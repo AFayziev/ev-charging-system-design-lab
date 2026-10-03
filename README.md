@@ -43,3 +43,11 @@ authoritative state after reconnecting.
 
 Operator simulators and fault scenarios cover timeouts, duplicate events, lost
 responses, worker crashes, dependency outages, replication lag, and recovery.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Domain reference](docs/domain.md)
+- [External integration contracts](docs/integrations.md)
+- [Lab profiles and verification](docs/lab.md)
+- [Implementation plan](docs/implementation-plan.md)

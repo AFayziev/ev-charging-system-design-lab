@@ -31,6 +31,11 @@ resource charges. Cloudflare and Azure profiles are active only for their exerci
 [Cloudflare Free plan](https://www.cloudflare.com/plans/free/),
 [Azure PostgreSQL pricing](https://azure.microsoft.com/en-us/pricing/details/postgresql/flexible-server/)
 
+The [initial topology milestone](implementation-plan.md#3-milestone-tasks-and-acceptance)
+starts every local baseline resource with stub application/simulator hosts and
+isolated protocol smoke checks. Resource availability is verified separately from
+the business and fault acceptance scenarios below.
+
 ## 2. Default timings
 
 Short intervals make failure and recovery visible during a small demonstration.
@@ -108,6 +113,7 @@ browser request, SQL mutation, outbox relay, message, worker attempt, and provid
 | Provider rate-limited/down | Its work isolated; retries bounded and durable intent retained |
 | Upload succeeds but completion notice is lost | Sweep verifies object and safely resumes processing |
 | Media worker fails after writing variants | Retry converges, old publication remains usable, orphan cleanup is visible |
+| All file/notification worker instances lost and restored | Both workload queues pause and resume from durable state; charging execution remains available |
 | Signed upload URL reused | Immutable published bytes cannot be overwritten |
 | Object storage lost | Files can fail while charging continues; processing retries retain references |
 | Warm and uncached synthetic objects deleted at the R2 origin | Warm edge hits can serve until expiry/eviction; cache misses fail and unavailable media shows placeholders; purge removes stale cached publication |

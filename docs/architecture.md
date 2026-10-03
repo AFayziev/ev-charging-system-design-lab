@@ -17,7 +17,7 @@ general maintenance platform are outside the product scope. Production capacity
 planning, availability commitments, multi-region recovery, and operational
 hardening are also excluded.
 
-The documentation separates four concerns:
+The documentation separates five concerns:
 
 | Reference | Responsibility |
 |---|---|
@@ -25,6 +25,7 @@ The documentation separates four concerns:
 | Architecture | Components, data ownership, processing paths, and technical boundaries |
 | [Integrations](integrations.md) | External simulator contracts and adapter obligations |
 | [Lab](lab.md) | Execution profiles, timing defaults, fault scenarios, and verification |
+| [Implementation plan](implementation-plan.md) | Milestones, dependencies, task tracking, and acceptance criteria |
 
 ## 2. Technology selections
 
@@ -76,7 +77,7 @@ flowchart LR
     API --> SQL
     API --> Views[Valkey, Elasticsearch, MongoDB views]
     API --> Objects[Private and public object storage]
-    SQL --> Relay[Outbox relay]
+    SQL --> Relay[Embedded Wolverine outbox relays]
     Relay --> Broker[RabbitMQ]
     Broker --> Workers[Worker groups]
     Workers --> External[Operator simulators and notification receiver]
@@ -116,11 +117,28 @@ CDN caching.
 | Notification worker | External delivery and persisted delivery attempts |
 | Outbox relay | Publish committed messages and recover after process loss |
 
-Logical roles need not be separate services. The process model comprises an API
-deployment with multiple instances and independent charging, observation/projection,
-and file worker groups. Scheduler, relay, and notification roles can share suitable
-worker hosts; their exact placement is unspecified. No process-local state is the
-sole record of an accepted operation.
+Logical roles are assigned to a gateway deployment, an API deployment, and three
+independent worker deployments. Replicas of a deployment share its responsibilities.
+
+| Host | Responsibilities |
+|---|---|
+| Gateway / BFF | Browser authentication sessions, OIDC interactions, public routing, and API-instance balancing |
+| API | Command/query acceptance, transactional intent, file authorization, observation callback ingestion, and SignalR connections/live-event subscription |
+| Charging worker | Start/stop effects, reservation expiry, reconciliation, recovery polling through observation ingestion, and recurring due-work discovery |
+| Observation/projection worker | Kafka consumers, MongoDB history/latest views, Valkey/Elasticsearch projections, SQL lifecycle/final-usage processing, stalled-session detection, and isolated rebuilds |
+| File/notification worker | Media processing/publication, summaries, diagnostic bundles, upload/orphan sweeps, and notification delivery |
+
+Recurring producers run with their owning workload: reconciliation/recovery
+polling in the charging worker and upload/orphan sweeps in the file worker.
+Stalled-session detection submits durable reconciliation work to the charging
+worker. Files and notifications have separate queues, concurrency budgets, and
+retry policies. Loss of all file/notification instances pauses both workloads;
+durable work resumes after recovery, independently of charging execution.
+
+The outbox relay is an embedded Wolverine runtime role in each message-producing
+API/worker deployment. The topology diagram represents logical roles rather than
+one process per node. No process-local state is the sole record of an accepted
+operation.
 
 ## 4. Data ownership
 
@@ -253,16 +271,27 @@ and recorded success can produce duplicate delivery. SQL consumers commit inbox
 deduplication with their mutations; external effects retain separate durable
 attempts and require the [integration safety contract](integrations.md#2-command-safety).
 
+API, charging, observation/projection, and file/notification hosts use distinct
+Wolverine message-storage schemas in the same application database. Replicas of
+one host type share its schema and recovery coordination. Each host registers
+only its own handlers/listeners; business mutations and that host's outgoing
+envelopes still commit in the same database transaction. Wolverine's hosted
+durability runtime recovers stranded inbox/outbox work for that host family.
+
 Persisted scheduled messages represent expiry deadlines and delayed retries.
-An Aspire-managed producer loop submits recurring reconciliation and cleanup work.
-Stable job IDs and database uniqueness make duplicate scheduling safe; handlers
-recheck current state rather than treating a scheduled message as authority.
+Scheduled jobs route to the owning worker queues. Recurring producers rescan
+persisted due state after startup and periodically submit reconciliation or cleanup
+work. Stable job IDs and database uniqueness make duplicate scheduling across
+replicas safe; handlers recheck current state rather than treating a scheduled
+message as authority. Aspire manages the hosts; Wolverine handles persisted
+message scheduling and recovery inside them.
 
 Envelopes include event ID, schema version, entity ID/version, occurrence and receipt
 times, correlation/causation IDs, and trace context. They omit secrets and private
 file URLs. Contracts support backward-compatible changes.
 
 [Wolverine durability](https://wolverinefx.net/guide/durability/),
+[Wolverine PostgreSQL storage](https://wolverinefx.net/guide/durability/postgresql),
 [EF Core integration](https://wolverinefx.net/guide/durability/efcore/),
 [RabbitMQ reliability](https://www.rabbitmq.com/docs/reliability)
 
@@ -376,9 +405,9 @@ configured credentials and provider-compatible signing/checksum settings. Upload
 and private downloads use object-specific, short-lived presigned URLs. Browser
 transfers require storage CORS rules for the application origin.
 
-The local profile uses an S3-compatible container behind the same adapter. Its
-product selection is pending; required operations include upload, download, HEAD
-verification, publication copy, deletion, and presigned transfers. Compatibility
+The local profile uses an S3-compatible container behind the same adapter. Product
+selection is part of the initial topology milestone; required operations include
+upload, download, HEAD verification, publication copy, deletion, and presigned transfers. Compatibility
 tests cover these operations against both the local service and R2.
 
 Public assets use a dedicated subdomain of the lab-owned domain, whose DNS is
@@ -535,6 +564,12 @@ ordering does not replace runtime recovery.
 Aspire integrations and reusable scripts provide supported publication steps.
 Managed endpoints, development certificates, and credentials come from environment
 configuration or .NET user secrets.
+
+The initial implementation milestone boots the complete local resource graph
+with stub application/simulator hosts and real infrastructure containers.
+Protocol-level smoke checks verify connectivity and basic operations; domain
+behavior and integration semantics are implemented and verified in subsequent
+[milestones](implementation-plan.md#2-suggested-order-and-dependencies).
 
 Most components run locally. Cloudflare supplies hosted R2/CDN behavior; Azure
 supplies managed PostgreSQL failover. These provider responsibilities are not
