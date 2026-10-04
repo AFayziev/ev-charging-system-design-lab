@@ -9,14 +9,16 @@ Milestones assemble the selected topology; component responsibilities and domain
 policies remain consistent throughout implementation.
 
 Task IDs are stable tracking references. Unchecked tasks are incomplete; checked
-tasks have implementation and verification evidence. Milestone status is one of
+tasks satisfy their implementation and verification requirements. Milestone status is one of
 `Planned`, `In progress`, `Blocked`, or `Done`. A blocked item records the specific
 dependency. `Done` requires every task and the milestone's acceptance criteria.
-Evidence consists of repository paths or issue/PR links to tests, scenario results,
-and demonstration instructions. Cloud results include the configuration used and
-resource cleanup outcome.
+Milestone status is recorded in the table below.
 
-The repository/design baseline is complete. All implementation milestones are planned.
+Task checkboxes and milestone status are updated in the same commit as the
+implementation. Conventional commit bodies identify completed tasks using
+`Plan: M01.01` or a comma-separated list of task IDs. Git history provides the link
+between task IDs and implementation. Verification summaries belong in pull request
+descriptions when applicable.
 
 ## 2. Suggested order and dependencies
 
@@ -26,22 +28,22 @@ Subsequent milestones implement application flows within those hosts. Frontend
 work and fault verification accompany each flow. Instrumentation begins with the
 first processes and expands as functional boundaries become active.
 
-| Order / ID | Milestone | Required predecessors | Status | Evidence |
-|---|---|---|---|---|
-| M00 | Repository and design baseline | None | Done | Commit `0589588`; existing root configuration and design references |
-| M01 | Bootable Aspire topology and dependency smoke checks | M00 | Planned | — |
-| M02 | Domain persistence, read/write routes, and pooling | M01 | Planned | — |
-| M03 | Gateway authentication and shared frontend shell | M02 | Planned | — |
-| M04 | Durable jobs, events, and scheduling | M02 | Planned | — |
-| M05 | Station catalog and reservations | M03, M04 | Planned | — |
-| M06 | Charging operators and start/stop execution | M05 | Planned | — |
-| M07 | Observation stream, projections, and completion | M06 | Planned | — |
-| M08 | Live delivery and cache recovery | M07 | Planned | — |
-| M09 | Search and station discovery | M07 | Planned | — |
-| M10 | Local files, media, summaries, and diagnostics | M07 | Planned | — |
-| M11 | Hosted R2 and Cloudflare CDN | M10 | Planned | — |
-| M12 | Managed PostgreSQL failover | M08, M02 | Planned | — |
-| M13 | Complete lab demonstrations and fault verification | M01–M12 | Planned | — |
+| Order / ID | Milestone | Required predecessors | Status |
+|---|---|---|---|
+| M00 | Repository and design baseline | None | Done |
+| M01 | Bootable Aspire topology and dependency smoke checks | M00 | In progress |
+| M02 | Domain persistence, read/write routes, and pooling | M01 | Planned |
+| M03 | Gateway authentication and shared frontend shell | M02 | Planned |
+| M04 | Durable jobs, events, and scheduling | M02 | Planned |
+| M05 | Station catalog and reservations | M03, M04 | Planned |
+| M06 | Charging operators and start/stop execution | M05 | Planned |
+| M07 | Observation stream, projections, and completion | M06 | Planned |
+| M08 | Live delivery and cache recovery | M07 | Planned |
+| M09 | Search and station discovery | M07 | Planned |
+| M10 | Local files, media, summaries, and diagnostics | M07 | Planned |
+| M11 | Hosted R2 and Cloudflare CDN | M10 | Planned |
+| M12 | Managed PostgreSQL failover | M08, M02 | Planned |
+| M13 | Complete lab demonstrations and fault verification | M01–M12 | Planned |
 
 Independent work becomes available at several points:
 
@@ -66,11 +68,11 @@ available at M10; hosted provider behavior is verified in M11 and M12.
   simulator contracts, and lab profiles.
 
 Acceptance: the repository contains the standalone design references and the
-monorepo baseline recorded in commit `0589588`.
+monorepo baseline.
 
 ### M01 — Bootable Aspire topology and dependency smoke checks
 
-- [ ] M01.01 Add the .NET solution, SDK/version configuration, central NuGet
+- [x] M01.01 Add the .NET solution, SDK/version configuration, central NuGet
   management, and pinned dependency/image versions compatible with the architecture.
 - [ ] M01.02 Add the Aspire C# AppHost, YARP gateway, API host, and independent
   charging, observation/projection, and file/notification worker hosts using the

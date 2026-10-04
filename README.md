@@ -44,6 +44,25 @@ authoritative state after reconnecting.
 Operator simulators and fault scenarios cover timeouts, duplicate events, lost
 responses, worker crashes, dependency outages, replication lag, and recovery.
 
+## Requirements
+
+| Tool | Requirement |
+|---|---|
+| [.NET SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) | 10.0.400 or a later stable patch in the 10.0.4xx feature band, as configured in [global.json](global.json) |
+| [Node.js](https://nodejs.org/en/about/previous-releases) | 24 LTS with npm for frontend tooling |
+| [Docker](https://docs.docker.com/get-started/get-docker/) | Running Docker Engine with Linux container support; Docker Desktop on Windows or macOS |
+| [Git](https://git-scm.com/downloads) | Repository checkout and version control |
+
+On Windows, Docker Desktop requires a supported WSL 2 or Hyper-V backend with
+hardware virtualization enabled. See the [Windows installation requirements](https://docs.docker.com/desktop/setup/install/windows-install/).
+Dependency restore and image pulls require access to NuGet, npm, and container
+registries. Aspire SDK and hosting dependencies are restored through NuGet.
+
+The local lab runs without cloud accounts. Hosted exercises additionally require
+a Cloudflare account with R2 and a domain managed by Cloudflare DNS, or an Azure
+subscription for managed PostgreSQL, depending on the
+[execution profile](docs/lab.md#1-execution-profiles).
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
