@@ -3,8 +3,8 @@
 ## 1. Purpose
 
 This reference defines canonical vocabulary and business rules for the EV charging
-lab. [Architecture](architecture.md) describes their implementation;
-[integrations](integrations.md) defines external simulator contracts; [lab profiles](lab.md)
+lab. [Architecture](architecture.md) describes system boundaries;
+[integrations](integrations.md) defines third-party contracts; [lab profiles](lab.md)
 supply configurable experiment timings.
 
 Provider-specific names remain in source payloads and map to these terms at adapter
@@ -16,10 +16,10 @@ boundaries. APIs, messages, tests, and frontend labels preserve the same meaning
 |---|---|
 | Driver | Authenticated person who reserves connectors and controls their own sessions |
 | Operator user | Human responsible for assigned stations and business recovery through the backoffice |
-| Charging operator | External system/organization operating equipment and reporting physical state |
-| Charging provider | Integration synonym for charging operator; other provider roles are qualified |
+| Charging provider | External system/organization operating equipment and reporting physical state |
 | Platform | Application owning reservations, operations, sessions, and access decisions |
-| Operator simulator | Controlled external system owning simulated physical state |
+| Charging-provider simulator | Controlled substitute for a charging provider, owning simulated physical state |
+| Notification provider | Third-party service responsible for message delivery; the lab can substitute a simulator |
 | Driver area / operator area | Separate navigation and workflows within the shared frontend |
 
 Drivers access their own reservations, sessions, and summaries. Assigned operator
@@ -70,8 +70,10 @@ this project's driver-facing site.
 | Operation | Durable record of one logical command; repeated submission can resolve to this record |
 | Attempt | One execution attempt within an operation |
 | Observation | Source-identified state or measurement at a reported time |
-| Telemetry | Series of operator observations; distinct from application observability |
+| Telemetry | Series of charging-provider observations; distinct from application observability |
 | Reconciliation | Comparing external evidence with platform records to resolve divergence or uncertainty |
+| Notification | Message generated from a platform event; delivery failure does not reverse that event |
+| Delivery attempt | One notification-provider call and its recorded acceptance, rejection, or uncertain outcome; distinct from a charging attempt |
 
 A temporary booking-hold lifecycle is outside scope. Discovery availability is
 advisory: an accepted booking cannot guarantee usable hardware when an external
@@ -142,7 +144,7 @@ Four dimensions remain separate:
 | Uncertain | The effect may have occurred, but evidence is insufficient |
 
 A provider acknowledgement can mean only that a request was queued. Confirmation
-depends on the [provider contract](integrations.md#1-operator-contracts).
+depends on the [provider contract](integrations.md#1-provider-contracts).
 Attempt failure, command rejection, and session failure are distinct; a transport
 timeout does not establish rejection.
 
@@ -185,7 +187,7 @@ Zero power, stale telemetry, and a stop acknowledgement alone do not complete on
 | Charging | Provider reports energy transfer or its mapped charging state |
 | Stopped | Energy transfer stopped; finalization may still be pending |
 | Faulted | Explicit equipment fault, retaining its scope/details |
-| Offline | Explicit simulator-reported connectivity condition |
+| Offline | Explicit charging-provider-reported connectivity condition |
 | Unknown | Evidence cannot establish the physical condition |
 | Fresh | Accepted current observation has a valid source time within the age limit |
 | Stale | Source-observation age exceeds the configured limit |
@@ -245,7 +247,7 @@ injected; infrastructure time synchronization is outside scope.
 | Identifier | Scope/meaning |
 |---|---|
 | `stationId`, `chargerId`, `evseId`, `connectorId` | Stable platform equipment identities, independent of labels |
-| `providerId` | External charging-operator integration |
+| `providerId` | External charging-provider integration |
 | Provider entity/session ID | Namespaced by provider and relevant parent |
 | `reservationId` / `sessionId` | One platform booking / charging lifecycle |
 | `operationId` / `attemptId` | Logical action / one execution attempt |
@@ -254,7 +256,7 @@ injected; infrastructure time synchronization is outside scope.
 | Source event ID | Provider event identity under its integration contract |
 | Correlation ID | Links workflow records; does not deduplicate effects |
 
-The same external ID can exist at different operators. Equal measurement values
+The same external ID can exist at different charging providers. Equal measurement values
 can represent distinct events.
 
 The same idempotency key and request return the existing operation; reuse with a
@@ -296,11 +298,11 @@ does not make media visible. Diagnostic generation does not modify the session.
 
 | Term | Meaning and project relationship |
 |---|---|
-| CPO | Charge Point Operator; external charging operator |
+| CPO | Charge Point Operator; industry term for an external charging provider |
 | eMSP | e-Mobility Service Provider; some analogous driver-service functions, without full roaming |
 | CSMS | Charging Station Management System; represented only by focused simulator behavior |
 | OCPP | Equipment-to-management protocol; not implemented by this lab |
-| OCPI | Operator/service-provider exchange; vocabulary reference, not full implementation |
+| OCPI | Charging-provider/service-provider exchange; vocabulary reference, not full implementation |
 | CDR | Charge Detail Record for charging/settlement; distinct from the session summary |
 
 Industry references do not imply protocol certification, roaming, settlement, or
@@ -312,7 +314,8 @@ physical charger firmware coverage.
 
 | Ambiguous term | Canonical usage |
 |---|---|
-| operator | Operator user for a human; charging operator for the external system |
+| operator | Operator user for the human backoffice actor |
+| provider | Charging provider for the external charging system; other provider roles are qualified |
 | station / port | Station for a site; charger, EVSE, connector for equipment |
 | status | Qualified reservation, lifecycle, outcome, or observed-state dimension |
 | transaction / session | Qualified database, charging, login, or provider context |

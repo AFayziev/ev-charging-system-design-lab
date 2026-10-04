@@ -6,4 +6,19 @@
     <File Path="NuGet.config" />
     <File Path="infra/ContainerVersions.props" />
   </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/EvCharging.Api/EvCharging.Api.csproj" />
+    <Project Path="src/EvCharging.AppHost/EvCharging.AppHost.csproj" />
+    <Project Path="src/EvCharging.MediaWorker/EvCharging.MediaWorker.csproj" />
+    <Project Path="src/EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
+    <Project Path="src/EvCharging.Gateway/EvCharging.Gateway.csproj" />
+    <Project Path="src/EvCharging.NotificationProviderApi/EvCharging.NotificationProviderApi.csproj" />
+    <Project Path="src/EvCharging.NotificationWorker/EvCharging.NotificationWorker.csproj" />
+    <Project Path="src/EvCharging.ObservationWorker/EvCharging.ObservationWorker.csproj" />
+    <Project Path="src/EvCharging.SearchIndexWorker/EvCharging.SearchIndexWorker.csproj" />
+    <Project Path="src/EvCharging.CacheWorker/EvCharging.CacheWorker.csproj" />
+    <Project Path="src/EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
+    <Project Path="src/EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
+    <Project Path="src/EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
+  </Folder>
 </Solution>

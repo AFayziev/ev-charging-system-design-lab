@@ -1,7 +1,7 @@
-# EV Charging System Design
+# EV Charging System Design Lab
 
 A system-design lab modeling an EV charging platform with a .NET 10/C# backend
-and a React/TypeScript frontend for drivers and charging-station operators.
+and a React/TypeScript frontend for drivers and backoffice operator users.
 
 The system connects station discovery, connector reservations, charging control,
 and live session tracking with operator workflows for station management and
@@ -11,9 +11,12 @@ failure recovery.
 
 - Drivers discover stations, reserve connectors, start and stop charging, follow
   session progress, and download session summaries.
-- Operators maintain station information and media, monitor sessions, investigate
+- Operator users maintain station information and media, monitor sessions, investigate
   uncertain command outcomes, and request reconciliation.
-- Two simulated charging operators expose different APIs and controllable faults.
+- Synchronous and queued charging-provider simulators expose different APIs and
+  controllable faults.
+- Notification delivery uses a third-party service simulator locally and a
+  Cloudflare Email Service adapter for the hosted exercise.
 - One frontend provides separate driver and operator areas.
 
 ## Architecture
@@ -26,7 +29,7 @@ failure recovery.
 - MongoDB document storage, Valkey caching, Elasticsearch, and rebuildable read models.
 - RabbitMQ work queues and publish/subscribe, Kafka observation streams, and
   Wolverine inbox/outbox and durable scheduling.
-- External operator adapters, telemetry processing, and reconciliation.
+- External provider adapters, telemetry processing, and reconciliation.
 - Cloudflare R2 object storage, media processing, generated documents, and
   Cloudflare CDN delivery.
 - Observability, fault injection, bounded load testing, and failure recovery.
@@ -41,7 +44,7 @@ Read models have explicit freshness requirements. The frontend shows pending
 operations, stale observations, and connection interruptions, then refreshes
 authoritative state after reconnecting.
 
-Operator simulators and fault scenarios cover timeouts, duplicate events, lost
+Provider simulators and fault scenarios cover timeouts, duplicate events, lost
 responses, worker crashes, dependency outages, replication lag, and recovery.
 
 ## Requirements
@@ -49,6 +52,7 @@ responses, worker crashes, dependency outages, replication lag, and recovery.
 | Tool | Requirement |
 |---|---|
 | [.NET SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) | 10.0.400 or a later stable patch in the 10.0.4xx feature band, as configured in [global.json](global.json) |
+| [Aspire CLI](https://aspire.dev/get-started/install-cli/) | 13.6, matching the AppHost SDK and hosting packages |
 | [Node.js](https://nodejs.org/en/about/previous-releases) | 24 LTS with npm for frontend tooling |
 | [Docker](https://docs.docker.com/get-started/get-docker/) | Running Docker Engine with Linux container support; Docker Desktop on Windows or macOS |
 | [Git](https://git-scm.com/downloads) | Repository checkout and version control |
@@ -59,14 +63,37 @@ Dependency restore and image pulls require access to NuGet, npm, and container
 registries. Aspire SDK and hosting dependencies are restored through NuGet.
 
 The local lab runs without cloud accounts. Hosted exercises additionally require
-a Cloudflare account with R2 and a domain managed by Cloudflare DNS, or an Azure
-subscription for managed PostgreSQL, depending on the
-[execution profile](docs/lab.md#1-execution-profiles).
+a Cloudflare account/domain for R2, CDN, or email delivery, or an Azure subscription
+for managed PostgreSQL, depending on the
+[execution profile](docs/lab.md#21-execution-profiles).
+
+## Local development
+
+```sh
+aspire run --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http
+```
+
+The AppHost starts the gateway, API, workers, and third-party service simulators
+as local processes. HTTP endpoints and telemetry are available in the Aspire
+dashboard; `/health` and `/alive` expose development health checks.
+
+Stop with `Ctrl+C`.
+
+Startup dependencies and
+discovery are defined in the [application wiring](docs/lab.md#12-application-wiring).
+
+Detached execution:
+
+```sh
+aspire start --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http --non-interactive
+aspire describe --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj
+aspire stop --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --non-interactive
+```
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
 - [Domain reference](docs/domain.md)
 - [External integration contracts](docs/integrations.md)
-- [Lab profiles and verification](docs/lab.md)
+- [Lab setup and verification](docs/lab.md)
 - [Implementation plan](docs/implementation-plan.md)
