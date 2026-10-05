@@ -10,6 +10,7 @@
     <PackageVersion Include="Aspire.Hosting.MongoDB" Version="13.6.0" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.0" />
     <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.6.0" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.0" />
     <PackageVersion Include="Aspire.Hosting.Valkey" Version="13.6.0" />
     <PackageVersion Include="AWSSDK.S3" Version="4.0.104.1" />
     <PackageVersion Include="Confluent.Kafka" Version="2.15.1" />
@@ -24,6 +25,8 @@
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery.Yarp" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.63.0" />
     <PackageVersion Include="MongoDB.Driver" Version="3.12.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
@@ -42,5 +45,7 @@
     <PackageVersion Include="WolverineFx.Postgresql" Version="6.45.0" />
     <PackageVersion Include="WolverineFx.RabbitMQ" Version="6.45.0" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
 </Project>

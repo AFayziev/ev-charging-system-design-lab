@@ -115,6 +115,27 @@ npm --prefix src/EvCharging.Web run typecheck
 npm --prefix src/EvCharging.Web run build
 ```
 
+## Tests
+
+Frontend component tests:
+
+```sh
+npm --prefix src/EvCharging.Web run test
+npm --prefix src/EvCharging.Web run test:watch
+```
+
+Topology and browser tests use a test-owned Aspire application with discovered
+endpoints. They require the frontend dependencies and Chromium installed:
+
+```sh
+dotnet build tests/EvCharging.TopologyTests
+pwsh tests/EvCharging.TopologyTests/bin/Debug/net10.0/playwright.ps1 install chromium
+dotnet test tests/EvCharging.TopologyTests
+```
+
+`--filter "Category=Topology"` runs the backend checks without a browser;
+`--filter "Category=Browser"` runs the Playwright workflow.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)

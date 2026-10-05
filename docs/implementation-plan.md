@@ -101,7 +101,7 @@ monorepo baseline.
   Stub hosts expose diagnostics; unimplemented business routes cannot report success.
 - [x] M01.06 Verify baseline diagnostics across the topology: correlated
   logs/traces, metrics, instance identity, and resource health.
-- [ ] M01.07 Add xUnit/Testcontainers/Aspire testing foundations and Vitest,
+- [x] M01.07 Add xUnit/Aspire testing foundations and Vitest,
   React Testing Library, and Playwright workflow harnesses.
 - [ ] M01.08 Select and pin the free local S3-compatible container; verify it can
   support the file operations specified in the architecture before adopting it.
@@ -110,7 +110,8 @@ monorepo baseline.
   database, MongoDB, Valkey, Elasticsearch, RabbitMQ, Kafka in KRaft mode, and local
   S3 storage. Configure credentials, volumes, endpoints, references, and readiness
   waits using integrations or custom container resources as appropriate.
-- [ ] M01.10 Add bounded protocol-level smoke checks through intended application
+- [ ] M01.10 Add Testcontainers for isolated dependency integration tests and
+  bounded protocol-level smoke checks through intended application
   connections: primary/replica SQL via poolers, replica read-only/replication behavior,
   MongoDB write/read, Valkey cache/Pub/Sub, Elasticsearch index/query, RabbitMQ
   publish/consume, Kafka append/read, S3 upload/download/presigned transfer, Keycloak
@@ -480,7 +481,8 @@ use the same application contracts with configured provider endpoints.
 | OpenTelemetry and Aspire Dashboard | M01.06 onward; M13 views | Correlated evidence, resource health, bounded export during outage |
 | Optional observability profile | M01.12; M13 profile scenarios | Telemetry routing, queries/custom dashboards, bounded buffering/drop during outage |
 | Frontend diagnostics / Sentry | M01.13; hosted gate M01.14 | [Signals](lab.md#23-verification-tools-and-signals), [fault scenarios](lab.md#24-fault-scenarios) |
-| xUnit, Testcontainers, Aspire testing | M01 onward | Domain, dependency, contract, topology, resilience verification |
+| xUnit and Aspire testing | M01.07 onward | Domain, contract, topology, resilience verification |
+| Testcontainers | M01.10 onward | Isolated real-dependency integration tests |
 | Vitest, React Testing Library, Playwright | M01 onward | UI semantics and authenticated browser workflows |
 | k6 and Toxiproxy | M13; available for earlier gates | Saturation and network-fault evidence |
 
