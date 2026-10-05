@@ -66,15 +66,16 @@ manifests, not duplicated in project files or a separate toolchain document.
   worker submissions and provider callbacks. Only the gateway references platform
   API destinations. External provider calls and orchestration health checks use
   their own endpoints.
-- Keep `AddServiceDefaults` on every application/simulator host. AppHost propagates
-  its environment to child hosts; development-only `/health` and `/alive` routes
-  depend on that propagation. Workers have no HTTP listeners.
+- Keep `AddServiceDefaults` on every application/simulator host and propagate
+  the AppHost environment to child hosts. Workers have no HTTP listeners.
 - Default HTTP retries exclude unsafe methods. Provider effect retries require
   an explicit policy permitted by the integration contract; queued acknowledgements
   and lost responses require reconciliation.
 - Inspect resource state, logs, and traces before changing code for a runtime issue.
   Distinguish application health from orchestrator and infrastructure health;
   healthy application hosts do not establish healthy container monitoring.
+- Use Aspire Dashboard and CLI for diagnostics they already expose. Do not add
+  custom diagnostic endpoints or verification harnesses to duplicate those tools.
 - Keep credentials, dashboard login tokens, and signed URLs out of source control,
   documentation, and verification output.
 

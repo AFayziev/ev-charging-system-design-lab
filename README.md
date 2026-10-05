@@ -78,7 +78,7 @@ service simulators as local processes. Open the `frontend` HTTP endpoint from
 the Aspire dashboard. The frontend and API share this browser origin.
 `/api/diagnostics/instance` and the `X-Gateway-Instance` response header identify
 the selected local replicas.
-`/health` and `/alive` on backend hosts expose development health checks.
+`/health` and `/alive` on backend hosts expose health checks.
 
 Container-backed milestones require Docker Engine to be running.
 

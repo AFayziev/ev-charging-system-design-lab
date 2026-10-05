@@ -2,6 +2,7 @@ using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
+builder.AddHttpApiDefaults();
 
 builder.Services.AddReverseProxy()
     .AddServiceDiscoveryDestinationResolver()
@@ -34,6 +35,7 @@ builder.Services.AddReverseProxy()
         }]);
 
 var app = builder.Build();
+app.UseHttpApiDefaults();
 if (app.Environment.IsDevelopment())
 {
     app.Use(async (context, next) =>
@@ -42,6 +44,6 @@ if (app.Environment.IsDevelopment())
         await next(context);
     });
 }
-app.MapDefaultEndpoints();
+app.MapHttpApiDiagnostics("gateway");
 app.MapReverseProxy();
 app.Run();

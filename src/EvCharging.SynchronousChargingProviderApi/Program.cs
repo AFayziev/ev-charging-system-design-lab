@@ -1,7 +1,7 @@
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
+builder.AddHttpApiDefaults();
 var app = builder.Build();
-app.MapDefaultEndpoints();
-
-app.MapGet("/", () => new { host = "synchronous-charging-provider-api", stub = true });
+app.UseHttpApiDefaults();
+app.MapHttpApiDiagnostics("synchronous-charging-provider-api");
 app.Run();

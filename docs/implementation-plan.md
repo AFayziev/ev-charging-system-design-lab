@@ -95,10 +95,11 @@ monorepo baseline.
   endpoints, and development secrets. Verify discovery, replica reachability,
   SPA navigation, and development WebSocket routing.
   Use the [application wiring](lab.md#12-application-wiring).
-- [ ] M01.05 Establish OpenAPI, Problem Details, request IDs, bounded request
-  cancellation, health/instance endpoints, and development-only dependency probes.
+- [x] M01.05 Establish OpenAPI, Problem Details, standard W3C trace correlation,
+  bounded request cancellation, health endpoints in all environments, and
+  development-only instance diagnostics.
   Stub hosts expose diagnostics; unimplemented business routes cannot report success.
-- [ ] M01.06 Verify baseline diagnostics across the topology: correlated
+- [x] M01.06 Verify baseline diagnostics across the topology: correlated
   logs/traces, metrics, instance identity, and resource health.
 - [ ] M01.07 Add xUnit/Testcontainers/Aspire testing foundations and Vitest,
   React Testing Library, and Playwright workflow harnesses.

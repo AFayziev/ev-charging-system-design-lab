@@ -60,6 +60,15 @@ profile sends OTLP through the Collector, which exports traces to Tempo, metrics
 to Prometheus, and logs to Loki, with Grafana querying these backends. It also
 forwards telemetry to Aspire Dashboard so resource diagnostics remain available.
 
+HTTP failures use Problem Details without exception details. The default request
+timeout is 10 seconds; cancellation is cooperative and does not establish whether
+a side effect occurred. Correlation uses standard W3C trace context.
+
+HTTP hosts expose `/health` and `/alive` in all environments; hosted ingress
+controls public access. Instance diagnostics and OpenAPI remain development-only.
+API endpoints are available through the gateway under `/api`;
+API OpenAPI advertises that base path. Unimplemented business routes return 404.
+
 ### 1.3 PostgreSQL access and pooling
 
 PostgreSQL range/exclusion constraints with `btree_gist` enforce booking conflicts.

@@ -2,13 +2,13 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var apiCount = await InstanceCount("api-instances");
 var gatewayCount = await InstanceCount("gateway-instances");
-var api = builder.AddProject<Projects.EvCharging_Api>("api")
+var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
     .WithReplicas(apiCount)
     .WithHttpHealthCheck("/health");
 
-var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway")
+var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
     .WithReplicas(gatewayCount)
@@ -21,15 +21,18 @@ builder.AddViteApp("frontend", "../EvCharging.Web")
     .WithReference(gateway)
     .WaitFor(gateway);
 
-var synchronousChargingProviderApi = builder.AddProject<Projects.EvCharging_SynchronousChargingProviderApi>("synchronous-charging-provider-api")
+var synchronousChargingProviderApi = builder.AddProject<Projects.EvCharging_SynchronousChargingProviderApi>(
+    "synchronous-charging-provider-api", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
     .WithHttpHealthCheck("/health");
-var queuedChargingProviderApi = builder.AddProject<Projects.EvCharging_QueuedChargingProviderApi>("queued-charging-provider-api")
+var queuedChargingProviderApi = builder.AddProject<Projects.EvCharging_QueuedChargingProviderApi>(
+    "queued-charging-provider-api", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
     .WithHttpHealthCheck("/health");
-var notificationProviderApi = builder.AddProject<Projects.EvCharging_NotificationProviderApi>("notification-provider-api")
+var notificationProviderApi = builder.AddProject<Projects.EvCharging_NotificationProviderApi>(
+    "notification-provider-api", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
     .WithHttpHealthCheck("/health");

@@ -1,7 +1,7 @@
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
+builder.AddHttpApiDefaults();
 var app = builder.Build();
-app.MapDefaultEndpoints();
-
-app.MapGet("/", () => new { host = "queued-charging-provider-api", stub = true });
+app.UseHttpApiDefaults();
+app.MapHttpApiDiagnostics("queued-charging-provider-api");
 app.Run();
