@@ -1,13 +1,17 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
+var apiCount = await InstanceCount("api-instances");
+var gatewayCount = await InstanceCount("gateway-instances");
 var api = builder.AddProject<Projects.EvCharging_Api>("api")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
+    .WithReplicas(apiCount)
     .WithHttpHealthCheck("/health");
 
 var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
+    .WithReplicas(gatewayCount)
     .WithHttpHealthCheck("/health")
     .WithReference(api)
     .WaitFor(api);
@@ -57,3 +61,13 @@ builder.AddProject<Projects.EvCharging_NotificationWorker>("notification-worker"
     .WaitFor(notificationProviderApi);
 
 builder.Build().Run();
+
+async Task<int> InstanceCount(string name)
+{
+    var parameter = builder.AddParameter(name, () => builder.Configuration[$"Parameters:{name}"] ?? "2");
+    if (!int.TryParse(await parameter.Resource.GetValueAsync(CancellationToken.None), out var count) || count is < 1 or > 8)
+    {
+        throw new InvalidOperationException($"Parameters:{name} must be an integer between 1 and 8.");
+    }
+    return count;
+}

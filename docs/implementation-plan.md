@@ -90,8 +90,10 @@ monorepo baseline.
   defaults for HTTP resilience, dashboard telemetry, and process health.
 - [x] M01.03 Add the React/TypeScript application with Vite, React Router,
   Mantine, TanStack Query, and frontend lockfile.
-- [ ] M01.04 Wire local HTTPS, gateway-served SPA entry page, HAProxy ingress,
-  multiple gateway/API instances, parameters, endpoints, and development secrets.
+- [x] M01.04 Wire frontend hosting with gateway-routed backend paths,
+  logical gateway/API services with runtime-managed replicas, parameters,
+  endpoints, and development secrets. Verify discovery, replica reachability,
+  SPA navigation, and development WebSocket routing.
   Use the [application wiring](lab.md#12-application-wiring).
 - [ ] M01.05 Establish OpenAPI, Problem Details, request IDs, bounded request
   cancellation, health/instance endpoints, and development-only dependency probes.
@@ -136,10 +138,11 @@ Acceptance:
   including the frontend, application stubs, and external simulator API stubs.
 - All required resources reach their expected healthy state within bounded waits,
   and protocol smoke checks prove credentials, routing, and usable connections.
-- The browser loads through HAProxy and YARP; a diagnostic request is traceable
-  across gateway and API with instance identity visible.
-- Selected-instance diagnostics prove HAProxy and YARP routing; losing one
-  gateway/API instance routes new requests to a healthy instance;
+- The browser loads the SPA from the frontend host without traversing YARP;
+  API requests pass through the gateway and are traceable across gateway/API instances.
+- Selected-instance diagnostics prove ingress/gateway routing through logical
+  services and runtime replica balancing; losing one gateway/API instance routes
+  new requests to a healthy instance;
   dependency loss produces a bounded, named smoke-check failure.
 - Restart/reset behavior is reproducible, and telemetry reaches Aspire Dashboard.
 
@@ -398,7 +401,7 @@ charging completion intact.
 - [ ] M11.03 Run adapter contract tests against R2, including browser CORS,
   presigned transfers, metadata/checksum handling, publication copy, and deletion.
 - [ ] M11.04 Publish versioned frontend assets and media through CDN cache rules;
-  the gateway entry page references the matching asset build.
+  the frontend entry page references the matching asset build.
 - [ ] M11.05 Implement the CDN purge adapter and publication/removal workflow,
   exposing hit/miss/age and purge results for synthetic assets.
 - [ ] M11.06 Verify warm versus cold requests, origin deletion, cache expiry/purge,
@@ -455,7 +458,7 @@ use the same application contracts with configured provider endpoints.
 | Component / boundary | Implementation | Principal verification |
 |---|---|---|
 | Aspire, process hosts, OCI containers | M01; resource wiring in each milestone | M01, M13 startup/reset |
-| HAProxy and YARP replicas | M01, M03, M08 | Destination selection/health, instance loss, affinity, authentication continuity |
+| Ingress, gateway, and runtime replicas | M01, M03, M08 | Logical destination health, replica selection/loss, affinity, authentication continuity |
 | React, Mantine, TanStack Query | M01, M03, M05–M11 | Role workflows, stale/pending states, reconnect, private access |
 | Keycloak, BFF, shared ticket/key state | M03 | Browser boundaries, refresh/logout races, identity/session-store outage |
 | PostgreSQL, EF Core, Npgsql | M02, M05–M07, M10 | Conflicts, ordering, commits, ownership, completion |

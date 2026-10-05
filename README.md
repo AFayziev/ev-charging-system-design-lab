@@ -54,7 +54,7 @@ responses, worker crashes, dependency outages, replication lag, and recovery.
 | [.NET SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) | 10.0.400 or a later stable patch in the 10.0.4xx feature band, as configured in [global.json](global.json) |
 | [Aspire CLI](https://aspire.dev/get-started/install-cli/) | 13.6, matching the AppHost SDK and hosting packages |
 | [Node.js](https://nodejs.org/en/about/previous-releases) | 24 LTS with npm for frontend tooling |
-| [Docker](https://docs.docker.com/get-started/get-docker/) | Running Docker Engine with Linux container support; Docker Desktop on Windows or macOS |
+| [Docker](https://docs.docker.com/get-started/get-docker/) | Docker CLI 25.0.0 or newer and running Docker Engine with Linux container support; Docker Desktop on Windows or macOS |
 | [Git](https://git-scm.com/downloads) | Repository checkout and version control |
 
 On Windows, Docker Desktop requires a supported WSL 2 or Hyper-V backend with
@@ -73,14 +73,19 @@ for managed PostgreSQL, depending on the
 aspire run --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http
 ```
 
-The AppHost starts the frontend, gateway, API, workers, and third-party service simulators
-as local processes. HTTP endpoints and telemetry are available in the Aspire
-dashboard; `/health` and `/alive` expose development health checks.
+The AppHost starts the frontend, gateway/API replicas, workers, and third-party
+service simulators as local processes. Open the `frontend` HTTP endpoint from
+the Aspire dashboard. The frontend and API share this browser origin.
+`/api/diagnostics/instance` and the `X-Gateway-Instance` response header identify
+the selected local replicas.
+`/health` and `/alive` on backend hosts expose development health checks.
+
+Container-backed milestones require Docker Engine to be running.
 
 Stop with `Ctrl+C`.
 
-Startup dependencies and
-discovery are defined in the [application wiring](docs/lab.md#12-application-wiring).
+Local routing and execution profiles are described in the
+[lab reference](docs/lab.md#12-application-wiring).
 
 Detached execution:
 
@@ -89,6 +94,16 @@ aspire start --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch
 aspire describe --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj
 aspire stop --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --non-interactive
 ```
+
+Optional local replica overrides and development secret storage:
+
+```sh
+dotnet user-secrets set "Parameters:gateway-instances" "3" --project src/EvCharging.AppHost
+dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.AppHost
+```
+
+Secret values belong in this local store or environment configuration, never
+in tracked settings.
 
 Frontend dependency restore and checks:
 

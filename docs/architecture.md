@@ -52,7 +52,8 @@ flowchart LR
     UI --> CDN[CDN]
     CDN --> Origin[Public assets and media storage]
     UI --> Edge[Load balancer]
-    Edge --> Gateway[Gateway replicas]
+    Edge -->|Pages and assets| FrontendHost[Frontend hosting]
+    Edge -->|API and authentication| Gateway[Gateway replicas]
     Gateway --> Identity[Identity provider]
     Gateway --> Sessions[Shared authentication session store]
     Sessions --> Primary[Relational primary]
@@ -78,8 +79,12 @@ flowchart LR
     Workers --> Objects
 ```
 
-The ingress load balancer distributes requests across gateway replicas; the
-gateway routes and balances requests across internal API instances.
+The ingress load balancer routes frontend requests to frontend hosting and API
+and authentication requests to the logical gateway service. The gateway routes
+API requests to the logical internal API service. The deployment
+runtime balances traffic across replicas of each service. Replica selection may
+be provided by service endpoints or by routing components with discovered
+destinations, without making individual instances application routing contracts.
 The gateway also acts as the backend for frontend (BFF), owning browser sessions
 and identity-provider interactions. APIs enforce resource authorization and
 business validation.
@@ -92,8 +97,9 @@ to ingestion. Outbound integration calls use external service endpoints.
 Orchestration health checks
 address hosts directly.
 
-The gateway serves the frontend entry page. Authentication, API, and live-update
-routes share that public origin. Versioned frontend assets and published media use the CDN;
+Frontend hosting serves the entry page independently of the gateway.
+Authentication, API, and live-update routes share the frontend's public origin.
+Versioned frontend assets and published media use the CDN;
 authorized file transfers use storage URLs. Authentication and API routes bypass
 CDN caching.
 
@@ -101,7 +107,7 @@ CDN caching.
 |---|---|
 | Frontend | Driver/operator navigation, gateway session discovery, asynchronous operations, uploads, progress, and reconnect |
 | Identity provider | Authentication and token issuance; application permissions remain separate |
-| Load balancer | Health-aware ingress routing across gateway replicas |
+| Load balancer | Health-aware ingress routing to frontend hosting and the gateway service |
 | External charging providers | Equipment control and physical-state evidence through distinct [command contracts](integrations.md#1-provider-contracts) |
 | External notification service | Delivery acceptance and outcomes through an outbound adapter |
 
@@ -110,7 +116,7 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 
 | Host | Responsibilities |
 |---|---|
-| Gateway / BFF | Browser authentication sessions, identity-provider interactions, browser/service/callback routing, and API-instance balancing |
+| Gateway / BFF | Browser authentication sessions, identity-provider interactions, and browser/service/callback routing to runtime-balanced API services |
 | API | Command/query acceptance, transactional reservation/operation/session intent, file authorization, observation ingestion, and live connections/event subscription |
 | Charging worker | Charging-provider adapters and start/stop effects, reservation expiry, reconciliation, recovery polling through observation ingestion, and recurring due-work discovery |
 | Observation worker | Stream consumers, document history/latest views, transactional lifecycle/final-usage processing, stalled-session detection, and isolated observation-view replay |
@@ -392,7 +398,7 @@ reconciles missing notices, abandoned uploads, and orphan variants. Stable
 asset/version identity makes retries converge after partial writes.
 
 Cache rules cover only public assets and published media. Versioned keys handle
-normal releases; the gateway-served entry page references the current build.
+normal releases; the frontend entry page references the current build.
 Urgent removal needs origin deletion and CDN purge, which is not instantaneous
 everywhere. Warm caches can survive origin loss until expiry/eviction; cold
 requests require the origin. Missing media produces a visible placeholder.
@@ -510,3 +516,10 @@ messaging, identity, storage, telemetry, and deployment. Database consistency an
 replication semantics remain part of the design; substituting a product requires
 equivalent behavior. Storage signing, CDN publication/purge, and notification
 delivery remain adapter boundaries.
+
+Local and hosted execution preserve application service boundaries and API
+contracts. Replicas belong to a service deployment; individual
+instance identities are diagnostic information rather than application routing
+contracts. Environment-specific configuration supplies scaling, discovery,
+certificates, secrets, and managed-resource bindings without changing application
+flows. Deployment artifacts and execution are verified alongside local runs.

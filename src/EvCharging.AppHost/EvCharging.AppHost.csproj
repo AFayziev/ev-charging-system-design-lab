@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <AspireUseCliBundle>true</AspireUseCliBundle>
     <AspireCliInvocationMode>DnxPinned</AspireCliInvocationMode>
+    <UserSecretsId>evcharging-apphost-local</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" />

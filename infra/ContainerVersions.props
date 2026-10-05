@@ -3,7 +3,6 @@
   <ItemGroup>
     <ContainerImage Include="Postgres" Image="docker.io/library/postgres" Tag="17.11-bookworm" />
     <ContainerImage Include="PgBouncer" Image="docker.io/edoburu/pgbouncer" Tag="v1.26.0-p0" />
-    <ContainerImage Include="HAProxy" Image="docker.io/library/haproxy" Tag="3.4.6-alpine3.24" />
     <ContainerImage Include="Keycloak" Image="quay.io/keycloak/keycloak" Tag="26.8.0" />
     <ContainerImage Include="MongoDB" Image="docker.io/library/mongo" Tag="8.3.11-noble" />
     <ContainerImage Include="Valkey" Image="docker.io/valkey/valkey" Tag="9.1.2" />

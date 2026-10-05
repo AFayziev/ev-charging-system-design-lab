@@ -16,14 +16,32 @@ builder.Services.AddReverseProxy()
         [new ClusterConfig
         {
             ClusterId = "api",
+            HealthCheck = new HealthCheckConfig
+            {
+                Active = new ActiveHealthCheckConfig
+                {
+                    Enabled = true,
+                    Interval = TimeSpan.FromSeconds(2),
+                    Timeout = TimeSpan.FromSeconds(1),
+                    Policy = "ConsecutiveFailures",
+                    Path = "/health"
+                }
+            },
             Destinations = new Dictionary<string, DestinationConfig>
             {
-                ["api"] = new() { Address = "https+http://api/" }
+                ["api"] = new() { Address = "http://api/" }
             }
         }]);
 
 var app = builder.Build();
+if (app.Environment.IsDevelopment())
+{
+    app.Use(async (context, next) =>
+    {
+        context.Response.Headers["X-Gateway-Instance"] = $"{Environment.MachineName}:{Environment.ProcessId}";
+        await next(context);
+    });
+}
 app.MapDefaultEndpoints();
-app.MapGet("/", () => new { host = "gateway", stub = true });
 app.MapReverseProxy();
 app.Run();

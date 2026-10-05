@@ -17,7 +17,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Backend | .NET 10, C# 14, ASP.NET Core 10 Minimal APIs, OpenAPI, Problem Details |
 | Orchestration | Aspire 13.6 C# AppHost, local processes and Docker Linux containers |
 | Frontend | React 19, TypeScript, Vite, React Router, Mantine, TanStack Query |
-| Gateway / ingress load balancer | YARP / HAProxy |
+| API gateway | YARP |
 | Identity | Keycloak; OIDC Authorization Code with PKCE through the gateway, using ASP.NET Core OpenID Connect and cookie authentication |
 | Live delivery | SignalR .NET/JavaScript clients; StackExchange.Redis backplane on Valkey |
 | Relational access / pooling | PostgreSQL 17 primary/read replica and PgBouncer; EF Core 10/Npgsql provider and long-lived Npgsql data sources |
@@ -47,14 +47,13 @@ Aspire SDK and hosting packages share a release family.
 Local host endpoints remain available for diagnostics. Service references define
 application routing; they do not enforce network isolation.
 
-The multi-instance topology exposes a discoverable endpoint for each gateway and
-API instance. HAProxy's backend list contains individual gateway endpoints; YARP's
-clusters contain individual API endpoints. These destinations bypass Aspire's
-automatic balancing proxy so HAProxy and YARP perform their own selection and
-health handling. Endpoint addresses come from AppHost/discovery rather than fixed
-ports. This wiring is verified by selected-instance diagnostics and instance-loss
-tests.
+Vite provides the local HTTP browser origin and development proxy to YARP for
+API/authentication requests. Frontend files bypass the API gateway. Gateway and
+API services default to two replicas each, balanced by Aspire's local proxies.
 [Aspire networking](https://aspire.dev/fundamentals/networking-overview/)
+
+Hosted execution uses static frontend hosting/CDN and managed TLS ingress/service
+routing. The compute target remains unselected.
 
 The baseline uses Aspire Dashboard diagnostics. The optional `observability`
 profile sends OTLP through the Collector, which exports traces to Tempo, metrics
