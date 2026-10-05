@@ -10,10 +10,10 @@ including concurrency, dependency failures, and uncertain external effects.
 | Reference | Responsibility |
 |---|---|
 | [README](README.md) | System overview, requirements, and local commands |
-| [Architecture](docs/architecture.md) | Components, ownership, data flows, and failure boundaries |
+| [Architecture](docs/architecture.md) | Technology-neutral component roles, ownership, data flows, and failure boundaries |
 | [Domain](docs/domain.md) | Canonical terms, permissions, lifecycle, and business rules |
 | [Integrations](docs/integrations.md) | Third-party provider contracts, simulators, delivery adapters, and command safety |
-| [Lab](docs/lab.md) | Technical setup, profiles, timings, fault scenarios, and verification |
+| [Lab](docs/lab.md) | Technology selections, implementation constraints, profiles, timings, fault scenarios, and verification |
 | [Plan](docs/implementation-plan.md) | Task IDs, dependencies, status, and acceptance criteria |
 
 ## Projects
@@ -25,6 +25,7 @@ implementation progress is recorded in the plan.
 |---|---|
 | `EvCharging.AppHost` | Aspire resource graph, endpoints, references, environment, and startup dependencies |
 | `EvCharging.Gateway` | YARP/BFF, browser sessions, authentication, browser/service/callback routing, and API balancing |
+| `EvCharging.Web` | Shared React/TypeScript browser application for drivers and backoffice operators |
 | `EvCharging.Api` | Commands/queries, transactional acceptance, file authorization, callbacks, and live delivery |
 | `EvCharging.ChargingWorker` | Charging effects, reservation expiry, reconciliation, and recovery polling |
 | `EvCharging.ObservationWorker` | Observation history/latest views, lifecycle and final-usage evidence, and stalled-session detection |
@@ -59,7 +60,8 @@ manifests, not duplicated in project files or a separate toolchain document.
   to resolve a build failure.
 - Connect HTTP dependencies through `WithReference` and discovery-aware clients
   or YARP destinations. Use logical service names rather than fixed localhost URLs.
-  Wiring and profile definitions are in the [lab reference](docs/lab.md).
+  The resource graph is defined in [AppHost](src/EvCharging.AppHost/AppHost.cs);
+  profile definitions are in the [lab reference](docs/lab.md).
 - Route application HTTP calls to platform APIs through the gateway, including
   worker submissions and provider callbacks. Only the gateway references platform
   API destinations. External provider calls and orchestration health checks use
@@ -80,10 +82,15 @@ manifests, not duplicated in project files or a separate toolchain document.
 
 Write standalone technical documents without chat history, drafting commentary,
 or reader-directed next steps. Record unresolved decisions factually. Keep domain
-rules in `domain.md`, architecture in `architecture.md`, and technical setup
-and experiments in `lab.md`; link instead of duplicating.
+rules in `domain.md`, technology-neutral design in `architecture.md`, and concrete
+technology selections, implementation constraints, and experiments in `lab.md`;
+link instead of duplicating. Architecture uses component roles such as relational
+database, gateway, load balancer, and orchestrator rather than product names.
 Each decision or technical detail has one authoritative location. Other documents
 link to it. Plans record tasks, dependencies, and acceptance without restating design.
+Do not narrate implementation details that are evident from source code.
+Documents describe decisions, constraints, contracts, and verification; link to
+source when implementation details are needed.
 
 Update task checkboxes and milestone status with the implementation. Do not add
 evidence paragraphs, duplicate progress summaries, or follow-up commits just to

@@ -12,6 +12,11 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway")
     .WithReference(api)
     .WaitFor(api);
 
+builder.AddViteApp("frontend", "../EvCharging.Web")
+    .WithExternalHttpEndpoints()
+    .WithReference(gateway)
+    .WaitFor(gateway);
+
 var synchronousChargingProviderApi = builder.AddProject<Projects.EvCharging_SynchronousChargingProviderApi>("synchronous-charging-provider-api")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()

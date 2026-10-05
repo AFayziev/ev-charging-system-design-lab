@@ -73,7 +73,7 @@ for managed PostgreSQL, depending on the
 aspire run --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http
 ```
 
-The AppHost starts the gateway, API, workers, and third-party service simulators
+The AppHost starts the frontend, gateway, API, workers, and third-party service simulators
 as local processes. HTTP endpoints and telemetry are available in the Aspire
 dashboard; `/health` and `/alive` expose development health checks.
 
@@ -88,6 +88,16 @@ Detached execution:
 aspire start --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http --non-interactive
 aspire describe --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj
 aspire stop --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --non-interactive
+```
+
+Frontend dependency restore and checks:
+
+```sh
+npm --prefix src/EvCharging.Web ci
+npm --prefix src/EvCharging.Web run format:check
+npm --prefix src/EvCharging.Web run format
+npm --prefix src/EvCharging.Web run typecheck
+npm --prefix src/EvCharging.Web run build
 ```
 
 ## Documentation

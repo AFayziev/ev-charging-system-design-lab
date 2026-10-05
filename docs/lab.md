@@ -1,60 +1,48 @@
 # EV Charging System Design Lab
 
 The lab implements the [architecture](architecture.md) with synthetic fixtures,
-bounded load, and controlled faults. This reference defines technical setup,
-execution profiles, experiment settings, and verification.
+bounded load, and controlled faults. This reference maps architectural roles to
+selected technologies and defines implementation constraints, execution profiles,
+experiment settings, and verification.
 [Domain rules](domain.md) remain constant across profiles;
 [integration contracts](integrations.md) define simulator and real-provider behavior.
 The [implementation plan](implementation-plan.md) tracks delivery and pending selections.
 
 ## 1. Technical setup
 
-### 1.1 Libraries and version sources
+### 1.1 Technology selections and version sources
 
 | Area | Selection |
 |---|---|
 | Backend | .NET 10, C# 14, ASP.NET Core 10 Minimal APIs, OpenAPI, Problem Details |
 | Orchestration | Aspire 13.6 C# AppHost, local processes and Docker Linux containers |
 | Frontend | React 19, TypeScript, Vite, React Router, Mantine, TanStack Query |
-| Identity handlers | ASP.NET Core OpenID Connect and cookie authentication |
+| Gateway / ingress load balancer | YARP / HAProxy |
+| Identity | Keycloak; OIDC Authorization Code with PKCE through the gateway, using ASP.NET Core OpenID Connect and cookie authentication |
 | Live delivery | SignalR .NET/JavaScript clients; StackExchange.Redis backplane on Valkey |
-| Relational access | PostgreSQL 17; EF Core 10/Npgsql provider and long-lived Npgsql data sources |
-| Documents | Official MongoDB C# driver |
-| Cache | StackExchange.Redis connected to Valkey |
-| Search | Official Elastic .NET client |
+| Relational access / pooling | PostgreSQL 17 primary/read replica and PgBouncer; EF Core 10/Npgsql provider and long-lived Npgsql data sources |
+| Managed database exercise | Azure Database for PostgreSQL Flexible Server; readable replica and provider-managed HA |
+| Documents | MongoDB with the official C# driver |
+| Cache / live backplane | Valkey with StackExchange.Redis |
+| Search | Elasticsearch with the official Elastic .NET client |
 | Messaging | Wolverine RabbitMQ transport and EF Core/PostgreSQL durability |
 | Observation stream | Confluent.Kafka client; Kafka in KRaft mode |
-| Object storage | AWSSDK.S3 for local S3-compatible storage and R2 |
+| Object storage / CDN | Cloudflare R2 or a local S3-compatible service through AWSSDK.S3 / Cloudflare CDN |
+| Notification delivery | [Simulator and selected real-provider adapter](#18-notification-adapters) |
 | File processing | SkiaSharp images, PDFsharp summaries, .NET ZIP/JSON diagnostics |
 | HTTP resilience | Microsoft.Extensions.Http.Resilience and Polly |
-| Instrumentation | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export |
+| Default diagnostics | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export to Aspire Dashboard |
+| Optional observability profile | OpenTelemetry Collector, Prometheus, Loki, Tempo, Grafana |
+| Frontend error tracking | Hosted Sentry service; [configuration and constraints](#19-frontend-diagnostics) |
 
 Exact SDK, package, and image versions are defined in [global.json](../global.json),
 [Directory.Packages.props](../Directory.Packages.props), and
 [ContainerVersions.props](../infra/ContainerVersions.props). Frontend dependencies
-use a lockfile. Aspire SDK and hosting packages share a release family.
+are pinned in [package.json](../src/EvCharging.Web/package.json) and resolved in
+[package-lock.json](../src/EvCharging.Web/package-lock.json).
+Aspire SDK and hosting packages share a release family.
 
 ### 1.2 Application wiring
-
-AppHost models each runnable .NET host using project references. The shared
-`EvCharging.ServiceDefaults` library is referenced by all application and
-simulator hosts and is not a runnable resource.
-
-`WithReference` injects dependency endpoints. Gateway destinations use YARP's
-`AddServiceDiscoveryDestinationResolver`; HTTP clients use
-`Microsoft.Extensions.ServiceDiscovery`. Logical URIs such as `https+http://api/`
-prefer HTTPS and fall back to HTTP when only HTTP is available.
-[Service discovery](https://aspire.dev/fundamentals/service-discovery/)
-
-The gateway is the only application host that references the platform API.
-ChargingWorker references and waits for the gateway; its named `gateway` HTTP
-client uses `https+http://gateway/api/`. YARP matches `/api/{**remainder}` and
-removes `/api` before forwarding, preserving the remaining path and query.
-`/api` reaches the API root, and nested routes reach the corresponding API path.
-Charging-provider clients retain their separate external service references.
-NotificationWorker's `notification-provider-api` client discovers the local
-`NotificationProviderApi` third-party service simulator through its Aspire reference.
-[YARP request transforms](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/yarp/transforms-request?view=aspnetcore-10.0)
 
 Local host endpoints remain available for diagnostics. Service references define
 application routing; they do not enforce network isolation.
@@ -68,35 +56,12 @@ ports. This wiring is verified by selected-instance diagnostics and instance-los
 tests.
 [Aspire networking](https://aspire.dev/fundamentals/networking-overview/)
 
-`AddServiceDefaults` configures discovery, standard HTTP resilience, health checks,
-and OpenTelemetry logs, metrics, and traces. Automatic retries exclude POST, PUT,
-PATCH, DELETE, and CONNECT; effect retries require an explicit provider policy.
-YARP proxy forwarding uses its destination resolver rather than the default
-`IHttpClientFactory` handler pipeline.
-[HTTP resilience](https://learn.microsoft.com/en-us/dotnet/core/resilience/http-resilience)
-
-HTTP hosts map `/health` and `/alive` in development. `/alive` runs checks tagged
-`live`; `/health` runs all registered checks. The baseline self-check establishes
-process responsiveness; workload dependency checks are separate. AppHost uses
-`WithHttpHealthCheck` and `WaitFor` for HTTP dependencies and propagates its
-`DOTNET_ENVIRONMENT` to child hosts. Workers use the shared defaults without HTTP
-listeners.
-
-OTLP export is enabled when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. Aspire
-supplies dashboard export settings for the baseline. The optional `observability`
+The baseline uses Aspire Dashboard diagnostics. The optional `observability`
 profile sends OTLP through the Collector, which exports traces to Tempo, metrics
 to Prometheus, and logs to Loki, with Grafana querying these backends. It also
 forwards telemetry to Aspire Dashboard so resource diagnostics remain available.
-Health requests are excluded from tracing. Configuration and credentials come
-from environment settings or .NET user secrets.
 
 ### 1.3 PostgreSQL access and pooling
-
-Command and query handlers select separate data sources in the same API host.
-EF Core manages transactions and migrations; read contexts use no tracking and
-explicit projections. Parameterized Npgsql SQL supports PostgreSQL-specific queries.
-Connections are borrowed briefly from reusable data sources and returned on disposal;
-connection pooling and ORM context pooling are separate mechanisms.
 
 PostgreSQL range/exclusion constraints with `btree_gist` enforce booking conflicts.
 Session claims use conditional updates/constraints; operation identity has a unique
@@ -118,14 +83,15 @@ on 5432. Npgsql multi-host routing is an optional direct-connection comparison.
 [Npgsql lifecycle](https://www.npgsql.org/doc/basic-usage.html),
 [Npgsql routing](https://www.npgsql.org/doc/failover-and-load-balancing.html),
 [PgBouncer compatibility](https://www.pgbouncer.org/features.html),
-[Azure PgBouncer](https://learn.microsoft.com/en-us/azure/postgresql/connectivity/concepts-pgbouncer)
+[Azure PgBouncer](https://learn.microsoft.com/en-us/azure/postgresql/connectivity/concepts-pgbouncer),
+[Azure HA](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-high-availability)
 
 ### 1.4 Message persistence and envelopes
 
 Each message-processing API/worker host family uses a distinct Wolverine storage
 schema in the application database. Replicas share that schema and durability
-coordination. Each host registers its own handlers/listeners. SQL mutations and
-outgoing envelopes commit together; non-SQL store updates use idempotent writes
+coordination. SQL mutations and outgoing envelopes commit together;
+non-SQL store updates use idempotent writes
 before acknowledgement. The hosted durability runtime recovers stranded inbox/outbox
 work.
 
@@ -134,18 +100,19 @@ and receipt times, correlation/causation IDs, and trace context. They exclude se
 and private file URLs. Stable job IDs and database uniqueness deduplicate scheduling.
 [Wolverine durability](https://wolverinefx.net/guide/durability/),
 [PostgreSQL storage](https://wolverinefx.net/guide/durability/postgresql),
-[EF Core integration](https://wolverinefx.net/guide/durability/efcore/)
+[EF Core integration](https://wolverinefx.net/guide/durability/efcore/),
+[RabbitMQ reliability](https://www.rabbitmq.com/docs/reliability)
 
 ### 1.5 Storage and delivery
 
-AWSSDK.S3 uses configured endpoints, credentials, and provider-compatible
-signing/checksum settings. Adapter operations cover upload/download, HEAD
+Storage compatibility checks cover upload/download, HEAD
 verification, publication copy, deletion, and presigned transfers. Contract tests
 cover both the selected local service and R2. Browser transfers require storage
 CORS rules for the application origin.
 
 Public assets use an R2 custom domain in the same Cloudflare account/zone as the
-bucket. Exact hostnames are environment configuration. `r2.dev` does not provide
+bucket, on a dedicated subdomain of the lab-owned domain. Exact hostnames are
+environment configuration. `r2.dev` does not provide
 CDN caching. Private buckets have no public custom-domain access; presigned URLs
 use the R2 S3 API domain rather than the public asset domain.
 [R2 .NET client](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-net/),
@@ -154,12 +121,10 @@ use the R2 S3 API domain rather than the public asset domain.
 
 ### 1.6 Frontend and live clients
 
-Mantine supplies UI components. TanStack Query manages cached server data, mutations,
-and bounded refetching; SignalR updates refresh or invalidate views. Mutation retries
-retain request identity. Gateway session discovery uses `/auth/session`.
+Frontend behavior follows the [live-delivery design](architecture.md#11-frontend-and-live-delivery).
 
 Valkey cache and SignalR backplane traffic use separate key/channel prefixes,
-connections, and budgets through StackExchange.Redis. Live-route cookie affinity
+connections, and budgets. Live-route cookie affinity
 keeps negotiation and transport on the same API. Authentication-session and
 live-affinity cookies serve separate purposes. Client/server contract checks cover
 fan-out, disconnect, and reconnection.
@@ -169,8 +134,7 @@ fan-out, disconnect, and reconnection.
 
 ### 1.7 Gateway authentication conventions
 
-ASP.NET Core OpenID Connect and cookie handlers implement the
-[gateway authentication design](architecture.md#131-gateway-authentication).
+Browser routes follow the [gateway authentication design](architecture.md#131-gateway-authentication).
 
 | Browser route | Responsibility |
 |---|---|
@@ -181,10 +145,8 @@ ASP.NET Core OpenID Connect and cookie handlers implement the
 | `/identity/*` | Required Keycloak login/protocol resources; administrative routes stay private |
 
 Keycloak's public hostname, issuer, and redirects match the gateway identity route;
-server-side exchanges use internal connectivity. A PostgreSQL-backed `ITicketStore`
-holds tickets and token state. The browser cookie contains a protected session
-reference with Secure, HttpOnly, and SameSite=Lax settings. Shared Data Protection
-keys/application identity and per-session refresh coordination support gateway replicas.
+server-side exchanges use internal connectivity. Browser session cookies require
+Secure, HttpOnly, and SameSite=Lax settings.
 Keycloak uses a dedicated PostgreSQL database and pool, included in connection budgets.
 
 Before attaching an access token upstream, the gateway strips browser-supplied
@@ -196,17 +158,14 @@ forward the authenticated machine identity. Browser token substitution and cooki
 handling apply only to browser-session routes; machine callers do not enter the
 interactive OIDC flow.
 [Keycloak reverse proxy](https://www.keycloak.org/server/reverseproxy),
-[Ticket store](https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.authentication.cookies.iticketstore?view=aspnetcore-10.0),
 [Antiforgery](https://learn.microsoft.com/en-us/aspnet/core/security/anti-request-forgery?view=aspnetcore-10.0),
 [YARP authentication](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/yarp/authn-authz?view=aspnetcore-10.0)
 
 ### 1.8 Notification adapters
 
 NotificationWorker selects `Simulator` (local default) or `Cloudflare` through
-configuration. The simulator uses the discovery-aware client described in
-[application wiring](#12-application-wiring). In Cloudflare mode the worker has
-no simulator reference or startup dependency; missing configuration fails
-explicitly without switching providers. Delivery semantics are defined in
+configuration. Missing provider configuration fails explicitly without switching
+providers. Delivery semantics are defined in
 [integrations](integrations.md#4-notification-providers).
 
 | Provider | Adapter and setup |
@@ -222,6 +181,24 @@ dependencies. Provider SDKs and wire formats remain inside their adapters.
 [Azure email SDK](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/email/send-email),
 [SES SDK](https://docs.aws.amazon.com/ses/latest/dg/send-an-email-using-sdk-programmatically.html)
 
+### 1.9 Frontend diagnostics
+
+Frontend diagnostics cover error capture, structured logs, breadcrumbs, release
+context, and browser tracing. Captured failures include
+JavaScript exceptions, unhandled rejections, and React error-boundary reports.
+Reports include the route, browser, anonymous browser-session ID, and recent
+actions/request outcomes. Tokens, form values, and signed URLs are excluded.
+
+| Configuration | Behavior |
+|---|---|
+| Enablement | Disabled by default; independent of the `observability` profile. Disabled mode sends no Sentry telemetry |
+| Public settings | DSN, environment, and build/release identifier supplied through frontend startup configuration |
+| Collection controls | Configurable error/trace sampling and log levels; session replay has a separate opt-in setting, disabled by default |
+| Build credentials | Source-map upload token, organization, and project configured in the build environment; the secret token is never exposed to the browser |
+| Source-map access | Source maps remain private and match the deployed release; excluded from public CDN assets |
+
+Local builds with Sentry disabled require no Sentry account or upload credentials.
+
 ## 2. Experiments and verification
 
 ### 2.1 Execution profiles
@@ -229,7 +206,8 @@ dependencies. Provider SDKs and wire formats remain inside their adapters.
 | Profile | Resources and purpose |
 |---|---|
 | Local baseline | Aspire processes/containers: multiple gateway/API instances, independent workers, PostgreSQL primary and streaming read replica with two PgBouncer routes, MongoDB, Valkey, Elasticsearch, one RabbitMQ broker, Kafka, an S3-compatible storage container, Keycloak, simulators, and Aspire Dashboard diagnostics |
-| Optional `observability` | Adds the [selected observability backends](architecture.md#2-technology-selections) for telemetry routing, backend queries, custom dashboards, and export/backend failure exercises; startup/health gates apply only when enabled |
+| Optional `observability` | Adds the [selected observability backends](#11-technology-selections-and-version-sources) for telemetry routing, backend queries, custom dashboards, and export/backend failure exercises; startup/health gates apply only when enabled |
+| Optional Sentry | Enables [frontend diagnostics](#19-frontend-diagnostics); requires a hosted project and build-upload credentials |
 | Broker leader loss | Three RabbitMQ nodes with quorum queues; leader-loss and recovery behavior |
 | Cloudflare files/CDN | R2 and Cloudflare CDN deliver versioned frontend assets and published media through a custom domain; real presigned transfers, warm/cold cache behavior, and purge |
 | Cloudflare notification delivery | The real email adapter replaces the notification service simulator; verified test recipients and recorded provider/delivery outcomes |
@@ -245,7 +223,7 @@ The synchronous and queued charging providers are controlled simulators.
 `NotificationProviderApi` simulates a third-party delivery service without sending
 real messages. Hosted notification delivery uses the [selected adapter](#18-notification-adapters).
 Local S3 storage does not demonstrate hosted CDN or R2 signing behavior;
-the files/CDN profile uses the [R2 delivery boundaries](architecture.md#10-object-storage-and-cdn).
+the files/CDN profile uses the [R2 delivery constraints](#15-storage-and-delivery).
 
 The local profile requires no paid product subscriptions. Cloudflare CDN uses the
 Free plan; R2 Standard storage has monthly free allowances with billed overages.
@@ -312,6 +290,7 @@ Verification uses correlated telemetry from the
 | Search/cache | Index freshness/rebuild status, hit rate, fallback load |
 | Files/CDN | Pending uploads, processing attempts, object versions, origin errors, edge hits/misses |
 | Frontend | Reconnects, operation identity/results, unavailable dependencies, stale progress |
+| Frontend diagnostics (Sentry enabled) | Readable JavaScript/component stacks, release, breadcrumbs, grouped issues, alert delivery, and correlated request traces |
 
 ### 2.4 Fault scenarios
 
@@ -359,6 +338,8 @@ Verification uses correlated telemetry from the
 | Browser authentication boundaries | No OIDC tokens exposed to JavaScript; login uses gateway routes, state-changing requests require antiforgery, and API access still enforces ownership |
 | Dashboard export unavailable | Bounded buffering/drop; core processing continues and export loss is observable through local diagnostics |
 | Collector or observability backend lost (optional profile) | Bounded buffering/drop and inspectable pipeline loss; core processing continues and telemetry delivery resumes after recovery |
+| Frontend render/async failure (Sentry enabled) | Error report identifies the deployed source location and preceding activity; repeated failures group into an issue and trigger the configured alert |
+| Sentry disabled or unreachable | Disabled mode sends no Sentry telemetry; failed export is bounded and does not prevent navigation or platform requests |
 
 Each scenario records topology/version, settings, workload, initial state, fault
 injection point/duration, expected behavior, correlated observations, final state,

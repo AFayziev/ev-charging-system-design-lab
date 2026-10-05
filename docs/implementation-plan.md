@@ -88,7 +88,7 @@ monorepo baseline.
   dependencies with Aspire references and service discovery: gateway destinations,
   gateway-routed platform clients, and direct external simulator clients. Share
   defaults for HTTP resilience, dashboard telemetry, and process health.
-- [ ] M01.03 Add the React/TypeScript application with Vite, React Router,
+- [x] M01.03 Add the React/TypeScript application with Vite, React Router,
   Mantine, TanStack Query, and frontend lockfile.
 - [ ] M01.04 Wire local HTTPS, gateway-served SPA entry page, HAProxy ingress,
   multiple gateway/API instances, parameters, endpoints, and development secrets.
@@ -120,6 +120,14 @@ monorepo baseline.
 - [ ] M01.12 Optional profile gate, after M01.06: wire the
   [`observability` profile](lab.md#21-execution-profiles). Verify export routing,
   backend queries, custom dashboards, restart, and its
+  [fault scenarios](lab.md#24-fault-scenarios).
+- [ ] M01.13 After M01.03, M01.04, and M01.06, implement
+  [frontend diagnostics](lab.md#19-frontend-diagnostics), startup configuration,
+  gateway tunnel, and build integration. Verify disabled behavior, capture metadata,
+  bounded export failure, and local builds without hosted credentials.
+- [ ] M01.14 Optional hosted gate, after M01.13: verify the Sentry execution
+  profile against a configured project using a built frontend,
+  [diagnostic signals](lab.md#23-verification-tools-and-signals), and
   [fault scenarios](lab.md#24-fault-scenarios).
 
 Acceptance:
@@ -467,6 +475,7 @@ use the same application contracts with configured provider endpoints.
 | Azure managed PostgreSQL | M12 | Provider failover, pool/session recovery, uncertain commits |
 | OpenTelemetry and Aspire Dashboard | M01.06 onward; M13 views | Correlated evidence, resource health, bounded export during outage |
 | Optional observability profile | M01.12; M13 profile scenarios | Telemetry routing, queries/custom dashboards, bounded buffering/drop during outage |
+| Frontend diagnostics / Sentry | M01.13; hosted gate M01.14 | [Signals](lab.md#23-verification-tools-and-signals), [fault scenarios](lab.md#24-fault-scenarios) |
 | xUnit, Testcontainers, Aspire testing | M01 onward | Domain, dependency, contract, topology, resilience verification |
 | Vitest, React Testing Library, Playwright | M01 onward | UI semantics and authenticated browser workflows |
 | k6 and Toxiproxy | M13; available for earlier gates | Saturation and network-fault evidence |
