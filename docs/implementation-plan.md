@@ -103,7 +103,7 @@ monorepo baseline.
   logs/traces, metrics, instance identity, and resource health.
 - [x] M01.07 Add xUnit/Aspire testing foundations and Vitest,
   React Testing Library, and Playwright workflow harnesses.
-- [ ] M01.08 Select and pin the free local S3-compatible container; verify it can
+- [x] M01.08 Select and pin the free local S3-compatible container; verify it can
   support the file operations specified in the architecture before adopting it.
 - [ ] M01.09 Wire all local baseline resources through Aspire: PostgreSQL primary
   and streaming read replica, two PgBouncer routes, Keycloak and its dedicated
@@ -494,7 +494,6 @@ closes coverage gaps and repeats the integrated demonstrations.
 
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
-| Local S3 container product/image | Free local use; required S3 operations and browser presigned transfers; R2 contract parity | M01.08; adapter verification in M10.01/M11.03 |
 | Cloudflare email sender and verified test recipients | Domain onboarding, scoped credentials, and real-delivery setup; cloud integration is already selected | M04.08 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.02 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

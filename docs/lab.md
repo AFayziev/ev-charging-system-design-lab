@@ -27,7 +27,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Search | Elasticsearch with the official Elastic .NET client |
 | Messaging | Wolverine RabbitMQ transport and EF Core/PostgreSQL durability |
 | Observation stream | Confluent.Kafka client; Kafka in KRaft mode |
-| Object storage / CDN | Cloudflare R2 or a local S3-compatible service through AWSSDK.S3 / Cloudflare CDN |
+| Object storage / CDN | RustFS locally, Cloudflare R2 hosted; AWSSDK.S3 / Cloudflare CDN |
 | Notification delivery | [Simulator and selected real-provider adapter](#18-notification-adapters) |
 | File processing | SkiaSharp images, PDFsharp summaries, .NET ZIP/JSON diagnostics |
 | HTTP resilience | Microsoft.Extensions.Http.Resilience and Polly |
@@ -113,10 +113,13 @@ and private file URLs. Stable job IDs and database uniqueness deduplicate schedu
 
 ### 1.5 Storage and delivery
 
+The local storage service runs as a single-node container.
+[RustFS](https://github.com/rustfs/rustfs) uses the Apache-2.0 license.
 Storage compatibility checks cover upload/download, HEAD
 verification, publication copy, deletion, and presigned transfers. Contract tests
 cover both the selected local service and R2. Browser transfers require storage
 CORS rules for the application origin.
+[RustFS S3 compatibility](https://docs.rustfs.com/en/reference/s3-compatibility)
 
 Public assets use an R2 custom domain in the same Cloudflare account/zone as the
 bucket, on a dedicated subdomain of the lab-owned domain. Exact hostnames are
