@@ -1,4 +1,5 @@
 using Aspire.Hosting;
+using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Xunit;
 
@@ -6,16 +7,25 @@ namespace EvCharging.TopologyTests;
 
 public sealed class AppHostFixture : IAsyncLifetime
 {
-    private DistributedApplication? app;
+    private DistributedApplication? _app;
 
-    public DistributedApplication App => app ?? throw new InvalidOperationException("The application has not started.");
+    public DistributedApplication App => _app ?? throw new InvalidOperationException("The application has not started.");
 
     public async Task InitializeAsync()
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_AppHost>(
             ["--environment=Development"], timeout.Token);
-        app = await builder.BuildAsync(timeout.Token);
+        foreach (var resource in builder.Resources.OfType<ContainerResource>())
+        {
+            foreach (var mount in resource.Annotations.OfType<ContainerMountAnnotation>()
+                .Where(m => m.Type == ContainerMountType.Volume).ToArray())
+            {
+                resource.Annotations.Remove(mount);
+                resource.Annotations.Add(new ContainerMountAnnotation(null, mount.Target, ContainerMountType.Volume, mount.IsReadOnly));
+            }
+        }
+        _app = await builder.BuildAsync(timeout.Token);
         try
         {
             await App.StartAsync(timeout.Token);
@@ -31,10 +41,10 @@ public sealed class AppHostFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
-        if (app is not null)
+        if (_app is not null)
         {
-            await app.DisposeAsync();
-            app = null;
+            await _app.DisposeAsync();
+            _app = null;
         }
     }
 }

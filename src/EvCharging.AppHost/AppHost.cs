@@ -1,12 +1,32 @@
+using EvCharging.AppHost;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
-var apiCount = await InstanceCount("api-instances");
-var gatewayCount = await InstanceCount("gateway-instances");
+var database = builder.AddPlatformDatabase();
+var identity = builder.AddIdentityProvider();
+var documents = builder.AddDocumentDatabase();
+var cacheStore = builder.AddCache();
+var broker = builder.AddMessageBroker();
+var stream = builder.AddObservationStream();
+var searchIndex = builder.AddSearchIndex();
+var (storage, storageAccessKey, storageSecretKey) = builder.AddObjectStorage();
+
+var apiCount = await InstanceCountAsync("api-instances");
+var gatewayCount = await InstanceCountAsync("gateway-instances");
 var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
     .WithReplicas(apiCount)
     .WithHttpHealthCheck("/health");
+
+api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
+    .WithReference(searchIndex).WaitFor(searchIndex)
+    .WithReference(database.Write).WithReference(database.Read).WithReference(database.Direct)
+    .WaitFor(database.Direct)
+    .WithReference(documents).WaitFor(documents)
+    .WithReference(cacheStore).WaitFor(cacheStore)
+    .WithReference(broker).WaitFor(broker)
+    .WithReference(stream).WaitFor(stream);
 
 var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
@@ -15,6 +35,9 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchP
     .WithHttpHealthCheck("/health")
     .WithReference(api)
     .WaitFor(api);
+
+gateway.WithReference(database.Write).WaitFor(database.Direct)
+    .WithReference(identity.GetEndpoint("http")).WaitFor(identity);
 
 builder.AddViteApp("frontend", "../EvCharging.Web")
     .WithExternalHttpEndpoints()
@@ -37,7 +60,7 @@ var notificationProviderApi = builder.AddProject<Projects.EvCharging_Notificatio
     .WithHttpEndpoint()
     .WithHttpHealthCheck("/health");
 
-builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
+var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithReference(gateway)
     .WithReference(synchronousChargingProviderApi)
@@ -46,26 +69,47 @@ builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
     .WaitFor(synchronousChargingProviderApi)
     .WaitFor(queuedChargingProviderApi);
 
-builder.AddProject<Projects.EvCharging_ObservationWorker>("observation-worker")
+var observation = builder.AddProject<Projects.EvCharging_ObservationWorker>("observation-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
 
-builder.AddProject<Projects.EvCharging_SearchIndexWorker>("search-index-worker")
+var search = builder.AddProject<Projects.EvCharging_SearchIndexWorker>("search-index-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
 
-builder.AddProject<Projects.EvCharging_CacheWorker>("cache-worker")
+var cache = builder.AddProject<Projects.EvCharging_CacheWorker>("cache-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
 
-builder.AddProject<Projects.EvCharging_MediaWorker>("media-worker")
+var media = builder.AddProject<Projects.EvCharging_MediaWorker>("media-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
 
-builder.AddProject<Projects.EvCharging_NotificationWorker>("notification-worker")
+var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("notification-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithReference(notificationProviderApi)
     .WaitFor(notificationProviderApi);
 
+foreach (var worker in new[] { charging, observation, search, cache, media, notification })
+{
+    worker.WithReference(database.Write).WaitFor(database.Direct)
+        .WithReference(broker).WaitFor(broker);
+}
+foreach (var consumer in new[] { observation, search, cache })
+{
+    consumer.WithReference(stream).WaitFor(stream);
+}
+observation.WithReference(documents).WaitFor(documents);
+foreach (var reader in new[] { search, cache })
+{
+    reader.WithReference(database.Read);
+}
+cache.WithReference(cacheStore).WaitFor(cacheStore);
+search.WithReference(searchIndex).WaitFor(searchIndex);
+media.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
+    .WithReference(documents).WaitFor(documents);
+synchronousChargingProviderApi.WithReference(gateway).WaitFor(gateway);
+queuedChargingProviderApi.WithReference(gateway).WaitFor(gateway);
+
 builder.Build().Run();
 
-async Task<int> InstanceCount(string name)
+async Task<int> InstanceCountAsync(string name)
 {
     var parameter = builder.AddParameter(name, () => builder.Configuration[$"Parameters:{name}"] ?? "2");
     if (!int.TryParse(await parameter.Resource.GetValueAsync(CancellationToken.None), out var count) || count is < 1 or > 8)

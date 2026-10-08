@@ -35,9 +35,18 @@ public sealed class PlatformTests(AppHostFixture fixture) : IClassFixture<AppHos
         var frontend = fixture.App.GetEndpoint("frontend", "http");
 
         await page.GotoAsync(new Uri(frontend, "/missing-page").AbsoluteUri);
-        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Page not found" })).ToBeVisibleAsync();
-        await page.GetByRole(AriaRole.Link, new() { Name = "Return home" }).ClickAsync();
-        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Welcome to EV Charging" })).ToBeVisibleAsync();
+        await Expect(page.GetByRole(AriaRole.Heading, new()
+        {
+            Name = "Page not found"
+        })).ToBeVisibleAsync();
+        await page.GetByRole(AriaRole.Link, new()
+        {
+            Name = "Return home"
+        }).ClickAsync();
+        await Expect(page.GetByRole(AriaRole.Heading, new()
+        {
+            Name = "Welcome to EV Charging"
+        })).ToBeVisibleAsync();
         await Expect(page).ToHaveURLAsync(new Uri(frontend, "/").AbsoluteUri);
 
         var result = await page.EvaluateAsync<JsonElement>("""

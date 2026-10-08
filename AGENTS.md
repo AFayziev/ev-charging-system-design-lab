@@ -15,6 +15,10 @@ including concurrency, dependency failures, and uncertain external effects.
 | [Integrations](docs/integrations.md) | Third-party provider contracts, simulators, delivery adapters, and command safety |
 | [Lab](docs/lab.md) | Technology selections, implementation constraints, profiles, timings, fault scenarios, and verification |
 | [Plan](docs/implementation-plan.md) | Task IDs, dependencies, status, and acceptance criteria |
+| [C# conventions](docs/csharp-conventions.md) | C# design and review guidelines, cleanup and validation commands |
+
+Follow the C# conventions for application code and tests. Use the repository
+EditorConfig and SDK analyzers; keep new and changed code free of warnings.
 
 ## Projects
 
@@ -43,13 +47,20 @@ Queue, stream, and scheduled-job processors use `Worker`. The proxy/BFF host use
 `Gateway`.
 
 `infra` owns infrastructure configuration; `tests` owns verification; `tools` owns
-repeatable lab commands. Package and image pins belong in the existing central
-manifests, not duplicated in project files or a separate toolchain document.
+repeatable lab commands. NuGet package pins belong in `Directory.Packages.props`;
+container image pins belong alongside their AppHost resource definitions. Do not
+duplicate them in documentation or a separate toolchain document.
 
 ## Aspire workflow
 
 - Use the project-local [Aspire skills](.agents/skills/aspire/SKILL.md): `aspireify`
   for wiring, `aspire-orchestration` for lifecycle, and `aspire-monitoring` for diagnostics.
+- Prefer Aspire-provided integrations and wiring. Check the official documentation
+  and published package dependencies before choosing a wiring approach. Use custom
+  wiring only for a verified gap; differing package versions alone do not establish
+  incompatibility.
+- Use conventional .NET extension methods for reusable resource registration and
+  wiring. Keep resource references and the application graph explicit in AppHost.
 - Run the topology through Aspire CLI, not `dotnet run`. Target
   `src/EvCharging.AppHost/EvCharging.AppHost.csproj` explicitly. Agents use detached
   `aspire start --non-interactive`; the README contains the human foreground command.
@@ -92,6 +103,8 @@ link to it. Plans record tasks, dependencies, and acceptance without restating d
 Do not narrate implementation details that are evident from source code.
 Documents describe decisions, constraints, contracts, and verification; link to
 source when implementation details are needed.
+Prefer concise tables and lists. Use numbered lists for ordered procedures and
+bullets for unordered reference information.
 
 Update task checkboxes and milestone status with the implementation. Do not add
 evidence paragraphs, duplicate progress summaries, or follow-up commits just to

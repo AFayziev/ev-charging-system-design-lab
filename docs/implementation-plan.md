@@ -46,7 +46,7 @@ first processes and expands as functional boundaries become active.
 | M09 | Search and station discovery | M07 | Planned |
 | M10 | Local files, media, summaries, and diagnostics | M07 | Planned |
 | M11 | Hosted R2 and Cloudflare CDN | M10 | Planned |
-| M12 | Managed PostgreSQL failover | M08 | Planned |
+| M12 | Managed PostgreSQL pooling, replication, and failover | M08 | Planned |
 | M13 | Complete lab demonstrations and fault verification | M01–M12; hosted gate M04.08 | Planned |
 
 Independent work becomes available at several points:
@@ -105,14 +105,17 @@ monorepo baseline.
   React Testing Library, and Playwright workflow harnesses.
 - [x] M01.08 Select and pin the free local S3-compatible container; verify it can
   support the file operations specified in the architecture before adopting it.
-- [ ] M01.09 Wire all local baseline resources through Aspire: PostgreSQL primary
-  and streaming read replica, two PgBouncer routes, Keycloak and its dedicated
-  database, MongoDB, Valkey, Elasticsearch, RabbitMQ, Kafka in KRaft mode, and local
+- [x] M01.09 Wire all local baseline resources through Aspire: one application
+  PostgreSQL server with logical read/write/direct connections, Keycloak and its
+  dedicated database, MongoDB, Valkey, Elasticsearch, RabbitMQ, Kafka in KRaft mode, and local
   S3 storage. Configure credentials, volumes, endpoints, references, and readiness
-  waits using integrations or custom container resources as appropriate.
+  waits using integrations or custom container resources as appropriate. Provide
+  local management UI access for every baseline store and broker; verify backend
+  connectivity, both PostgreSQL servers, loopback access, and exclusion from
+  deployment.
 - [ ] M01.10 Add Testcontainers for isolated dependency integration tests and
   bounded protocol-level smoke checks through intended application
-  connections: primary/replica SQL via poolers, replica read-only/replication behavior,
+  connections: SQL through the logical read/write/direct routes,
   MongoDB write/read, Valkey cache/Pub/Sub, Elasticsearch index/query, RabbitMQ
   publish/consume, Kafka append/read, S3 upload/download/presigned transfer, Keycloak
   reachability/discovery, and simulator API stub reachability. Test records
@@ -166,21 +169,21 @@ criteria.
   boundaries for authentication and host-specific Wolverine message-storage schemas.
 - [ ] M02.03 Add synthetic equipment, driver, operator-assignment, and provider
   mappings; provide reproducible fixture seeding and lab-data reset.
-- [ ] M02.04 Extend the M01 database topology with application-specific
-  least-privilege roles and a dedicated direct migration connection; verify grants
-  and transaction-pooling behavior against the actual application schema.
+- [ ] M02.04 Add application-specific least-privilege roles, read-only query
+  credentials, and dedicated migration credentials; verify grants on the local schema.
 - [ ] M02.05 Implement separate long-lived Npgsql data sources, EF Core command
   and no-tracking query contexts, and a dedicated gateway-session primary pool.
 - [ ] M02.06 Add database constraints and conditional updates for booking overlap,
   session exclusivity, operation identity, and permitted transitions.
-- [ ] M02.07 Implement bounded acquisition/query/transaction waits, lag detection,
-  primary fallback admission, and metrics for both client and server pools.
-- [ ] M02.08 Verify transaction-pooling compatibility, replica read-only access,
-  saturation, replica interruption, and uncertain-commit lookup by operation identity.
+- [ ] M02.07 Implement bounded acquisition/query/transaction waits, replica-lag
+  detection when the read route uses a replica, primary fallback admission, and
+  client-pool metrics. Managed replica/pooler verification is tracked in M12.
+- [ ] M02.08 Verify local read/write route selection and permissions, client-pool
+  saturation, database interruption, and uncertain-commit lookup by operation identity.
 
-Acceptance: seeded catalog queries use the replica route, transactional checks
-use the primary, and immediate write results remain authoritative during replica
-lag. A modest workload exposes pool waiting without unbounded primary fallback.
+Acceptance: seeded catalog queries use the read route, transactional checks and
+immediate authoritative results use the write route, and both routes work against
+one local database. A modest workload exposes client-pool waiting with bounded admission.
 Constraint checks use real PostgreSQL across competing connections. No SQL
 transaction remains open during an external call.
 
@@ -260,7 +263,7 @@ is required for M04.08, independently of the local milestone gate.
 - [ ] M05.06 Connect reservation events to notification jobs and verify delivery
   against the third-party service simulator, independently of the booking transaction.
 - [ ] M05.07 Verify competing bookings, adjacent slots, cross-driver access,
-  unauthorized station edits, deadline restart, and replica-lag UI behavior.
+  unauthorized station edits, deadline restart, and authoritative mutation-result display.
 
 Acceptance: an authenticated driver reserves and cancels eligible slots while an
 assigned operator edits station content. Competing API instances preserve booking
@@ -416,22 +419,31 @@ Authentication/API routes and private files are excluded from shared caching.
 Deleting synthetic origins produces observable warm-hit versus cold-miss behavior,
 and purge removes the old publication. Setup and cleanup are reproducible.
 
-### M12 — Managed PostgreSQL failover
+### M12 — Managed PostgreSQL pooling, replication, and failover
 
 - [ ] M12.01 Add the Azure database profile with primary, provider-managed HA
   standby, separate readable replica, managed pooler routes, and configuration/secrets.
+  Preserve the local connection contracts without application routing changes.
 - [ ] M12.02 Run migrations and fixtures using the direct route; verify primary,
   replica, identity, and gateway-session pool budgets and read-only permissions.
 - [ ] M12.03 Run active charging/observation workloads during provider-supported
   failover and record endpoint/pool recovery and transaction interruption.
 - [ ] M12.04 Verify uncertain-commit lookup, operation resubmission, durable work
-  recovery, browser-session continuity, and replica lag/fallback during the exercise.
+  recovery, browser-session continuity, authoritative mutation-result display,
+  and replica lag/fallback during the exercise.
 - [ ] M12.05 Record any observed lost commits, recovered outcomes, bounded waits,
   and measured recovery time; automate teardown and record remaining-resource costs.
+- [ ] M12.06 Verify transaction-pooling compatibility of EF Core and durable
+  messaging, direct routes for session-affine coordination, server-pool budgets and
+  saturation, replica read-only behavior, lag detection, replica interruption, and
+  bounded primary fallback. After M02 and M04 persistence work, M12.01, M12.02,
+  and this gate can run ahead of the full M08-dependent failover workflows.
 
 Acceptance: the provider performs database promotion; the application handles
 interrupted transactions and connections without inventing commit outcomes or
-duplicating operations. HA standby and query replica roles are separately visible.
+duplicating operations. The same application binaries use configured managed
+routes; transaction pooling, bounded fallback, and server-pool contention are
+demonstrated. HA standby and query replica roles are separately visible.
 The exercise ends with recorded business outcomes and resource cleanup.
 
 ### M13 — Complete lab demonstrations and fault verification
@@ -463,8 +475,8 @@ use the same application contracts with configured provider endpoints.
 | Ingress, gateway, and runtime replicas | M01, M03, M08 | Logical destination health, replica selection/loss, affinity, authentication continuity |
 | React, Mantine, TanStack Query | M01, M03, M05–M11 | Role workflows, stale/pending states, reconnect, private access |
 | Keycloak, BFF, shared ticket/key state | M03 | Browser boundaries, refresh/logout races, identity/session-store outage |
-| PostgreSQL, EF Core, Npgsql | M02, M05–M07, M10 | Conflicts, ordering, commits, ownership, completion |
-| Read replica and PgBouncer | M02, M12 | Lag, read-only routes, pool saturation, reconnect/failover |
+| PostgreSQL, EF Core, Npgsql | M02, M05–M07, M10 | Route permissions, client pooling, conflicts, ordering, commits, ownership, completion |
+| Managed read replica and PgBouncer | M12; application route contracts in M02 | Lag, read-only routes, server-pool saturation, reconnect/failover |
 | RabbitMQ jobs/topics, Wolverine inbox/outbox | M04 onward | Publish/ack crash windows, redelivery, independent subscribers |
 | Durable scheduler / reconciliation | M04–M07, M10 | Restart, deadlines, exhaustion, expiry races, missing notices |
 | Provider simulators, HTTP resilience | M06, M07 | Lost responses, idempotency differences, rate limits, physical evidence |

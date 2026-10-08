@@ -3,10 +3,6 @@
 A system-design lab modeling an EV charging platform with a .NET 10/C# backend
 and a React/TypeScript frontend for drivers and backoffice operator users.
 
-The system connects station discovery, connector reservations, charging control,
-and live session tracking with operator workflows for station management and
-failure recovery.
-
 ## Features
 
 - Drivers discover stations, reserve connectors, start and stop charging, follow
@@ -24,8 +20,8 @@ failure recovery.
 - Aspire application modeling and lab orchestration with local processes and
   containers, plus targeted Cloudflare and Azure service exercises.
 - Authentication, resource authorization, API gateway, load balancing, and replicas.
-- PostgreSQL primary/read-replica routing, Npgsql connection pools, PgBouncer,
-  and a provider-managed database failover exercise.
+- PostgreSQL read/write routing and Npgsql connection pools, with managed
+  replication, PgBouncer, and database failover in the Azure exercise.
 - MongoDB document storage, Valkey caching, Elasticsearch, and rebuildable read models.
 - RabbitMQ work queues and publish/subscribe, Kafka observation streams, and
   Wolverine inbox/outbox and durable scheduling.
@@ -36,108 +32,152 @@ failure recovery.
 
 ## Resilience
 
-Charging commands and observed charger state are tracked separately so uncertain
-external outcomes can be reconciled. Transactional checks protect reservations,
-while idempotent processing and outbox publishing support asynchronous workflows.
-
-Read models have explicit freshness requirements. The frontend shows pending
-operations, stale observations, and connection interruptions, then refreshes
-authoritative state after reconnecting.
-
-Provider simulators and fault scenarios cover timeouts, duplicate events, lost
-responses, worker crashes, dependency outages, replication lag, and recovery.
+- Transactional reservation checks, idempotent processing, and outbox publishing.
+- Reconciliation of charging commands against observed charger state.
+- Explicit read-model freshness, pending operations, and reconnect recovery.
+- Fault scenarios: timeouts, duplicates, lost responses, crashes, outages, and
+  replication lag.
 
 ## Requirements
 
 | Tool | Requirement |
 |---|---|
-| [.NET SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) | 10.0.400 or a later stable patch in the 10.0.4xx feature band, as configured in [global.json](global.json) |
-| [Aspire CLI](https://aspire.dev/get-started/install-cli/) | 13.6, matching the AppHost SDK and hosting packages |
-| [Node.js](https://nodejs.org/en/about/previous-releases) | 24 LTS with npm for frontend tooling |
-| [Docker](https://docs.docker.com/get-started/get-docker/) | Docker CLI 25.0.0 or newer and running Docker Engine with Linux container support; Docker Desktop on Windows or macOS |
+| [.NET SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) | 10.0.400 or a later stable 10.0.4xx patch ([global.json](global.json)) |
+| [Aspire CLI](https://aspire.dev/get-started/install-cli/) | 13.6 |
+| [Node.js](https://nodejs.org/en/about/previous-releases) | 24 LTS with npm |
+| [Docker](https://docs.docker.com/get-started/get-docker/) | CLI 25+ and a running Linux container engine |
 | [Git](https://git-scm.com/downloads) | Repository checkout and version control |
 
-On Windows, Docker Desktop requires a supported WSL 2 or Hyper-V backend with
-hardware virtualization enabled. See the [Windows installation requirements](https://docs.docker.com/desktop/setup/install/windows-install/).
-Dependency restore and image pulls require access to NuGet, npm, and container
-registries. Aspire SDK and hosting dependencies are restored through NuGet.
-
-The local lab runs without cloud accounts. Hosted exercises additionally require
-a Cloudflare account/domain for R2, CDN, or email delivery, or an Azure subscription
-for managed PostgreSQL, depending on the
-[execution profile](docs/lab.md#21-execution-profiles).
+- Windows Docker requires
+  [WSL 2 or Hyper-V with virtualization](https://docs.docker.com/desktop/setup/install/windows-install/).
+- Network access to NuGet, npm, and container registries.
+- Local runs need no cloud accounts. Hosted
+  [profiles](docs/lab.md#21-execution-profiles) require Cloudflare and/or Azure.
 
 ## Local development
 
-```sh
-aspire run --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http
-```
+1. Start Docker Engine with Linux container support.
+2. Start the lab:
 
-The AppHost starts the frontend, gateway/API replicas, workers, and third-party
-service simulators as local processes. Open the `frontend` HTTP endpoint from
-the Aspire dashboard. The frontend and API share this browser origin.
-`/api/diagnostics/instance` and the `X-Gateway-Instance` response header identify
-the selected local replicas.
-`/health` and `/alive` on backend hosts expose health checks.
+   ```sh
+   aspire run --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http
+   ```
 
-Container-backed milestones require Docker Engine to be running.
+3. Open the dashboard's `frontend` HTTP endpoint.
+4. Stop with `Ctrl+C`; named data volumes persist.
 
-Stop with `Ctrl+C`.
+- Starts application hosts, simulators, and dependency containers.
+- Frontend and API share the browser origin.
+- Replica identity: `/api/diagnostics/instance` and `X-Gateway-Instance`.
+- Backend health: `/health` and `/alive`.
+- [Routing and execution profiles](docs/lab.md#12-application-wiring).
 
-Local routing and execution profiles are described in the
-[lab reference](docs/lab.md#12-application-wiring).
+### Management tools
 
-Detached execution:
+- Access: dashboard **Manage** links or resource HTTP endpoints.
+- Local only: loopback endpoints, excluded from deployment.
+- Credentials: local Aspire resource details.
 
-```sh
-aspire start --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http --non-interactive
-aspire describe --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj
-aspire stop --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --non-interactive
-```
+| Tool | Resource |
+|---|---|
+| pgAdmin | Application and identity PostgreSQL servers |
+| Keycloak Admin Console | Identity provider |
+| Mongo Express | MongoDB |
+| Kafbat UI | Kafka |
+| Valkey Admin | Valkey |
+| Elasticvue | Elasticsearch |
+| RabbitMQ Management | RabbitMQ |
+| RustFS Console | Object storage |
 
-Optional local replica overrides and development secret storage:
+- Valkey Admin **Add Connection**: `valkey:6379`, user `default`,
+  `valkey-password`, TLS disabled.
+- RabbitMQ login: configured resource credentials.
+
+### Detached execution
+
+1. Start:
+
+   ```sh
+   aspire start --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http --non-interactive
+   ```
+
+2. Inspect resources and endpoints:
+
+   ```sh
+   aspire describe --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj
+   ```
+
+3. Stop:
+
+   ```sh
+   aspire stop --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --non-interactive
+   ```
+
+### Optional replica overrides
 
 ```sh
 dotnet user-secrets set "Parameters:gateway-instances" "3" --project src/EvCharging.AppHost
 dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.AppHost
 ```
 
-Secret values belong in this local store or environment configuration, never
-in tracked settings.
+- Store secrets in user-secrets or environment configuration, never tracked settings.
+- Aspire persists generated dependency credentials in AppHost user-secrets.
 
-Frontend dependency restore and checks:
+### Frontend checks
 
-```sh
-npm --prefix src/EvCharging.Web ci
-npm --prefix src/EvCharging.Web run format:check
-npm --prefix src/EvCharging.Web run format
-npm --prefix src/EvCharging.Web run typecheck
-npm --prefix src/EvCharging.Web run build
-```
+1. Restore dependencies:
+
+   ```sh
+   npm --prefix src/EvCharging.Web ci
+   ```
+
+2. Check formatting and build:
+
+   ```sh
+   npm --prefix src/EvCharging.Web run format:check
+   npm --prefix src/EvCharging.Web run build
+   ```
+
+- Apply formatting fixes: `npm --prefix src/EvCharging.Web run format`.
 
 ## Tests
 
-Frontend component tests:
+### Frontend component tests
 
-```sh
-npm --prefix src/EvCharging.Web run test
-npm --prefix src/EvCharging.Web run test:watch
-```
+| Mode | Command |
+|---|---|
+| Single run | `npm --prefix src/EvCharging.Web run test` |
+| Watch | `npm --prefix src/EvCharging.Web run test:watch` |
 
-Topology and browser tests use a test-owned Aspire application with discovered
-endpoints. They require the frontend dependencies and Chromium installed:
+### Topology and browser tests
 
-```sh
-dotnet build tests/EvCharging.TopologyTests
-pwsh tests/EvCharging.TopologyTests/bin/Debug/net10.0/playwright.ps1 install chromium
-dotnet test tests/EvCharging.TopologyTests
-```
+- Isolated Aspire application and disposable container data.
+- Require Docker, frontend dependencies, and Chromium.
 
-`--filter "Category=Topology"` runs the backend checks without a browser;
-`--filter "Category=Browser"` runs the Playwright workflow.
+1. Build the test project:
+
+   ```sh
+   dotnet build tests/EvCharging.TopologyTests
+   ```
+
+2. Install Chromium (first run):
+
+   ```sh
+   pwsh tests/EvCharging.TopologyTests/bin/Debug/net10.0/playwright.ps1 install chromium
+   ```
+
+3. Run the tests:
+
+   ```sh
+   dotnet test tests/EvCharging.TopologyTests
+   ```
+
+- Backend only: `--filter "Category=Topology"`.
+- Playwright workflow: `--filter "Category=Browser"`.
 
 ## Documentation
 
+- [C# coding conventions](docs/csharp-conventions.md)
 - [Architecture](docs/architecture.md)
 - [Domain reference](docs/domain.md)
 - [External integration contracts](docs/integrations.md)

@@ -8,7 +8,14 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="Aspire.Hosting.Elasticsearch" />
     <PackageReference Include="Aspire.Hosting.JavaScript" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+    <PackageReference Include="Aspire.Hosting.MongoDB" />
+    <PackageReference Include="Aspire.Hosting.Valkey" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" />
+    <PackageReference Include="Aspire.Hosting.Kafka" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Elasticsearch.Extensions" />
     <ProjectReference Include="../EvCharging.Gateway/EvCharging.Gateway.csproj" />
     <ProjectReference Include="../EvCharging.Api/EvCharging.Api.csproj" />
     <ProjectReference Include="../EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />

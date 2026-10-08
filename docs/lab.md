@@ -10,7 +10,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 
 ## 1. Technical setup
 
-### 1.1 Technology selections and version sources
+### 1.1 Technology selections
 
 | Area | Selection |
 |---|---|
@@ -20,7 +20,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | API gateway | YARP |
 | Identity | Keycloak; OIDC Authorization Code with PKCE through the gateway, using ASP.NET Core OpenID Connect and cookie authentication |
 | Live delivery | SignalR .NET/JavaScript clients; StackExchange.Redis backplane on Valkey |
-| Relational access / pooling | PostgreSQL 17 primary/read replica and PgBouncer; EF Core 10/Npgsql provider and long-lived Npgsql data sources |
+| Relational access / pooling | PostgreSQL 17; EF Core 10/Npgsql provider and long-lived Npgsql data sources; managed PgBouncer in Azure |
 | Managed database exercise | Azure Database for PostgreSQL Flexible Server; readable replica and provider-managed HA |
 | Documents | MongoDB with the official C# driver |
 | Cache / live backplane | Valkey with StackExchange.Redis |
@@ -34,13 +34,6 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Default diagnostics | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export to Aspire Dashboard |
 | Optional observability profile | OpenTelemetry Collector, Prometheus, Loki, Tempo, Grafana |
 | Frontend error tracking | Hosted Sentry service; [configuration and constraints](#19-frontend-diagnostics) |
-
-Exact SDK, package, and image versions are defined in [global.json](../global.json),
-[Directory.Packages.props](../Directory.Packages.props), and
-[ContainerVersions.props](../infra/ContainerVersions.props). Frontend dependencies
-are pinned in [package.json](../src/EvCharging.Web/package.json) and resolved in
-[package-lock.json](../src/EvCharging.Web/package-lock.json).
-Aspire SDK and hosting packages share a release family.
 
 ### 1.2 Application wiring
 
@@ -60,14 +53,13 @@ profile sends OTLP through the Collector, which exports traces to Tempo, metrics
 to Prometheus, and logs to Loki, with Grafana querying these backends. It also
 forwards telemetry to Aspire Dashboard so resource diagnostics remain available.
 
-HTTP failures use Problem Details without exception details. The default request
-timeout is 10 seconds; cancellation is cooperative and does not establish whether
-a side effect occurred. Correlation uses standard W3C trace context.
+HTTP failures use Problem Details without exception details. Request cancellation
+is cooperative and does not establish whether a side effect occurred. Correlation
+uses standard W3C trace context.
 
 HTTP hosts expose `/health` and `/alive` in all environments; hosted ingress
 controls public access. Instance diagnostics and OpenAPI remain development-only.
-API endpoints are available through the gateway under `/api`;
-API OpenAPI advertises that base path. Unimplemented business routes return 404.
+API endpoints are available through the gateway under `/api`.
 
 ### 1.3 PostgreSQL access and pooling
 
@@ -77,21 +69,38 @@ constraint. These mechanisms enforce the [domain rules](domain.md#5-reservations
 [Range constraints](https://www.postgresql.org/docs/17/rangetypes.html#RANGETYPES-CONSTRAINT),
 [btree_gist](https://www.postgresql.org/docs/17/btree-gist.html)
 
-Local primary and replica routes use separate PgBouncer containers in transaction
-mode. Session pooling is a comparison route for session-affine features. Session
-state, advisory locks, temporary objects, and prepared statements require pooler
-compatibility checks. Migrations use a dedicated direct connection.
+The local baseline uses one application database without a replica or server
+pooler. Logical routes remain separate across environments:
+
+| Connection | Local baseline | Azure database profile |
+|---|---|---|
+| `platform-write` | Application database | Primary through managed PgBouncer |
+| `platform-read` | Same database with a read-only application role | Readable replica, with managed pooling when enabled |
+| `platform-direct` | Direct application database connection | Direct primary for migrations and session-affine operations |
+
+Application roles enforce route permissions; read/write paths retain separate
+Npgsql data sources and budgets. Authoritative reads use the write route; replica
+queries tolerate asynchronous lag. Changing topology changes connection settings,
+not application routing or consistency rules.
+
+Managed PgBouncer uses transaction mode. Session state, advisory locks, temporary
+objects, prepared statements, and persistence-library coordination require
+compatibility checks; session-affine operations use a suitable direct connection.
 
 Client pool limits multiply across processes and routes; server pools also depend
 on pooler instances and database/user combinations. Gateway session persistence
 has its own primary-route pool within the aggregate connection budget.
 
 Azure exercises use managed PgBouncer endpoints on port 6432 and direct connections
-on 5432. Npgsql multi-host routing is an optional direct-connection comparison.
+on 5432, with provider authentication and TLS. Managed pooling and read replicas
+require General Purpose or Memory Optimized compute. Replica lag/outage and
+server-pool contention are verified in Azure; local runs verify route permissions
+and client pooling. Npgsql multi-host routing is an optional direct-connection comparison.
 [Npgsql lifecycle](https://www.npgsql.org/doc/basic-usage.html),
 [Npgsql routing](https://www.npgsql.org/doc/failover-and-load-balancing.html),
 [PgBouncer compatibility](https://www.pgbouncer.org/features.html),
 [Azure PgBouncer](https://learn.microsoft.com/en-us/azure/postgresql/connectivity/concepts-pgbouncer),
+[Azure read replicas](https://learn.microsoft.com/en-us/azure/postgresql/read-replica/concepts-read-replicas),
 [Azure HA](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-high-availability)
 
 ### 1.4 Message persistence and envelopes
@@ -216,8 +225,8 @@ Local builds with Sentry disabled require no Sentry account or upload credential
 
 | Profile | Resources and purpose |
 |---|---|
-| Local baseline | Aspire processes/containers: multiple gateway/API instances, independent workers, PostgreSQL primary and streaming read replica with two PgBouncer routes, MongoDB, Valkey, Elasticsearch, one RabbitMQ broker, Kafka, an S3-compatible storage container, Keycloak, simulators, and Aspire Dashboard diagnostics |
-| Optional `observability` | Adds the [selected observability backends](#11-technology-selections-and-version-sources) for telemetry routing, backend queries, custom dashboards, and export/backend failure exercises; startup/health gates apply only when enabled |
+| Local baseline | Aspire processes/containers: multiple gateway/API instances, independent workers, one application PostgreSQL server, a separate identity database server, MongoDB, Valkey, Elasticsearch, one RabbitMQ broker, Kafka, an S3-compatible storage container, Keycloak, simulators, and Aspire Dashboard diagnostics |
+| Optional `observability` | Adds the [selected observability backends](#11-technology-selections) for telemetry routing, backend queries, custom dashboards, and export/backend failure exercises; startup/health gates apply only when enabled |
 | Optional Sentry | Enables [frontend diagnostics](#19-frontend-diagnostics); requires a hosted project and build-upload credentials |
 | Broker leader loss | Three RabbitMQ nodes with quorum queues; leader-loss and recovery behavior |
 | Cloudflare files/CDN | R2 and Cloudflare CDN deliver versioned frontend assets and published media through a custom domain; real presigned transfers, warm/cold cache behavior, and purge |
@@ -225,9 +234,9 @@ Local builds with Sentry disabled require no Sentry account or upload credential
 | Azure database failover | Managed PostgreSQL HA plus readable replica/pooler routes; provider-supported failover exposes application interruption and recovery |
 
 The local baseline covers redelivery, outbox recovery, projection replay, cache
-loss, replication lag, and dependency interruptions. Clustered profiles are used
-for quorum/leader behavior. Local replicas share a host failure boundary; they
-do not demonstrate multi-zone availability.
+loss, and dependency interruptions. Clustered profiles cover quorum/leader behavior;
+the Azure database profile covers replication and managed pooling. Local application
+replicas share a host failure boundary and do not demonstrate multi-zone availability.
 
 MongoDB, Valkey, Elasticsearch, RabbitMQ, and Kafka need no cloud subscriptions.
 The synchronous and queued charging providers are controlled simulators.
@@ -248,11 +257,6 @@ of cloud subscriptions.
 [Cloudflare Email Service pricing](https://developers.cloudflare.com/email-service/platform/pricing/),
 [Azure PostgreSQL pricing](https://azure.microsoft.com/en-us/pricing/details/postgresql/flexible-server/)
 
-The [initial topology milestone](implementation-plan.md#3-milestone-tasks-and-acceptance)
-starts every local baseline resource with stub application/simulator hosts and
-isolated protocol smoke checks. Resource availability is verified separately from
-the business and fault acceptance scenarios below.
-
 ### 2.2 Default timings
 
 Short intervals make failure and recovery visible during a small demonstration.
@@ -260,6 +264,7 @@ These are overridable experiment settings, not production availability targets.
 
 | Setting | Default | Meaning |
 |---|---|---|
+| API request timeout | 10 seconds | Cooperative deadline for inbound API requests |
 | Telemetry interval | 2 seconds | Normal simulator cadence |
 | Freshness limit | 10 seconds | Greater source-observation age is stale |
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
@@ -294,7 +299,7 @@ Verification uses correlated telemetry from the
 | Boundary | Evidence |
 |---|---|
 | Requests | Latency, errors, admission rejection, active requests, selected replicas |
-| SQL and pooling | Client/server counts by route/process, acquisition waits, transaction/query duration, locks, replay lag |
+| SQL and pooling | Client counts by route/process, acquisition waits, transaction/query duration, locks; server-pool counts and replay lag in Azure |
 | Jobs | Queue depth/age, oldest outbox age, attempts, dead letters, uncertain operations |
 | Streams/documents | Consumer lag, processing errors, retained history, latest-view age |
 | Providers | Physical state, command/correlation records, latency, rate limiting, circuit state, reconciliation results |
@@ -316,12 +321,12 @@ Verification uses correlated telemetry from the
 | Replay into a replacement view | Validated rebuilt projection; no charging commands or notifications |
 | Telemetry stops | Timestamped state becomes stale; silence does not imply stopped or offline |
 | Stop confirmed before final usage | Session waits for final evidence; completion and summary use matching frozen facts |
-| Replica replay paused or replica lost | Lag visible; bounded fallback protects primary; immediate write confirmation remains correct |
+| Replica lag or replica lost (Azure database profile) | Lag visible; bounded fallback protects primary; immediate write confirmation remains correct |
 | Read saturation / API-worker scaling | Bounded acquisition/rejection; separate route budgets and aggregate client/server counts remain observable |
 | Gateway/API process lost | Routing reaches healthy instances; browser session remains usable across gateways; in-flight operations recover by identity |
 | Gateway unavailable during observation submission | Worker/provider submissions retain event identity and follow bounded retry/recovery; acknowledgement still requires durable ingestion, and no caller bypasses the gateway |
-| Pooler/primary lost | Interrupted work is visible; reconnect is bounded and uncertain commits are checked |
-| Managed database failover | Endpoint/pool recovery, transaction outcomes, recovery time, and any lost commits recorded |
+| Primary lost; managed pooler lost in Azure | Interrupted work is visible; reconnect is bounded and uncertain commits are checked |
+| Managed database failover (Azure database profile) | Endpoint/pool recovery, transaction outcomes, recovery time, and any lost commits recorded |
 | Broker outage and recovery | Outbox retains pending work, exposes age, and drains without duplicate mutations |
 | Clustered broker leader lost | Quorum queue behavior and publisher/consumer recovery observed |
 | Stream unavailable | No false durable acknowledgement; bounded callback retry/polling and visible observation uncertainty |
