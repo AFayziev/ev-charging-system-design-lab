@@ -4,9 +4,16 @@ using Microsoft.Extensions.Configuration;
 var builder = DistributedApplication.CreateBuilder(args);
 
 var database = builder.AddPlatformDatabase();
+var authentication = builder.AddAuthenticationDatabase(database.Direct);
+var authenticationMigrations = builder.AddProject<Projects.EvCharging_Gateway_Migrations>("gateway-auth-migrations", launchProfileName: null)
+    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithReference(authentication.Migration)
+    .WaitForCompletion(authentication.Bootstrap);
+
 var gatewayOidcSecret = builder.AddParameter("gateway-oidc-secret",
     new GenerateParameterDefault { MinLength = 32, Special = false }, secret: true, persist: true);
 var identity = builder.AddIdentityProvider(gatewayOidcSecret);
+
 var documents = builder.AddDocumentDatabase();
 var cacheStore = builder.AddCache();
 var broker = builder.AddMessageBroker();
@@ -39,7 +46,7 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchP
     .WithReference(api)
     .WaitFor(api);
 
-gateway.WithReference(database.Write).WaitFor(database.Direct)
+gateway.WithReference(authentication.Runtime).WaitForCompletion(authenticationMigrations)
     .WithReference(identity.GetEndpoint("http")).WaitFor(identity);
 
 var gatewayPublicOrigin = builder.ExecutionContext.IsRunMode && builder.Configuration["Parameters:gateway-public-origin"] is null
@@ -99,17 +106,21 @@ foreach (var worker in new[] { charging, observation, search, cache, media, noti
     worker.WithReference(database.Write).WaitFor(database.Direct)
         .WithReference(broker).WaitFor(broker);
 }
+
 foreach (var consumer in new[] { observation, search, cache })
 {
     consumer.WithReference(stream).WaitFor(stream);
 }
+
 observation.WithReference(documents).WaitFor(documents);
 foreach (var reader in new[] { search, cache })
 {
     reader.WithReference(database.Read);
 }
+
 cache.WithReference(cacheStore).WaitFor(cacheStore);
 search.WithReference(searchIndex).WaitFor(searchIndex);
+
 media.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
     .WithReference(documents).WaitFor(documents);
 synchronousChargingProviderApi.WithReference(gateway).WaitFor(gateway);
@@ -124,5 +135,6 @@ async Task<int> InstanceCountAsync(string name)
     {
         throw new InvalidOperationException($"Parameters:{name} must be an integer between 1 and 8.");
     }
+
     return count;
 }

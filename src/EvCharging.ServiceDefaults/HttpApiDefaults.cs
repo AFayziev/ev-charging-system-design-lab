@@ -50,6 +50,7 @@ public static class HttpApiDefaultsExtensions
                 stub = true
             });
         }
+
         return app;
     }
 }

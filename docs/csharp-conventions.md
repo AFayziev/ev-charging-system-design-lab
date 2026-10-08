@@ -12,6 +12,8 @@ retain their prescribed names and signatures.
   small related private types may remain together.
 - Comments explain intent, constraints, or surprising behavior. Document public
   contracts when their units, invariants, or failure semantics need explanation.
+- Separate distinct logical steps with one blank line; keep closely related
+  statements together.
 
 ## Types and dependencies
 
@@ -25,7 +27,13 @@ retain their prescribed names and signatures.
   service location inside business logic and manually building service providers.
 - Register shared capabilities through conventional `Add...` extension methods;
   name HTTP pipeline extensions `Use...` and endpoint extensions `Map...`.
-- Bind related settings to typed options and validate required settings at startup.
+- Bind related settings to typed options and use the framework's Options validation
+  at startup. Do not duplicate it with manual validation in factories or helpers.
+- Keep options types limited to settings and validation metadata. Construct
+  dependencies in registration code.
+- Missing or invalid required configuration must fail explicitly, including in
+  design-time tooling. Do not substitute connection strings, credentials, or
+  dependency endpoints. Defaults belong only to intentionally optional settings.
 - Introduce interfaces at meaningful dependency boundaries, not for every class.
   Keep persistence and transport concerns out of domain behavior.
 - Prefer stable framework/library capabilities to custom infrastructure. Avoid
@@ -74,6 +82,10 @@ retain their prescribed names and signatures.
   and isolated data. Avoid timing sleeps and order-dependent tests.
 - Use unit tests for logic and integration tests for real dependency contracts;
   do not mock away the behavior an integration test is intended to verify.
+- Do not add tests or custom probes solely to confirm framework configuration,
+  dependency-injection registrations, built-in telemetry, or basic framework
+  behavior such as ORM CRUD and rerunning unchanged migrations. Test application
+  behavior and data/security contracts; use existing diagnostics to inspect wiring.
 - [.editorconfig](../.editorconfig) defines formatting and naming.
   [Directory.Build.props](../Directory.Build.props) enables SDK analyzers and
   build-visible style warnings. Design guidelines require code review.

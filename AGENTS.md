@@ -29,6 +29,7 @@ implementation progress is recorded in the plan.
 |---|---|
 | `EvCharging.AppHost` | Aspire resource graph, endpoints, references, environment, and startup dependencies |
 | `EvCharging.Gateway` | YARP/BFF, browser sessions, authentication, and browser/service/callback routing to runtime-balanced API services |
+| `EvCharging.Gateway.Migrations` | One-shot authentication-schema migrations using schema-owning credentials |
 | `EvCharging.Web` | Shared React/TypeScript browser application for drivers and backoffice operators |
 | `EvCharging.Api` | Commands/queries, transactional acceptance, file authorization, callbacks, and live delivery |
 | `EvCharging.ChargingWorker` | Charging effects, reservation expiry, reconciliation, and recovery polling |

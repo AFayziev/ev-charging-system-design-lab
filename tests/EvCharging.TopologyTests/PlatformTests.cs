@@ -16,6 +16,7 @@ public sealed class PlatformTests(AppHostFixture fixture) : IClassFixture<AppHos
     {
         using var client = fixture.App.CreateHttpClient("gateway", "http");
         client.Timeout = TimeSpan.FromSeconds(15);
+
         using var response = await client.GetAsync("/api/__unmapped-test-route");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);

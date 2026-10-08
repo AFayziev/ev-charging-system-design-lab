@@ -2,7 +2,7 @@ namespace EvCharging.AppHost;
 
 internal static class ResourceExtensions
 {
-    private const string PostgresImageTag = "17.11-bookworm";
+    internal const string PostgresImageTag = "17.11-bookworm";
 
     public static (
         IResourceBuilder<PostgresDatabaseResource> Direct,
@@ -17,6 +17,7 @@ internal static class ResourceExtensions
         {
             primary.WithPgAdmin(gui => gui.WithImageTag("9.15.0").WaitFor(primary));
         }
+
         var direct = primary.AddDatabase("platform-direct", "evcharging");
         var write = builder.AddConnectionString("platform-write", direct.Resource.ConnectionStringExpression);
         var read = builder.AddConnectionString("platform-read", direct.Resource.ConnectionStringExpression);
@@ -102,6 +103,7 @@ internal static class ResourceExtensions
         {
             database.WithMongoExpress(gui => gui.WithImageTag("1.0.2-20-alpine3.19").WaitFor(database));
         }
+
         return database;
     }
 
@@ -112,6 +114,7 @@ internal static class ResourceExtensions
             broker.WithManagementPlugin()
                 .WithEndpoint("management", endpoint => endpoint.ExcludeReferenceEndpoint = true);
         }
+
         return broker;
     }
 
@@ -122,6 +125,7 @@ internal static class ResourceExtensions
             stream.WithKafkaUI(gui => gui.WithImageTag("v1.5.0")
                 .WithHttpHealthCheck("/actuator/health").WaitFor(stream));
         }
+
         return stream;
     }
 
@@ -144,6 +148,7 @@ internal static class ResourceExtensions
                 .WaitFor(cache)
                 .ExcludeFromManifest();
         }
+
         return cache;
     }
 
@@ -153,6 +158,7 @@ internal static class ResourceExtensions
         {
             search.WithElasticvue(gui => gui.WithImageTag("1.16.0").WithHttpHealthCheck("/"));
         }
+
         return search;
     }
 

@@ -169,12 +169,13 @@ criteria.
 - [x] M02.01 Configure the bootstrapped Keycloak instance with application realm,
   synthetic users, and the gateway's confidential OIDC client; verify its dedicated
   PostgreSQL database/pool configuration.
-- [ ] M02.02 Establish authentication persistence: session/key schema migrations,
+- [x] M02.02 Establish authentication persistence: session/key schema migrations,
   least-privilege runtime and migration credentials, and a dedicated long-lived
-  Npgsql primary data source with bounded waits and pool metrics. Introduce
-  Testcontainers for isolated PostgreSQL tests of schema and permissions.
+  Npgsql primary data source with bounded waits and pool metrics.
 - [ ] M02.03 Implement the shared PostgreSQL `ITicketStore`, protected token state,
   Data Protection key sharing, per-session refresh coordination, and logout removal.
+  Introduce PostgreSQL Testcontainers tests for session expiry, renewal,
+  concurrent updates, and removal.
 - [ ] M02.04 Implement the documented `/auth` routes and gateway-proxied
   `/identity` resources, including matching public issuer/redirect configuration.
 - [ ] M02.05 Add antiforgery validation, validated return URLs, cookie attributes,
@@ -204,8 +205,7 @@ access.
   mappings linked to the M02 identity fixtures; provide reproducible fixture seeding
   and lab-data reset.
 - [ ] M03.04 Extend database roles with least-privilege domain access, read-only
-  query credentials, and dedicated migration credentials; verify grants using the
-  PostgreSQL Testcontainers foundation from M02.02.
+  query credentials, and dedicated migration credentials.
 - [ ] M03.05 Implement separate long-lived Npgsql read/write data sources and
   EF Core command and no-tracking query contexts.
 - [ ] M03.06 Add database constraints and conditional updates for booking overlap,
@@ -512,7 +512,7 @@ use the same application contracts with configured provider endpoints.
 | Optional observability profile | M01.12; M13 profile scenarios | Telemetry routing, queries/custom dashboards, bounded buffering/drop during outage |
 | Frontend diagnostics / Sentry | M01.13; hosted gate M01.14 | [Signals](lab.md#23-verification-tools-and-signals), [fault scenarios](lab.md#24-fault-scenarios) |
 | xUnit and Aspire testing | M01.07 onward | Domain, contract, topology, resilience verification |
-| Testcontainers | M02.02 onward | Isolated real-dependency integration tests within functional milestones |
+| Testcontainers | M02.03 onward | Isolated real-dependency integration tests within functional milestones |
 | Vitest, React Testing Library, Playwright | M01 onward | UI semantics and authenticated browser workflows |
 | k6 and Toxiproxy | M13; available for earlier gates | Saturation and network-fault evidence |
 

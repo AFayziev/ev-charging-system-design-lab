@@ -25,6 +25,7 @@ public sealed class AppHostFixture : IAsyncLifetime
                 resource.Annotations.Add(new ContainerMountAnnotation(null, mount.Target, ContainerMountType.Volume, mount.IsReadOnly));
             }
         }
+
         _app = await builder.BuildAsync(timeout.Token);
         try
         {

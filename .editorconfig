@@ -32,8 +32,12 @@ csharp_indent_switch_labels = true
 csharp_space_after_keywords_in_control_flow_statements = true
 csharp_space_between_method_call_parameter_list_parentheses = false
 csharp_space_between_method_declaration_parameter_list_parentheses = false
-csharp_preserve_single_line_blocks = false
+csharp_preserve_single_line_blocks = true
 csharp_preserve_single_line_statements = false
+dotnet_diagnostic.RCS0042.severity = warning
+dotnet_diagnostic.RCS0021.severity = warning
+dotnet_diagnostic.RCS0008.severity = warning
+roslynator_block_braces_style = multi_line
 
 # Language style
 csharp_prefer_braces = true
@@ -144,3 +148,11 @@ dotnet_naming_style.underscore_camel_case.required_prefix = _
 [tests/**/*.cs]
 # Test code uses behavior names without an Async suffix requirement.
 dotnet_naming_rule.async_methods.style = pascal_case
+
+# Generated C# and EF migration output retain their generator's formatting.
+[**/{Migrations/*.cs,*.g.cs,*.g.i.cs,*.generated.cs,*.Generated.cs,*.designer.cs,*.Designer.cs,*ModelSnapshot.cs}]
+generated_code = true
+dotnet_diagnostic.IDE0055.severity = none
+dotnet_diagnostic.RCS0008.severity = none
+dotnet_diagnostic.RCS0021.severity = none
+dotnet_diagnostic.RCS0042.severity = none
