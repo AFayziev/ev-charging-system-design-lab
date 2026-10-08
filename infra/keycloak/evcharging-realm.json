@@ -1,0 +1,65 @@
+{
+  "id": "evcharging",
+  "realm": "evcharging",
+  "displayName": "EV Charging Lab",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "driver" },
+      { "name": "operator" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "evcharging-gateway",
+      "name": "EV Charging Gateway",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${GATEWAY_OIDC_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${GATEWAY_PUBLIC_ORIGIN}/auth/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${GATEWAY_PUBLIC_ORIGIN}/auth/logout-callback"
+      },
+      "defaultClientScopes": ["profile", "email", "roles"]
+    }
+  ],
+  "users": [
+    {
+      "id": "10000000-0000-0000-0000-000000000001",
+      "username": "driver",
+      "firstName": "Synthetic",
+      "lastName": "Driver",
+      "email": "driver@example.test",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["driver"],
+      "credentials": [
+        { "type": "password", "value": "${SYNTHETIC_DRIVER_PASSWORD}", "temporary": false }
+      ]
+    },
+    {
+      "id": "10000000-0000-0000-0000-000000000002",
+      "username": "operator",
+      "firstName": "Synthetic",
+      "lastName": "Operator",
+      "email": "operator@example.test",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["operator"],
+      "credentials": [
+        { "type": "password", "value": "${SYNTHETIC_OPERATOR_PASSWORD}", "temporary": false }
+      ]
+    }
+  ]
+}

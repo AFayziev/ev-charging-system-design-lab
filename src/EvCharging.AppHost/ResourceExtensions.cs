@@ -23,20 +23,27 @@ internal static class ResourceExtensions
         return (direct, write, read);
     }
 
-    public static IResourceBuilder<ContainerResource> AddIdentityProvider(this IDistributedApplicationBuilder builder)
+    public static IResourceBuilder<ContainerResource> AddIdentityProvider(this IDistributedApplicationBuilder builder,
+        IResourceBuilder<ParameterResource> gatewayOidcSecret)
     {
-        var database = builder.AddPostgres("identity-postgres")
+        var database = builder.AddPostgres("identity-postgres", password: builder.AddPersistentSecret("identity-postgres-password"))
             .WithImageRegistry("docker.io").WithImage("library/postgres").WithImageTag(PostgresImageTag)
             .WithDataVolume().AddDatabase("identity-database", "keycloak");
-        return builder.AddContainer("keycloak", "keycloak/keycloak", "26.8.0")
-            .WithImageRegistry("quay.io")
-            .WithArgs("start-dev")
+        return builder.AddDockerfile("keycloak", "../../infra/keycloak")
+            .WithBuildArg("KEYCLOAK_IMAGE", "quay.io/keycloak/keycloak:26.8.0")
+            .WithArgs("start-dev", "--import-realm")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", builder.AddPersistentSecret("keycloak-admin-password"))
             .WithEnvironment("KC_DB", "postgres")
             .WithEnvironment("KC_DB_URL", ReferenceExpression.Create($"jdbc:postgresql://{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Host)}:{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Port)}/keycloak"))
             .WithEnvironment("KC_DB_USERNAME", "postgres")
             .WithEnvironment("KC_DB_PASSWORD", database.Resource.Parent.PasswordParameter)
+            .WithEnvironment("KC_DB_POOL_INITIAL_SIZE", "5")
+            .WithEnvironment("KC_DB_POOL_MIN_SIZE", "5")
+            .WithEnvironment("KC_DB_POOL_MAX_SIZE", "10")
+            .WithEnvironment("GATEWAY_OIDC_SECRET", gatewayOidcSecret)
+            .WithEnvironment("SYNTHETIC_DRIVER_PASSWORD", builder.AddPersistentSecret("synthetic-driver-password"))
+            .WithEnvironment("SYNTHETIC_OPERATOR_PASSWORD", builder.AddPersistentSecret("synthetic-operator-password"))
             .WithEnvironment("KC_HTTP_RELATIVE_PATH", "/identity")
             .WithEnvironment("KC_HEALTH_ENABLED", "true")
             .WithHttpEndpoint(targetPort: 8080, name: "http")

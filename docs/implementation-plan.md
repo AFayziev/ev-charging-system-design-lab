@@ -42,7 +42,7 @@ is needed only when changes invalidate their results.
 |---|---|---|---|
 | M00 | Repository and design baseline | None | Done |
 | M01 | Bootable Aspire topology | M00 | Done |
-| M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | Planned |
+| M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | In progress |
 | M03 | Domain persistence, read/write routes, and pooling | M02 | Planned |
 | M04 | Durable jobs, scheduling, and notification delivery | M03 | Planned |
 | M05 | Station catalog and reservations | M03, M04 | Planned |
@@ -166,7 +166,7 @@ criteria.
 
 ### M02 — Gateway authentication and shared frontend shell
 
-- [ ] M02.01 Configure the bootstrapped Keycloak instance with application realm,
+- [x] M02.01 Configure the bootstrapped Keycloak instance with application realm,
   synthetic users, and the gateway's confidential OIDC client; verify its dedicated
   PostgreSQL database/pool configuration.
 - [ ] M02.02 Establish authentication persistence: session/key schema migrations,

@@ -1,9 +1,12 @@
 using EvCharging.AppHost;
+using Microsoft.Extensions.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
 var database = builder.AddPlatformDatabase();
-var identity = builder.AddIdentityProvider();
+var gatewayOidcSecret = builder.AddParameter("gateway-oidc-secret",
+    new GenerateParameterDefault { MinLength = 32, Special = false }, secret: true, persist: true);
+var identity = builder.AddIdentityProvider(gatewayOidcSecret);
 var documents = builder.AddDocumentDatabase();
 var cacheStore = builder.AddCache();
 var broker = builder.AddMessageBroker();
@@ -30,7 +33,7 @@ api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
 
 var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
-    .WithHttpEndpoint()
+    .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode ? builder.Configuration.GetValue("Gateway:HttpPort", 5100) : null)
     .WithReplicas(gatewayCount)
     .WithHttpHealthCheck("/health")
     .WithReference(api)
@@ -38,6 +41,11 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchP
 
 gateway.WithReference(database.Write).WaitFor(database.Direct)
     .WithReference(identity.GetEndpoint("http")).WaitFor(identity);
+
+var gatewayPublicOrigin = builder.ExecutionContext.IsRunMode && builder.Configuration["Parameters:gateway-public-origin"] is null
+    ? ReferenceExpression.Create($"http://localhost:{gateway.GetEndpoint("http").Property(EndpointProperty.Port)}")
+    : ReferenceExpression.Create($"{builder.AddParameter("gateway-public-origin")}");
+identity.WithEnvironment("GATEWAY_PUBLIC_ORIGIN", gatewayPublicOrigin);
 
 builder.AddViteApp("frontend", "../EvCharging.Web")
     .WithExternalHttpEndpoints()

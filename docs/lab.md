@@ -162,12 +162,21 @@ Browser routes follow the [gateway authentication design](architecture.md#131-ga
 | `/auth/callback` | Complete OIDC and establish the browser session |
 | `/auth/session` | Sign-in state, display claims, and antiforgery token; no OIDC tokens |
 | `/auth/logout` | Antiforgery-protected logout of the application and provider session |
+| `/auth/logout-callback` | Complete the provider's post-logout redirect |
 | `/identity/*` | Required Keycloak login/protocol resources; administrative routes stay private |
 
 Keycloak's public hostname, issuer, and redirects match the gateway identity route;
 server-side exchanges use internal connectivity. Browser session cookies require
 Secure, HttpOnly, and SameSite=Lax settings.
-Keycloak uses a dedicated PostgreSQL database and pool, included in connection budgets.
+Keycloak uses a dedicated PostgreSQL database. Its pool starts with the configured
+number of connections and remains within configured limits; identity connections
+count toward database connection budgets.
+
+Identity provisioning supports local and hosted execution. The gateway's public
+origin remains stable across restarts so registered redirects stay valid.
+Provisioning preserves existing realm state. Changes to realm configuration,
+credentials, or the public origin require an explicit administrative update;
+restart alone does not apply them.
 
 Before attaching an access token upstream, the gateway strips browser-supplied
 authorization/identity headers and its session cookie. API token validation checks
