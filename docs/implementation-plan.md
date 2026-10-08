@@ -9,14 +9,17 @@ and fault scenarios for acceptance.
 Milestones assemble the selected topology; component responsibilities and domain
 policies remain consistent throughout implementation.
 
-Task IDs are stable tracking references. Unchecked tasks are incomplete; checked
-tasks satisfy their implementation and verification requirements. Milestone status
-is one of `Planned`, `In progress`, `Blocked`, or `Done`. A blocked item records the
-specific dependency. `Done` requires every required task and the milestone's
+Task IDs are tracking references. Completed task IDs remain stable. Unchecked
+tasks are incomplete; checked tasks satisfy their implementation and verification
+requirements. Milestone status is one of `Planned`, `In progress`, `Blocked`, or
+`Done`. A blocked item records the specific dependency. `Done` requires every
+required task and the milestone's
 acceptance criteria.
 Optional and hosted gates remain independently tracked and do not
 block baseline local acceptance. Optional-profile gates apply when that profile
 is enabled; hosted gates require their provider setup.
+Independent follow-up tasks retain their IDs and specify their own dependencies
+and acceptance gates; they do not block their original milestone.
 Milestone status is recorded in the table below.
 
 Task checkboxes and milestone status are updated in the same commit as the
@@ -27,18 +30,21 @@ when applicable.
 ## 2. Suggested order and dependencies
 
 The first milestone boots the complete local topology with stub application and
-simulator hosts, real dependency containers, and protocol-level smoke checks.
+simulator hosts, real dependency containers, and baseline routing/health checks.
 Subsequent milestones implement application flows within those hosts. Frontend
 work and fault verification accompany each flow. Instrumentation begins with the
 first processes and expands as functional boundaries become active.
+Dependency operation and failure tests accompany the milestone that implements
+their application consumer. Existing checks count toward acceptance; repetition
+is needed only when changes invalidate their results.
 
-| Order / ID | Milestone | Required predecessors | Status |
+| ID | Milestone | Required predecessors | Status |
 |---|---|---|---|
 | M00 | Repository and design baseline | None | Done |
-| M01 | Bootable Aspire topology and dependency smoke checks | M00 | In progress |
-| M02 | Domain persistence, read/write routes, and pooling | M01 | Planned |
-| M03 | Gateway authentication and shared frontend shell | M02 | Planned |
-| M04 | Durable jobs, scheduling, and notification delivery | M02 | Planned |
+| M01 | Bootable Aspire topology | M00 | Done |
+| M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | Planned |
+| M03 | Domain persistence, read/write routes, and pooling | M02 | Planned |
+| M04 | Durable jobs, scheduling, and notification delivery | M03 | Planned |
 | M05 | Station catalog and reservations | M03, M04 | Planned |
 | M06 | Charging providers and start/stop execution | M05 | Planned |
 | M07 | Observation stream, projections, and completion | M06 | Planned |
@@ -51,7 +57,8 @@ first processes and expands as functional boundaries become active.
 
 Independent work becomes available at several points:
 
-- M03 and M04 can proceed independently after M02.
+- M02.01 identity setup and M02.02 authentication persistence can proceed
+  independently after M01. M01.13 frontend diagnostics can proceed alongside them.
 - The M04.08 hosted email gate depends on M04.05 and provider setup; it does not
   block M05 or the local demonstrations.
 - M08, M09, and M10 can proceed independently after M07. File storage and media
@@ -59,10 +66,12 @@ Independent work becomes available at several points:
 - M11 follows the local file contracts. M12 can proceed independently of M09–M11
   once charging, observation, and reconnect behavior are available.
 
-The first authenticated booking demonstration ends at M05. Start/stop execution
-and uncertain outcome recovery are demonstrable at M06. A completed charging
-session with final usage is demonstrable at M07. The full local feature set is
-available after M08–M10; hosted behavior is verified by M04.08, M11, and M12.
+The first authenticated frontend/API demonstration ends at M02; charging-domain
+persistence follows in M03. The first authenticated booking demonstration ends at
+M05. Start/stop execution and uncertain outcome recovery are demonstrable at M06.
+A completed charging session with final usage is demonstrable at M07. The full
+local feature set is available after M08–M10; hosted behavior is verified by
+M04.08, M11, and M12.
 
 ## 3. Milestone tasks and acceptance
 
@@ -76,7 +85,7 @@ available after M08–M10; hosted behavior is verified by M04.08, M11, and M12.
 Acceptance: the repository contains the standalone design references and the
 monorepo baseline.
 
-### M01 — Bootable Aspire topology and dependency smoke checks
+### M01 — Bootable Aspire topology
 
 - [x] M01.01 Add the .NET solution, SDK/version configuration, central NuGet
   management, and pinned dependency/image versions compatible with the architecture.
@@ -113,43 +122,23 @@ monorepo baseline.
   local management UI access for every baseline store and broker; verify backend
   connectivity, both PostgreSQL servers, loopback access, and exclusion from
   deployment.
-- [ ] M01.10 Add Testcontainers for isolated dependency integration tests and
-  bounded protocol-level smoke checks through intended application
-  connections: SQL through the logical read/write/direct routes,
-  MongoDB write/read, Valkey cache/Pub/Sub, Elasticsearch index/query, RabbitMQ
-  publish/consume, Kafka append/read, S3 upload/download/presigned transfer, Keycloak
-  reachability/discovery, and simulator API stub reachability. Test records
-  use isolated synthetic namespaces and are cleaned up.
-- [ ] M01.11 Verify clean first startup, restart with retained volumes, stop/reset,
-  application-to-container networking, gateway/API instance loss, and smoke-check
-  failure reporting when a dependency is unavailable. Document prerequisites and
-  the local start/test/stop/reset commands.
-- [ ] M01.12 Optional profile gate, after M01.06: wire the
-  [`observability` profile](lab.md#21-execution-profiles). Verify export routing,
-  backend queries, custom dashboards, restart, and its
-  [fault scenarios](lab.md#24-fault-scenarios).
-- [ ] M01.13 After M01.03, M01.04, and M01.06, implement
-  [frontend diagnostics](lab.md#19-frontend-diagnostics), startup configuration,
-  gateway tunnel, and build integration. Verify disabled behavior, capture metadata,
-  bounded export failure, and local builds without hosted credentials.
-- [ ] M01.14 Optional hosted gate, after M01.13: verify the Sentry execution
-  profile against a configured project using a built frontend,
-  [diagnostic signals](lab.md#23-verification-tools-and-signals), and
-  [fault scenarios](lab.md#24-fault-scenarios).
+- [x] M01.10 Verify baseline HTTP routing with the existing topology/browser tests;
+  verify dependency wiring with Aspire readiness and management-tool connectivity.
+- [x] M01.11 Verify local startup/stop and restart with retained volumes; document
+  prerequisites and local start/inspect/test/stop commands.
 
 Acceptance:
 
 - One documented AppHost command starts every resource in the local baseline,
   including the frontend, application stubs, and external simulator API stubs.
 - All required resources reach their expected healthy state within bounded waits,
-  and protocol smoke checks prove credentials, routing, and usable connections.
+  and management tools establish authenticated backend connectivity.
 - The browser loads the SPA from the frontend host without traversing YARP;
   API requests pass through the gateway and are traceable across gateway/API instances.
 - Selected-instance diagnostics prove ingress/gateway routing through logical
-  services and runtime replica balancing; losing one gateway/API instance routes
-  new requests to a healthy instance;
-  dependency loss produces a bounded, named smoke-check failure.
-- Restart/reset behavior is reproducible, and telemetry reaches Aspire Dashboard.
+  services and runtime replica balancing.
+- Startup/stop and retained-volume restart are reproducible, and telemetry reaches
+  Aspire Dashboard.
 
 Health checks remain workload-specific as functionality is added. Passing this
 milestone establishes infrastructure availability and wiring; authentication,
@@ -160,56 +149,83 @@ criteria.
 [Health checks](https://aspire.dev/fundamentals/health-checks/),
 [Topology testing](https://aspire.dev/testing/write-your-first-test/)
 
-### M02 — Domain persistence, read/write routes, and pooling
+#### Independent follow-up tasks
 
-- [ ] M02.01 Implement canonical identifiers, UTC/time-zone handling, state
+- [ ] M01.12 Optional profile gate, after M01.06: wire the
+  [`observability` profile](lab.md#21-execution-profiles). Verify export routing,
+  backend queries, custom dashboards, restart, and its
+  [fault scenarios](lab.md#24-fault-scenarios).
+- [ ] M01.13 Before M02 frontend acceptance, after M01.03, M01.04, and M01.06:
+  implement [frontend diagnostics](lab.md#19-frontend-diagnostics), startup
+  configuration, gateway tunnel, and build integration. Verify disabled behavior,
+  capture metadata, bounded export failure, and local builds without hosted credentials.
+- [ ] M01.14 Optional hosted gate, after M01.13: verify the Sentry execution
+  profile against a configured project using a built frontend,
+  [diagnostic signals](lab.md#23-verification-tools-and-signals), and
+  [fault scenarios](lab.md#24-fault-scenarios).
+
+### M02 — Gateway authentication and shared frontend shell
+
+- [ ] M02.01 Configure the bootstrapped Keycloak instance with application realm,
+  synthetic users, and the gateway's confidential OIDC client; verify its dedicated
+  PostgreSQL database/pool configuration.
+- [ ] M02.02 Establish authentication persistence: session/key schema migrations,
+  least-privilege runtime and migration credentials, and a dedicated long-lived
+  Npgsql primary data source with bounded waits and pool metrics. Introduce
+  Testcontainers for isolated PostgreSQL tests of schema and permissions.
+- [ ] M02.03 Implement the shared PostgreSQL `ITicketStore`, protected token state,
+  Data Protection key sharing, per-session refresh coordination, and logout removal.
+- [ ] M02.04 Implement the documented `/auth` routes and gateway-proxied
+  `/identity` resources, including matching public issuer/redirect configuration.
+- [ ] M02.05 Add antiforgery validation, validated return URLs, cookie attributes,
+  browser header/cookie stripping, bearer forwarding, and API JWT validation.
+  Enforce authenticated access and driver/operator role policies at the API.
+  Keep machine routes outside browser session/token-substitution policies.
+- [ ] M02.06 Build the driver/operator navigation shell, session discovery,
+  sign-in/sign-out states, and shared API/error handling through the gateway.
+- [ ] M02.07 Verify OIDC discovery, gateway/API instance loss, concurrent refresh,
+  logout, session-store outage, Keycloak outage, and browser authentication
+  boundaries with real dependencies.
+
+Acceptance: both roles sign in through the gateway origin. A browser session
+survives gateway-instance loss; JavaScript receives no OIDC tokens. Invalid
+antiforgery requests and forged identity headers fail. Authentication and role
+policies are enforced by the API, and session-store failure cannot grant anonymous
+access.
+
+### M03 — Domain persistence, read/write routes, and pooling
+
+- [ ] M03.01 Implement canonical identifiers, UTC/time-zone handling, state
   dimensions, measurement types, and domain policy tests from the domain reference.
-- [ ] M02.02 Add PostgreSQL migrations for equipment, assignments, reservations,
-  sessions, operations/attempts, deadlines, and file metadata; define persistence
-  boundaries for authentication and host-specific Wolverine message-storage schemas.
-- [ ] M02.03 Add synthetic equipment, driver, operator-assignment, and provider
-  mappings; provide reproducible fixture seeding and lab-data reset.
-- [ ] M02.04 Add application-specific least-privilege roles, read-only query
-  credentials, and dedicated migration credentials; verify grants on the local schema.
-- [ ] M02.05 Implement separate long-lived Npgsql data sources, EF Core command
-  and no-tracking query contexts, and a dedicated gateway-session primary pool.
-- [ ] M02.06 Add database constraints and conditional updates for booking overlap,
+- [ ] M03.02 Add PostgreSQL migrations for equipment, assignments, reservations,
+  sessions, operations/attempts, deadlines, and file metadata; define boundaries
+  between domain persistence and host-specific Wolverine message-storage schemas.
+- [ ] M03.03 Add synthetic equipment, driver, operator-assignment, and provider
+  mappings linked to the M02 identity fixtures; provide reproducible fixture seeding
+  and lab-data reset.
+- [ ] M03.04 Extend database roles with least-privilege domain access, read-only
+  query credentials, and dedicated migration credentials; verify grants using the
+  PostgreSQL Testcontainers foundation from M02.02.
+- [ ] M03.05 Implement separate long-lived Npgsql read/write data sources and
+  EF Core command and no-tracking query contexts.
+- [ ] M03.06 Add database constraints and conditional updates for booking overlap,
   session exclusivity, operation identity, and permitted transitions.
-- [ ] M02.07 Implement bounded acquisition/query/transaction waits, replica-lag
+- [ ] M03.07 Implement bounded acquisition/query/transaction waits, replica-lag
   detection when the read route uses a replica, primary fallback admission, and
   client-pool metrics. Managed replica/pooler verification is tracked in M12.
-- [ ] M02.08 Verify local read/write route selection and permissions, client-pool
-  saturation, database interruption, and uncertain-commit lookup by operation identity.
+- [ ] M03.08 Establish ownership/assignment authorization
+  and audit infrastructure for protected workflows; verify cross-driver and
+  unassigned-operator denial against seeded records.
+- [ ] M03.09 Verify SQL round trips through the local read/write/direct routes,
+  route selection and permissions, client-pool saturation, database interruption,
+  and uncertain-commit lookup by operation identity.
 
 Acceptance: seeded catalog queries use the read route, transactional checks and
 immediate authoritative results use the write route, and both routes work against
 one local database. A modest workload exposes client-pool waiting with bounded admission.
 Constraint checks use real PostgreSQL across competing connections. No SQL
-transaction remains open during an external call.
-
-### M03 — Gateway authentication and shared frontend shell
-
-- [ ] M03.01 Configure the bootstrapped Keycloak instance with application realm,
-  synthetic users, and the gateway's confidential OIDC client; verify its dedicated
-  PostgreSQL database/pool configuration.
-- [ ] M03.02 Implement the documented `/auth` routes and gateway-proxied
-  `/identity` resources, including matching public issuer/redirect configuration.
-- [ ] M03.03 Implement the shared PostgreSQL `ITicketStore`, protected token state,
-  Data Protection key sharing, per-session refresh coordination, and logout removal.
-- [ ] M03.04 Add antiforgery validation, validated return URLs, cookie attributes,
-  browser header/cookie stripping, bearer forwarding, and API JWT validation.
-  Keep machine routes outside browser session/token-substitution policies.
-- [ ] M03.05 Build the driver/operator navigation shell, session discovery,
-  sign-in/sign-out states, and shared API/error handling through the gateway.
-- [ ] M03.06 Establish ownership/assignment authorization and audit infrastructure
-  for later protected workflows.
-- [ ] M03.07 Verify gateway loss, concurrent refresh, logout, session-store outage,
-  Keycloak outage, and browser authentication boundaries with real dependencies.
-
-Acceptance: both roles sign in through the gateway origin. A browser session
-survives gateway-instance loss; JavaScript receives no OIDC tokens. Invalid
-antiforgery requests and forged identity headers fail. Authorization is enforced
-by the API, and session-store failure cannot grant anonymous access.
+transaction remains open during an external call. Ownership and station-assignment
+policies deny access to another driver's records or an unassigned station.
 
 ### M04 — Durable jobs, scheduling, and notification delivery
 
@@ -317,7 +333,8 @@ usage; completion evidence processing is supplied by M07.
   views with freshness labels, canonical units, and diagnostic anomalies.
 - [ ] M07.07 Add isolated observation-view replay/rebuild tooling that cannot send
   provider effects or notifications and preserves original observation times.
-- [ ] M07.08 Verify stream outage/ambiguous append, consumer crash/stall, MongoDB
+- [ ] M07.08 Verify durable Kafka append/read and MongoDB history/latest persistence,
+  stream outage/ambiguous append, consumer crash/stall, MongoDB
   outage, duplicates/out-of-order evidence, timestamp skew, missing/decreasing energy,
   stop before final usage, terminal evidence before stop, and late contradictions.
 
@@ -339,8 +356,9 @@ evidence. Final usage remains unchanged by later contradictory observations.
   bounded reconnect, snapshot recovery, and polling fallback.
 - [ ] M08.05 Show live connection health separately from charger observation
   freshness and preserve pending operations across reconnects.
-- [ ] M08.06 Verify cross-instance fan-out with pinned versions, cache flush/outage,
-  cache-worker loss/recovery independently of search and observations, backplane
+- [ ] M08.06 Verify cache reads/writes and expiry, cross-instance fan-out with pinned
+  versions, cache flush/outage, cache-worker loss/recovery independently of search
+  and observations, backplane
   outage/recovery, API loss, missed updates, and lost affinity targets.
 
 Acceptance: two API instances deliver updates through the backplane. A disconnected
@@ -370,8 +388,8 @@ commands for known equipment.
 
 ### M10 — Local files, media, summaries, and diagnostics
 
-- [ ] M10.01 Extend the M01 S3 smoke checks into storage-adapter contract verification
-  for file workflows, including HEAD, publication copy, deletion, and retry behavior.
+- [ ] M10.01 Add isolated storage contract tests for upload/download, presigned
+  transfers, HEAD, publication copy, deletion, and retry behavior.
 - [ ] M10.02 Implement the `AWSSDK.S3` storage adapter, private/public buckets,
   CORS, presigned authorization, file ownership/state records, and transfer limits.
 - [ ] M10.03 Add private upload allocation, direct browser transfer, verification,
@@ -436,7 +454,7 @@ and purge removes the old publication. Setup and cleanup are reproducible.
 - [ ] M12.06 Verify transaction-pooling compatibility of EF Core and durable
   messaging, direct routes for session-affine coordination, server-pool budgets and
   saturation, replica read-only behavior, lag detection, replica interruption, and
-  bounded primary fallback. After M02 and M04 persistence work, M12.01, M12.02,
+  bounded primary fallback. After M03 and M04 persistence work, M12.01, M12.02,
   and this gate can run ahead of the full M08-dependent failover workflows.
 
 Acceptance: the provider performs database promotion; the application handles
@@ -471,12 +489,12 @@ use the same application contracts with configured provider endpoints.
 
 | Component / boundary | Implementation | Principal verification |
 |---|---|---|
-| Aspire, process hosts, OCI containers | M01; resource wiring in each milestone | M01, M13 startup/reset |
-| Ingress, gateway, and runtime replicas | M01, M03, M08 | Logical destination health, replica selection/loss, affinity, authentication continuity |
-| React, Mantine, TanStack Query | M01, M03, M05–M11 | Role workflows, stale/pending states, reconnect, private access |
-| Keycloak, BFF, shared ticket/key state | M03 | Browser boundaries, refresh/logout races, identity/session-store outage |
-| PostgreSQL, EF Core, Npgsql | M02, M05–M07, M10 | Route permissions, client pooling, conflicts, ordering, commits, ownership, completion |
-| Managed read replica and PgBouncer | M12; application route contracts in M02 | Lag, read-only routes, server-pool saturation, reconnect/failover |
+| Aspire, process hosts, OCI containers | M01; resource wiring in each milestone | M01 startup/restart; M03 fixtures/reset; M13 clean-checkout demonstrations |
+| Ingress, gateway, and runtime replicas | M01, M02, M08 | Logical destination health, replica selection/loss, affinity, authentication continuity |
+| React, Mantine, TanStack Query | M01, M02, M05–M11 | Role workflows, stale/pending states, reconnect, private access |
+| Keycloak, BFF, shared ticket/key state | M02 | Browser boundaries, refresh/logout races, identity/session-store outage |
+| PostgreSQL, EF Core, Npgsql | M02, M03, M05–M07, M10 | Route permissions, client pooling, conflicts, ordering, commits, ownership, completion |
+| Managed read replica and PgBouncer | M12; application route contracts in M03 | Lag, read-only routes, server-pool saturation, reconnect/failover |
 | RabbitMQ jobs/topics, Wolverine inbox/outbox | M04 onward | Publish/ack crash windows, redelivery, independent subscribers |
 | Durable scheduler / reconciliation | M04–M07, M10 | Restart, deadlines, exhaustion, expiry races, missing notices |
 | Provider simulators, HTTP resilience | M06, M07 | Lost responses, idempotency differences, rate limits, physical evidence |
@@ -486,7 +504,7 @@ use the same application contracts with configured provider endpoints.
 | Valkey and SignalR backplane | M08 | Cache flush, bounded fallback, fan-out loss/recovery |
 | Elasticsearch | M09 | Index freshness, outage, validated rebuild |
 | Independent cache and search index workers | M08, M09 | Separate lag/checkpoint recovery, worker loss, warming/rebuild without session effects |
-| S3 adapter / local container | M01, M10 | Protocol smoke checks, transfer authorization, partial writes, cleanup, immutable publication |
+| S3 adapter / local container | Compatibility selection M01.08; contracts M10 | Transfer authorization, partial writes, cleanup, immutable publication |
 | SkiaSharp, PDFsharp, ZIP/JSON | M10 | Processing recovery, frozen summary facts, diagnostic sanitization |
 | R2 and Cloudflare CDN | M11 | Real signing, cache hits/misses, origin deletion, purge |
 | Azure managed PostgreSQL | M12 | Provider failover, pool/session recovery, uncertain commits |
@@ -494,7 +512,7 @@ use the same application contracts with configured provider endpoints.
 | Optional observability profile | M01.12; M13 profile scenarios | Telemetry routing, queries/custom dashboards, bounded buffering/drop during outage |
 | Frontend diagnostics / Sentry | M01.13; hosted gate M01.14 | [Signals](lab.md#23-verification-tools-and-signals), [fault scenarios](lab.md#24-fault-scenarios) |
 | xUnit and Aspire testing | M01.07 onward | Domain, contract, topology, resilience verification |
-| Testcontainers | M01.10 onward | Isolated real-dependency integration tests |
+| Testcontainers | M02.02 onward | Isolated real-dependency integration tests within functional milestones |
 | Vitest, React Testing Library, Playwright | M01 onward | UI semantics and authenticated browser workflows |
 | k6 and Toxiproxy | M13; available for earlier gates | Saturation and network-fault evidence |
 
