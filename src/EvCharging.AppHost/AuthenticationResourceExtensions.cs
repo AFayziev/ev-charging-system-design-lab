@@ -8,10 +8,8 @@ internal static class AuthenticationResourceExtensions
         IResourceBuilder<ContainerResource> Bootstrap) AddAuthenticationDatabase(
         this IDistributedApplicationBuilder builder, IResourceBuilder<PostgresDatabaseResource> database)
     {
-        var runtimePassword = builder.AddParameter("gateway-auth-password",
-            new GenerateParameterDefault { MinLength = 32, Special = false }, secret: true, persist: true);
-        var migrationPassword = builder.AddParameter("gateway-auth-migration-password",
-            new GenerateParameterDefault { MinLength = 32, Special = false }, secret: true, persist: true);
+        var runtimePassword = builder.AddPersistentSecret("gateway-auth-password");
+        var migrationPassword = builder.AddPersistentSecret("gateway-auth-migration-password");
         var endpoint = database.Resource.Parent.GetEndpoint("tcp");
         var runtime = builder.AddConnectionString("gateway-auth", ReferenceExpression.Create(
             $"Host={endpoint.Property(EndpointProperty.Host)};Port={endpoint.Property(EndpointProperty.Port)};Database={database.Resource.DatabaseName};Username=gateway_auth_runtime;Password={runtimePassword}"));

@@ -11,8 +11,8 @@ ALTER ROLE gateway_auth_runtime PASSWORD :'runtime_password';
 ALTER ROLE gateway_auth_migrator PASSWORD :'migration_password';
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-REVOKE TEMPORARY ON DATABASE evcharging FROM PUBLIC;
-GRANT CONNECT ON DATABASE evcharging TO gateway_auth_runtime, gateway_auth_migrator;
+REVOKE TEMPORARY ON DATABASE :"DBNAME" FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"DBNAME" TO gateway_auth_runtime, gateway_auth_migrator;
 
 CREATE SCHEMA IF NOT EXISTS gateway_auth AUTHORIZATION gateway_auth_migrator;
 GRANT USAGE ON SCHEMA gateway_auth TO gateway_auth_runtime;

@@ -146,8 +146,15 @@ dotnet_naming_style.underscore_camel_case.capitalization = camel_case
 dotnet_naming_style.underscore_camel_case.required_prefix = _
 
 [tests/**/*.cs]
-# Test code uses behavior names without an Async suffix requirement.
-dotnet_naming_rule.async_methods.style = pascal_case
+# Test methods allow underscore-separated PascalCase parts without an Async suffix.
+dotnet_naming_rule.async_methods.style = test_method
+dotnet_naming_rule.test_methods.symbols = test_methods
+dotnet_naming_rule.test_methods.style = test_method
+dotnet_naming_rule.test_methods.severity = warning
+dotnet_naming_symbols.test_methods.applicable_kinds = method
+dotnet_naming_symbols.test_methods.applicable_accessibilities = public
+dotnet_naming_style.test_method.capitalization = pascal_case
+dotnet_naming_style.test_method.word_separator = _
 
 # Generated C# and EF migration output retain their generator's formatting.
 [**/{Migrations/*.cs,*.g.cs,*.g.i.cs,*.generated.cs,*.Generated.cs,*.designer.cs,*.Designer.cs,*ModelSnapshot.cs}]

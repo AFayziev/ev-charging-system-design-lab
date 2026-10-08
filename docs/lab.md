@@ -156,6 +156,11 @@ fan-out, disconnect, and reconnection.
 
 Browser routes follow the [gateway authentication design](architecture.md#131-gateway-authentication).
 
+Gateway session persistence uses PostgreSQL; ticket protection uses ASP.NET Core
+Data Protection with EF Core key storage. The local key ring is unencrypted at
+rest. Hosted key protection and retention remain deployment dependencies.
+[Data Protection configuration](https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/configuration/overview?view=aspnetcore-10.0)
+
 | Browser route | Responsibility |
 |---|---|
 | `/auth/login` | Start login with a validated local return URL |

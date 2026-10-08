@@ -1,7 +1,8 @@
+using EvCharging.Gateway.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace EvCharging.Gateway.Persistence;
+namespace EvCharging.Gateway.Migrations;
 
 public sealed class AuthenticationDbContextFactory : IDesignTimeDbContextFactory<AuthenticationDbContext>
 {
@@ -14,6 +15,6 @@ public sealed class AuthenticationDbContextFactory : IDesignTimeDbContextFactory
         }
 
         return new AuthenticationDbContext(new DbContextOptionsBuilder<AuthenticationDbContext>()
-            .UseNpgsql(connection, postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "gateway_auth")).Options);
+            .UseNpgsql(connection).Options);
     }
 }

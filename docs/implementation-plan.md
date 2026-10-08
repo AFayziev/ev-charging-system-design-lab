@@ -23,8 +23,7 @@ and acceptance gates; they do not block their original milestone.
 Milestone status is recorded in the table below.
 
 Task checkboxes and milestone status are updated in the same commit as the
-implementation. The [commit conventions](../AGENTS.md#commits) link task IDs to
-implementation history. Verification summaries belong in pull request descriptions
+implementation. Verification summaries belong in pull request descriptions
 when applicable.
 
 ## 2. Suggested order and dependencies
@@ -172,7 +171,7 @@ criteria.
 - [x] M02.02 Establish authentication persistence: session/key schema migrations,
   least-privilege runtime and migration credentials, and a dedicated long-lived
   Npgsql primary data source with bounded waits and pool metrics.
-- [ ] M02.03 Implement the shared PostgreSQL `ITicketStore`, protected token state,
+- [x] M02.03 Implement the shared PostgreSQL `ITicketStore`, protected token state,
   Data Protection key sharing, per-session refresh coordination, and logout removal.
   Introduce PostgreSQL Testcontainers tests for session expiry, renewal,
   concurrent updates, and removal.

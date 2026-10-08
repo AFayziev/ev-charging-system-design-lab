@@ -36,7 +36,7 @@ internal static class ResourceExtensions
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", builder.AddPersistentSecret("keycloak-admin-password"))
             .WithEnvironment("KC_DB", "postgres")
-            .WithEnvironment("KC_DB_URL", ReferenceExpression.Create($"jdbc:postgresql://{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Host)}:{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Port)}/keycloak"))
+            .WithEnvironment("KC_DB_URL", ReferenceExpression.Create($"jdbc:postgresql://{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Host)}:{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Port)}/{database.Resource.DatabaseName}"))
             .WithEnvironment("KC_DB_USERNAME", "postgres")
             .WithEnvironment("KC_DB_PASSWORD", database.Resource.Parent.PasswordParameter)
             .WithEnvironment("KC_DB_POOL_INITIAL_SIZE", "5")
@@ -167,19 +167,23 @@ internal static class ResourceExtensions
         IResourceBuilder<ParameterResource> AccessKey,
         IResourceBuilder<ParameterResource> SecretKey) AddObjectStorage(this IDistributedApplicationBuilder builder)
     {
+        const string DataPath = "/data";
+        const int ServicePort = 9000;
+        const int ConsolePort = 9001;
+
         var accessKey = builder.AddPersistentSecret("rustfs-access-key");
         var secretKey = builder.AddPersistentSecret("rustfs-secret-key");
         var storage = builder.AddContainer("rustfs", "rustfs/rustfs", "1.0.1")
             .WithImageRegistry("docker.io");
-        storage.WithVolume(VolumeNameGenerator.Generate(storage, "data"), "/data")
+        storage.WithVolume(VolumeNameGenerator.Generate(storage, "data"), DataPath)
             .WithEnvironment("RUSTFS_ACCESS_KEY", accessKey)
             .WithEnvironment("RUSTFS_SECRET_KEY", secretKey)
-            .WithEnvironment("RUSTFS_VOLUMES", "/data")
-            .WithEnvironment("RUSTFS_ADDRESS", "0.0.0.0:9000")
+            .WithEnvironment("RUSTFS_VOLUMES", DataPath)
+            .WithEnvironment("RUSTFS_ADDRESS", "0.0.0.0:" + ServicePort)
             .WithEnvironment("RUSTFS_CONSOLE_ENABLE", "true")
-            .WithEnvironment("RUSTFS_CONSOLE_ADDRESS", "0.0.0.0:9001")
-            .WithHttpEndpoint(targetPort: 9000, name: "http")
-            .WithHttpEndpoint(targetPort: 9001, name: "console")
+            .WithEnvironment("RUSTFS_CONSOLE_ADDRESS", "0.0.0.0:" + ConsolePort)
+            .WithHttpEndpoint(targetPort: ServicePort, name: "http")
+            .WithHttpEndpoint(targetPort: ConsolePort, name: "console")
             .WithEndpoint("console", e => e.ExcludeReferenceEndpoint = true)
             .WithHttpHealthCheck("/health");
         return (storage, accessKey, secretKey);
@@ -192,6 +196,6 @@ internal static class ResourceExtensions
         host.WithReference(storage.GetEndpoint("http")).WaitFor(storage)
             .WithEnvironment("Storage__AccessKey", accessKey).WithEnvironment("Storage__SecretKey", secretKey);
 
-    private static IResourceBuilder<ParameterResource> AddPersistentSecret(this IDistributedApplicationBuilder builder, string name) =>
+    internal static IResourceBuilder<ParameterResource> AddPersistentSecret(this IDistributedApplicationBuilder builder, string name) =>
         builder.AddParameter(name, new GenerateParameterDefault { MinLength = 32, Special = false }, secret: true, persist: true);
 }

@@ -29,7 +29,7 @@ implementation progress is recorded in the plan.
 |---|---|
 | `EvCharging.AppHost` | Aspire resource graph, endpoints, references, environment, and startup dependencies |
 | `EvCharging.Gateway` | YARP/BFF, browser sessions, authentication, and browser/service/callback routing to runtime-balanced API services |
-| `EvCharging.Gateway.Migrations` | One-shot authentication-schema migrations using schema-owning credentials |
+| `EvCharging.Gateway.Migrations` | EF migrations, model snapshot, design-time tooling, and one-shot authentication-schema migrations using schema-owning credentials |
 | `EvCharging.Web` | Shared React/TypeScript browser application for drivers and backoffice operators |
 | `EvCharging.Api` | Commands/queries, transactional acceptance, file authorization, callbacks, and live delivery |
 | `EvCharging.ChargingWorker` | Charging effects, reservation expiry, reconciliation, and recovery polling |
@@ -51,6 +51,19 @@ Queue, stream, and scheduled-job processors use `Worker`. The proxy/BFF host use
 repeatable lab commands. NuGet package pins belong in `Directory.Packages.props`;
 container image pins belong alongside their AppHost resource definitions. Do not
 duplicate them in documentation or a separate toolchain document.
+
+## Implementation choices
+
+Before introducing any custom machinery, check framework and library documentation
+and established conventions for an existing solution. Prefer stable provided
+capabilities when they meet the requirement; custom mechanisms require an identified
+gap. This applies to all languages and components.
+
+Give configuration values one owner. Derive dependent settings from resource
+metadata or existing options, and reuse existing registration helpers instead of
+copying literals or policies. Independent public-contract assertions may repeat
+expected values; tests must explicitly configure scenario settings rather than
+depend on application defaults.
 
 ## Aspire workflow
 
@@ -100,10 +113,13 @@ technology selections, implementation constraints, and experiments in `lab.md`;
 link instead of duplicating. Architecture uses component roles such as relational
 database, gateway, load balancer, and orchestrator rather than product names.
 Each decision or technical detail has one authoritative location. Other documents
-link to it. Plans record tasks, dependencies, and acceptance without restating design.
-Do not narrate implementation details that are evident from source code.
-Documents describe decisions, constraints, contracts, and verification; link to
-source when implementation details are needed.
+link to it. This file links to documentation; documents do not link back to this file.
+Plans record tasks, dependencies, and acceptance without restating design.
+Update documentation when decisions, constraints, contracts, or experiments change;
+an implementation task alone does not require more narrative. Do not restate
+application logic, source configuration values, or framework defaults. Link to
+source when implementation details are needed. Numerical experiment settings
+belong in the lab only when they define the experiment, rather than copy a code default.
 Prefer concise tables and lists. Use numbered lists for ordered procedures and
 bullets for unordered reference information.
 

@@ -1,9 +1,11 @@
+using EvCharging.Gateway.Authentication;
 using EvCharging.Gateway.Persistence;
 using Yarp.ReverseProxy.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.AddAuthenticationPersistence();
+builder.AddAuthenticationSessions();
 builder.AddHttpApiDefaults();
 
 builder.Services.AddReverseProxy()

@@ -12,7 +12,7 @@ public sealed class PlatformTests(AppHostFixture fixture) : IClassFixture<AppHos
 {
     [Fact]
     [Trait("Category", "Topology")]
-    public async Task UnknownBusinessRouteReturnsProblemDetailsThroughGateway()
+    public async Task Route_UnknownPath_ReturnsProblemDetails()
     {
         using var client = fixture.App.CreateHttpClient("gateway", "http");
         client.Timeout = TimeSpan.FromSeconds(15);
@@ -27,7 +27,7 @@ public sealed class PlatformTests(AppHostFixture fixture) : IClassFixture<AppHos
 
     [Fact]
     [Trait("Category", "Browser")]
-    public async Task BrowserNavigatesShellAndCallsApiThroughItsOrigin()
+    public async Task Navigate_SameOrigin_RoutesApi()
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();

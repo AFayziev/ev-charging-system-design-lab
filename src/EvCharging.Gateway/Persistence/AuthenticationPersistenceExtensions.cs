@@ -34,9 +34,8 @@ public static class AuthenticationPersistenceExtensions
             return new NpgsqlDataSourceBuilder(connectionSettings.ConnectionString) { Name = "gateway-auth-primary" }.Build();
         });
 
-        builder.Services.AddDbContext<AuthenticationDbContext>((serviceProvider, options) =>
-            options.UseNpgsql(serviceProvider.GetRequiredService<NpgsqlDataSource>(),
-                postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "gateway_auth")));
+        builder.Services.AddDbContextFactory<AuthenticationDbContext>((serviceProvider, options) =>
+            options.UseNpgsql(serviceProvider.GetRequiredService<NpgsqlDataSource>()));
 
         // A shared, named datasource makes the pool budget independent of EF context lifetime.
         // Ambiguous session writes must be reconciled by their caller, never replayed implicitly.

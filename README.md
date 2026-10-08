@@ -142,6 +142,15 @@ dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.
 
 ## Tests
 
+### Gateway session tests
+
+Requires a running Docker Linux container engine. Testcontainers starts and removes
+an isolated PostgreSQL container.
+
+```sh
+dotnet test tests/EvCharging.Gateway.Tests
+```
+
 ### Frontend component tests
 
 | Mode | Command |

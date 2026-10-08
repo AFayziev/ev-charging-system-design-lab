@@ -10,8 +10,7 @@ var authenticationMigrations = builder.AddProject<Projects.EvCharging_Gateway_Mi
     .WithReference(authentication.Migration)
     .WaitForCompletion(authentication.Bootstrap);
 
-var gatewayOidcSecret = builder.AddParameter("gateway-oidc-secret",
-    new GenerateParameterDefault { MinLength = 32, Special = false }, secret: true, persist: true);
+var gatewayOidcSecret = builder.AddPersistentSecret("gateway-oidc-secret");
 var identity = builder.AddIdentityProvider(gatewayOidcSecret);
 
 var documents = builder.AddDocumentDatabase();

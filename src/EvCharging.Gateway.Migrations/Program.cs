@@ -13,9 +13,7 @@ if (string.IsNullOrWhiteSpace(connection))
     throw new InvalidOperationException("The gateway-auth-migration-db connection is required.");
 }
 
-builder.Services.AddDbContext<AuthenticationDbContext>(options => options.UseNpgsql(
-    connection,
-    postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "gateway_auth").CommandTimeout(30)));
+builder.Services.AddDbContext<AuthenticationDbContext>(options => options.UseNpgsql(connection));
 
 using var host = builder.Build();
 await host.StartAsync();

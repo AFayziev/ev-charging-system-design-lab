@@ -36,8 +36,7 @@ retain their prescribed names and signatures.
   dependency endpoints. Defaults belong only to intentionally optional settings.
 - Introduce interfaces at meaningful dependency boundaries, not for every class.
   Keep persistence and transport concerns out of domain behavior.
-- Prefer stable framework/library capabilities to custom infrastructure. Avoid
-  generic repositories or abstraction layers that only forward calls.
+- Avoid generic repositories or abstraction layers that only forward calls.
 
 ## Async, resources, and data
 
@@ -57,6 +56,13 @@ retain their prescribed names and signatures.
 - Use parameterized queries. Materialize sequences deliberately; avoid hidden
   multiple enumeration and unbounded result sets. Keep transactions short and
   do not concurrently use one EF Core `DbContext`.
+- Map GUID-valued properties as `Guid` in EF Core entities, not `string`.
+  For generated primary keys, use EF Core/provider generation when it meets
+  the requirements.
+- Keep EF migrations, snapshots, design-time factories, and design-time packages
+  in the corresponding `.Migrations` project. Generate migrations and snapshots
+  with `dotnet ef`. Add migration-specific SQL only for requirements the generated
+  migration does not cover.
 - Make culture explicit for persisted/protocol values; use ordinal comparison
   for identifiers unless a contract defines otherwise.
 
@@ -76,10 +82,14 @@ retain their prescribed names and signatures.
 
 ## Tests and enforcement
 
-- Name tests by behavior and expected outcome. Arrange, act, assert; verify
-  observable results rather than private implementation details.
+- Use `MethodUnderTest_Scenario_ExpectedResult` for test names, following
+  [Microsoft's testing guidance](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices#naming-your-tests).
+  Use the operation name for tests spanning components; keep each part concise.
+  Arrange, act, assert; verify observable results rather than private details.
 - Keep tests deterministic with controlled time, explicit cancellation/timeouts,
   and isolated data. Avoid timing sleeps and order-dependent tests.
+- Use `FakeTimeProvider` from `Microsoft.Extensions.TimeProvider.Testing` for
+  test clocks instead of custom `TimeProvider` implementations.
 - Use unit tests for logic and integration tests for real dependency contracts;
   do not mock away the behavior an integration test is intended to verify.
 - Do not add tests or custom probes solely to confirm framework configuration,
