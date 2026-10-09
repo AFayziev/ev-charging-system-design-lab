@@ -123,6 +123,19 @@ dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.
 - Store secrets in user-secrets or environment configuration, never tracked settings.
 - Aspire persists generated dependency credentials in AppHost user-secrets.
 
+### Charging-data reset
+
+1. Stop API replicas and workers in Aspire Dashboard before resetting data.
+2. Start the local reset resource:
+
+   ```sh
+   aspire resource lab-data-reset start --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --non-interactive
+   ```
+
+3. Wait for `lab-data-reset` to finish, then restart the stopped resources.
+
+- [Reset scope and synthetic fixtures](docs/lab.md#211-synthetic-fixtures).
+
 ### Frontend checks
 
 1. Restore dependencies:

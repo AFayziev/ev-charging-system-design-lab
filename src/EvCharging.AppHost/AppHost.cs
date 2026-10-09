@@ -92,6 +92,22 @@ identity.WithEnvironment("GATEWAY_PUBLIC_ORIGIN", gatewayPublicOrigin)
 var identityAuthority = ReferenceExpression.Create($"{identityPublicOrigin}/realms/evcharging");
 const string IdentityMetadataAddress = "http://keycloak/realms/evcharging/.well-known/openid-configuration";
 
+platformMigrations.WithEnvironment("LabData__Enabled", "true")
+    .WithEnvironment("LabData__IdentityIssuer", identityAuthority);
+
+if (builder.ExecutionContext.IsRunMode)
+{
+    builder.AddProject<Projects.EvCharging_Persistence_Migrations>("lab-data-reset", launchProfileName: null)
+        .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+        .WithEnvironment("LabData__Enabled", "true")
+        .WithEnvironment("LabData__Reset", "true")
+        .WithEnvironment("LabData__IdentityIssuer", identityAuthority)
+        .WithReference(databaseAccess.Migration)
+        .WaitForCompletion(platformMigrations)
+        .WithExplicitStart()
+        .ExcludeFromManifest();
+}
+
 api.WithReference(identity.GetEndpoint("http"))
     .WaitFor(identity)
     .WithEnvironment("ApiAuthentication__Authority", identityAuthority)

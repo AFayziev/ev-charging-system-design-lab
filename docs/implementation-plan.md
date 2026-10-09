@@ -209,7 +209,7 @@ access.
 - [x] M03.02 Add PostgreSQL migrations for equipment, assignments, reservations,
   sessions, operations/attempts, deadlines, and file metadata; define boundaries
   between domain persistence and host-specific Wolverine message-storage schemas.
-- [ ] M03.03 Add synthetic equipment, driver, operator-assignment, and provider
+- [x] M03.03 Add synthetic equipment, driver, operator-assignment, and provider
   mappings linked to the M02 identity fixtures; provide reproducible fixture seeding
   and lab-data reset.
 - [x] M03.04 Extend database roles with least-privilege domain access, read-only

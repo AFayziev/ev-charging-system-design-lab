@@ -1,8 +1,10 @@
 using EvCharging.Persistence;
+using EvCharging.Persistence.Migrations.SeedData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
@@ -13,7 +15,27 @@ if (string.IsNullOrWhiteSpace(connection))
     throw new InvalidOperationException("The platform-migration connection is required.");
 }
 
-builder.Services.AddDbContext<PlatformDbContext>(options => options.UseNpgsql(connection));
+builder.Services.AddOptions<LabDataOptions>()
+    .BindConfiguration(LabDataOptions.SectionName)
+    .Validate(options => !options.Reset || options.Enabled, "Lab data reset requires seeding to be enabled.")
+    .Validate(
+        options => !options.Enabled || Uri.TryCreate(options.IdentityIssuer, UriKind.Absolute, out var issuer)
+            && issuer.Scheme is "http" or "https",
+        "An absolute HTTP(S) LabData:IdentityIssuer is required when seeding is enabled.")
+    .ValidateOnStart();
+
+builder.Services.AddDbContext<PlatformDbContext>(
+    (services, options) =>
+    {
+        options.UseNpgsql(connection);
+
+        var labData = services.GetRequiredService<IOptions<LabDataOptions>>().Value;
+        if (labData.Enabled)
+        {
+            options.UseAsyncSeeding((context, _, cancellationToken) =>
+                LabDataSeeder.SeedAsync((PlatformDbContext)context, labData.IdentityIssuer!, cancellationToken));
+        }
+    });
 
 using var host = builder.Build();
 await host.StartAsync();
@@ -25,7 +47,13 @@ try
     timeout.CancelAfter(TimeSpan.FromMinutes(2));
 
     await using var scope = host.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<PlatformDbContext>().Database.MigrateAsync(timeout.Token);
+    var context = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+    if (scope.ServiceProvider.GetRequiredService<IOptions<LabDataOptions>>().Value.Reset)
+    {
+        await LabDataReset.ResetAsync(context, timeout.Token);
+    }
+
+    await context.Database.MigrateAsync(timeout.Token);
 }
 finally
 {

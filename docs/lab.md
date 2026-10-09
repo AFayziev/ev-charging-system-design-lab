@@ -288,6 +288,22 @@ of cloud subscriptions.
 [Cloudflare Email Service pricing](https://developers.cloudflare.com/email-service/platform/pricing/),
 [Azure PostgreSQL pricing](https://azure.microsoft.com/en-us/pricing/details/postgresql/flexible-server/)
 
+### 2.1.1 Synthetic fixtures
+
+| Fixture | Exercise |
+|---|---|
+| North Station, synchronous charging provider | Assigned operator access and authoritative command outcomes |
+| South Station, queued charging provider | Unassigned operator denial and uncertain command outcomes |
+| Two independent EVSEs per station | Concurrent sessions without sharing one charging outlet |
+| Driver and operator from the Keycloak realm fixtures | Identity-linked ownership and station assignments |
+
+Seeding is additive and retains existing station details. Reset restores charging
+fixtures and removes charging workflow/file metadata while preserving browser sessions,
+encryption keys, and identity-provider data. Reset is limited to relational
+charging data; other stores are unaffected. Numeric entity IDs may change after
+reset. The reset operation is excluded from deployment.
+[Reset procedure](../README.md#charging-data-reset).
+
 ### 2.2 Default timings
 
 Short intervals make failure and recovery visible during a small demonstration.
