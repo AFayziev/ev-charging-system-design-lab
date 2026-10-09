@@ -172,26 +172,35 @@ criteria.
   least-privilege runtime and migration credentials, and a dedicated long-lived
   Npgsql primary data source with bounded waits and pool metrics.
 - [x] M02.03 Implement the shared PostgreSQL `ITicketStore`, protected token state,
-  Data Protection key sharing, per-session refresh coordination, and logout removal.
-  Introduce PostgreSQL Testcontainers tests for session expiry, renewal,
-  concurrent updates, and removal.
-- [ ] M02.04 Implement the documented `/auth` routes and gateway-proxied
-  `/identity` resources, including matching public issuer/redirect configuration.
-- [ ] M02.05 Add antiforgery validation, validated return URLs, cookie attributes,
-  browser header/cookie stripping, bearer forwarding, and API JWT validation.
+  Data Protection key sharing, conventional cookie-handler renewal/removal, and
+  library-managed token refresh/revocation. Introduce PostgreSQL Testcontainers
+  tests for protected shared-session persistence and expiry.
+- [x] M02.04 Implement the `/auth` routes with direct browser redirects to Keycloak
+  and matching issuer/callback configuration. Include logout antiforgery protection,
+  validated return URLs, and browser cookie attributes.
+- [x] M02.05 Add antiforgery validation for browser API requests, browser
+  header/cookie stripping, bearer forwarding, and API JWT validation.
   Enforce authenticated access and driver/operator role policies at the API.
   Keep machine routes outside browser session/token-substitution policies.
 - [ ] M02.06 Build the driver/operator navigation shell, session discovery,
   sign-in/sign-out states, and shared API/error handling through the gateway.
-- [ ] M02.07 Verify OIDC discovery, gateway/API instance loss, concurrent refresh,
-  logout, session-store outage, Keycloak outage, and browser authentication
-  boundaries with real dependencies.
+- [ ] M02.07 Verify browser navigation to Keycloak, OIDC discovery and callbacks,
+  gateway/API instance loss, concurrent refresh under the supported provider policy,
+  logout, session-store outage,
+  Keycloak outage, and browser authentication boundaries with real dependencies.
 
-Acceptance: both roles sign in through the gateway origin. A browser session
-survives gateway-instance loss; JavaScript receives no OIDC tokens. Invalid
+Acceptance: login and logout start at the gateway, with Keycloak-hosted login pages
+and gateway callbacks. Both roles can sign in. A browser session survives
+gateway-instance loss; JavaScript receives no OIDC tokens. Invalid
 antiforgery requests and forged identity headers fail. Authentication and role
 policies are enforced by the API, and session-store failure cannot grant anonymous
 access.
+
+#### Independent follow-up tasks
+
+- [ ] M02.08 Optional, after M02.06 and an established frontend visual design:
+  customize the Keycloak login theme to match the application's branding and
+  verify authentication flows with the themed pages.
 
 ### M03 — Domain persistence, read/write routes, and pooling
 

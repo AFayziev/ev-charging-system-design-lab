@@ -48,15 +48,34 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchP
 gateway.WithReference(authentication.Runtime).WaitForCompletion(authenticationMigrations)
     .WithReference(identity.GetEndpoint("http")).WaitFor(identity);
 
-var gatewayPublicOrigin = builder.ExecutionContext.IsRunMode && builder.Configuration["Parameters:gateway-public-origin"] is null
-    ? ReferenceExpression.Create($"http://localhost:{gateway.GetEndpoint("http").Property(EndpointProperty.Port)}")
-    : ReferenceExpression.Create($"{builder.AddParameter("gateway-public-origin")}");
-identity.WithEnvironment("GATEWAY_PUBLIC_ORIGIN", gatewayPublicOrigin);
-
-builder.AddViteApp("frontend", "../EvCharging.Web")
+var frontend = builder.AddViteApp("frontend", "../EvCharging.Web")
+    .WithEndpoint("http", endpoint => endpoint.Port = builder.ExecutionContext.IsRunMode
+        ? builder.Configuration.GetValue("Frontend:HttpPort", 5173) : null)
     .WithExternalHttpEndpoints()
     .WithReference(gateway)
     .WaitFor(gateway);
+
+var gatewayPublicOrigin = builder.AddBrowserOrigin(frontend.GetEndpoint("http"), "gateway-public-origin");
+var identityPublicOrigin = builder.AddBrowserOrigin(identity.GetEndpoint("http"), "identity-public-origin");
+identity.WithEnvironment("GATEWAY_PUBLIC_ORIGIN", gatewayPublicOrigin)
+    .WithEnvironment("KC_HOSTNAME", identityPublicOrigin)
+    .WithEnvironment("KC_HOSTNAME_BACKCHANNEL_DYNAMIC", "true");
+
+var identityAuthority = ReferenceExpression.Create($"{identityPublicOrigin}/realms/evcharging");
+const string IdentityMetadataAddress = "http://keycloak/realms/evcharging/.well-known/openid-configuration";
+
+api.WithReference(identity.GetEndpoint("http")).WaitFor(identity)
+    .WithEnvironment("ApiAuthentication__Authority", identityAuthority)
+    .WithEnvironment("ApiAuthentication__MetadataAddress", IdentityMetadataAddress)
+    .WithEnvironment("ApiAuthentication__Audience", "evcharging-api")
+    .WithEnvironment("ApiAuthentication__AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false");
+
+gateway.WithEnvironment("BrowserAuthentication__PublicOrigin", gatewayPublicOrigin)
+    .WithEnvironment("BrowserAuthentication__Authority", identityAuthority)
+    .WithEnvironment("BrowserAuthentication__MetadataAddress", IdentityMetadataAddress)
+    .WithEnvironment("BrowserAuthentication__ClientId", "evcharging-gateway")
+    .WithEnvironment("BrowserAuthentication__ClientSecret", gatewayOidcSecret)
+    .WithEnvironment("BrowserAuthentication__AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false");
 
 var synchronousChargingProviderApi = builder.AddProject<Projects.EvCharging_SynchronousChargingProviderApi>(
     "synchronous-charging-provider-api", launchProfileName: null)

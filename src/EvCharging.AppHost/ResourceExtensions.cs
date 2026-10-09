@@ -1,8 +1,16 @@
+using Microsoft.Extensions.Configuration;
+
 namespace EvCharging.AppHost;
 
 internal static class ResourceExtensions
 {
     internal const string PostgresImageTag = "17.11-bookworm";
+
+    public static ReferenceExpression AddBrowserOrigin(this IDistributedApplicationBuilder builder,
+        EndpointReference endpoint, string parameterName) =>
+        builder.ExecutionContext.IsRunMode && builder.Configuration[$"Parameters:{parameterName}"] is null
+            ? ReferenceExpression.Create($"{new EndpointReference(endpoint.Resource, endpoint.EndpointName, KnownNetworkIdentifiers.LocalhostNetwork)}")
+            : ReferenceExpression.Create($"{builder.AddParameter(parameterName)}");
 
     public static (
         IResourceBuilder<PostgresDatabaseResource> Direct,
@@ -30,7 +38,7 @@ internal static class ResourceExtensions
         var database = builder.AddPostgres("identity-postgres", password: builder.AddPersistentSecret("identity-postgres-password"))
             .WithImageRegistry("docker.io").WithImage("library/postgres").WithImageTag(PostgresImageTag)
             .WithDataVolume().AddDatabase("identity-database", "keycloak");
-        return builder.AddDockerfile("keycloak", "../../infra/keycloak")
+        var identity = builder.AddDockerfile("keycloak", "../../infra/keycloak")
             .WithBuildArg("KEYCLOAK_IMAGE", "quay.io/keycloak/keycloak:26.8.0")
             .WithArgs("start-dev", "--import-realm")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
@@ -45,13 +53,20 @@ internal static class ResourceExtensions
             .WithEnvironment("GATEWAY_OIDC_SECRET", gatewayOidcSecret)
             .WithEnvironment("SYNTHETIC_DRIVER_PASSWORD", builder.AddPersistentSecret("synthetic-driver-password"))
             .WithEnvironment("SYNTHETIC_OPERATOR_PASSWORD", builder.AddPersistentSecret("synthetic-operator-password"))
-            .WithEnvironment("KC_HTTP_RELATIVE_PATH", "/identity")
             .WithEnvironment("KC_HEALTH_ENABLED", "true")
-            .WithHttpEndpoint(targetPort: 8080, name: "http")
+            .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode
+                ? builder.Configuration.GetValue("Keycloak:HttpPort", 8080) : null, targetPort: 8080, name: "http")
             .WithHttpEndpoint(targetPort: 9000, name: "management")
             .WithEndpoint("management", e => e.ExcludeReferenceEndpoint = true)
-            .WithHttpHealthCheck("/identity/health/ready", endpointName: "management")
+            .WithHttpHealthCheck("/health/ready", endpointName: "management")
             .WaitFor(database);
+
+        if (builder.ExecutionContext.IsRunMode)
+        {
+            identity.WithImageTag("local");
+        }
+
+        return identity;
     }
 
     public static IResourceBuilder<MongoDBDatabaseResource> AddDocumentDatabase(this IDistributedApplicationBuilder builder) =>

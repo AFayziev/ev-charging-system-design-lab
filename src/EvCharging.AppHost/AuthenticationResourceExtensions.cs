@@ -27,6 +27,12 @@ internal static class AuthenticationResourceExtensions
             .WithEnvironment("GATEWAY_AUTH_PASSWORD", runtimePassword)
             .WithEnvironment("GATEWAY_AUTH_MIGRATION_PASSWORD", migrationPassword)
             .WaitFor(database);
+
+        if (builder.ExecutionContext.IsRunMode)
+        {
+            bootstrap.WithImageTag("local");
+        }
+
         return (runtime, migration, bootstrap);
     }
 }

@@ -9,7 +9,8 @@ retain their prescribed names and signatures.
 
 - Use [domain terminology](domain.md) consistently; name by responsibility.
 - Match filenames to the principal type. Keep one principal type per file;
-  small related private types may remain together.
+  small related private types may remain together. Request/response records and
+  their child property types may share a file named after the parent contract.
 - Comments explain intent, constraints, or surprising behavior. Document public
   contracts when their units, invariants, or failure semantics need explanation.
 - Separate distinct logical steps with one blank line; keep closely related
@@ -21,6 +22,11 @@ retain their prescribed names and signatures.
 - Default implementation types to `internal`; expose only required contracts.
 - Use records for immutable data/messages and classes for identity or mutable
   lifecycle. Prefer immutable collections where practical.
+- Use named, strongly typed request and response models for API payloads; avoid
+  anonymous objects, `dynamic`, and dictionaries for fixed contracts. Keep transport
+  models separate from persistence entities. Reuse framework models where appropriate.
+  For Minimal APIs, use `TypedResults` and explicit `Results<T1, ...>` unions for
+  multiple outcomes. Simple route and query parameters may remain typed scalars.
 - Use nullable annotations honestly. Validate boundaries; avoid `null!` and `!`
   unless an invariant is proven and cannot be expressed in the type system.
 - Use constructor injection. Resolve dependencies in composition roots; avoid

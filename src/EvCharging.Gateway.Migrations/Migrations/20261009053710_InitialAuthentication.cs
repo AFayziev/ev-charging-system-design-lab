@@ -36,11 +36,8 @@ namespace EvCharging.Gateway.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
-                    protected_ticket = table.Column<byte[]>(type: "bytea", nullable: false),
-                    expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    version = table.Column<long>(type: "bigint", nullable: false),
-                    refresh_claim = table.Column<Guid>(type: "uuid", nullable: true),
-                    refresh_lease_expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    protected_ticket = table.Column<string>(type: "text", nullable: false),
+                    expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {

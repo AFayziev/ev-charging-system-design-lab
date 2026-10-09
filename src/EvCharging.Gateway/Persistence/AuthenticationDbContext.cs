@@ -22,7 +22,6 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
         modelBuilder.Entity<AuthenticationSession>(entity =>
         {
             entity.HasKey(session => session.Id);
-            entity.Property(session => session.Version).IsConcurrencyToken();
             entity.HasIndex(session => session.ExpiresAt);
         });
     }

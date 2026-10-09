@@ -22,7 +22,7 @@ export default defineConfig(({ command, isPreview }) => {
     plugins,
     server: {
       proxy: {
-        "^/(api|auth|identity)(/|$|\\?)": proxy,
+        "^/(api|auth)(/|$|\\?)": proxy,
       },
     },
   };

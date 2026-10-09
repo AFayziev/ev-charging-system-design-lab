@@ -1,15 +1,19 @@
 using EvCharging.Gateway.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Gateway.Authentication;
 
 internal sealed class PostgresTicketStore(
     IDbContextFactory<AuthenticationDbContext> contexts,
-    SessionTicketProtection protection,
+    IDataProtectionProvider protectionProvider,
     TimeProvider timeProvider) : ITicketStore
 {
+    private readonly TicketDataFormat _ticketFormat = new(
+        protectionProvider.CreateProtector("EvCharging.Gateway.SessionTicket", "v1"));
+
     public Task<string> StoreAsync(AuthenticationTicket ticket) => StoreAsync(ticket, CancellationToken.None);
     public Task RenewAsync(string key, AuthenticationTicket ticket) => RenewAsync(key, ticket, CancellationToken.None);
     public Task<AuthenticationTicket?> RetrieveAsync(string key) => RetrieveAsync(key, CancellationToken.None);
@@ -20,43 +24,26 @@ internal sealed class PostgresTicketStore(
         await using var database = await contexts.CreateDbContextAsync(cancellationToken);
         var session = new AuthenticationSession
         {
-            ProtectedTicket = protection.Protect(ticket),
-            ExpiresAt = SessionTicketProtection.GetExpiry(ticket),
-            Version = 1
+            ProtectedTicket = _ticketFormat.Protect(ticket),
+            ExpiresAt = GetExpiry(ticket)
         };
         database.Sessions.Add(session);
         await database.SaveChangesAsync(cancellationToken);
-
-        var key = session.Id.ToString();
-        SessionTicketProtection.SetVersion(ticket, 1);
-        ticket.Properties.Items[SessionTicketMetadata.KeyProperty] = key;
-        return key;
+        return session.Id.ToString();
     }
 
     public async Task RenewAsync(string key, AuthenticationTicket ticket, CancellationToken cancellationToken)
     {
-        var version = SessionTicketProtection.GetVersion(ticket);
-        if (version is null || !string.Equals(SessionTicketMetadata.GetSessionKey(ticket), key, StringComparison.Ordinal))
-        {
-            // Re-login must remove the previous session and store a new ticket.
-            throw new InvalidOperationException("Renewal requires a ticket retrieved from the shared session store.");
-        }
-
-        var payload = protection.Protect(ticket);
-        var expiry = SessionTicketProtection.GetExpiry(ticket);
         var id = Guid.Parse(key);
-        var now = timeProvider.GetUtcNow();
+        var payload = _ticketFormat.Protect(ticket);
+        var expiry = GetExpiry(ticket);
         await using var database = await contexts.CreateDbContextAsync(cancellationToken);
-        var changed = await database.Sessions
-            .Where(session => session.Id == id && session.Version == version && session.ExpiresAt > now
-                && session.RefreshClaim == null)
-            .ExecuteUpdateAsync(update => update.SetProperty(session => session.ProtectedTicket, payload)
-                .SetProperty(session => session.ExpiresAt, expiry)
-                .SetProperty(session => session.Version, session => session.Version + 1), cancellationToken);
-        if (changed == 1)
-        {
-            SessionTicketProtection.SetVersion(ticket, version.Value + 1);
-        }
+        await database.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO gateway_auth.sessions (id, protected_ticket, expires_at)
+            VALUES ({id}, {payload}, {expiry})
+            ON CONFLICT (id) DO UPDATE
+            SET protected_ticket = EXCLUDED.protected_ticket, expires_at = EXCLUDED.expires_at
+            """, cancellationToken);
     }
 
     public async Task<AuthenticationTicket?> RetrieveAsync(string key, CancellationToken cancellationToken)
@@ -75,15 +62,14 @@ internal sealed class PostgresTicketStore(
         }
 
         var now = timeProvider.GetUtcNow();
-        if (session.ExpiresAt <= now || session.RefreshLeaseExpiresAt <= now)
+        if (session.ExpiresAt <= now)
         {
-            // An expired refresh lease can represent a completed, unrecorded token rotation.
-            await database.Sessions.Where(session => session.Id == id
-                && (session.ExpiresAt <= now || session.RefreshLeaseExpiresAt <= now)).ExecuteDeleteAsync(cancellationToken);
+            await database.Sessions.Where(session => session.Id == id && session.ExpiresAt <= now)
+                .ExecuteDeleteAsync(cancellationToken);
             return null;
         }
 
-        return protection.Unprotect(session.ProtectedTicket, session.Version, key);
+        return _ticketFormat.Unprotect(session.ProtectedTicket);
     }
 
     public async Task RemoveAsync(string key, CancellationToken cancellationToken)
@@ -96,4 +82,7 @@ internal sealed class PostgresTicketStore(
         await using var database = await contexts.CreateDbContextAsync(cancellationToken);
         await database.Sessions.Where(session => session.Id == id).ExecuteDeleteAsync(cancellationToken);
     }
+
+    private static DateTimeOffset GetExpiry(AuthenticationTicket ticket) =>
+        ticket.Properties.ExpiresUtc ?? throw new InvalidOperationException("Authentication tickets must have an expiry.");
 }

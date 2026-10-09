@@ -34,23 +34,10 @@ namespace EvCharging.Gateway.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
-                    b.Property<byte[]>("ProtectedTicket")
+                    b.Property<string>("ProtectedTicket")
                         .IsRequired()
-                        .HasColumnType("bytea")
+                        .HasColumnType("text")
                         .HasColumnName("protected_ticket");
-
-                    b.Property<Guid?>("RefreshClaim")
-                        .HasColumnType("uuid")
-                        .HasColumnName("refresh_claim");
-
-                    b.Property<DateTimeOffset?>("RefreshLeaseExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("refresh_lease_expires_at");
-
-                    b.Property<long>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint")
-                        .HasColumnName("version");
 
                     b.HasKey("Id")
                         .HasName("pk_sessions");

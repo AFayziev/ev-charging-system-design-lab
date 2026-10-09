@@ -54,7 +54,8 @@ flowchart LR
     UI --> Edge[Load balancer]
     Edge -->|Pages and assets| FrontendHost[Frontend hosting]
     Edge -->|API and authentication| Gateway[Gateway replicas]
-    Gateway --> Identity[Identity provider]
+    UI -->|Login and logout navigation| Identity[Identity provider]
+    Gateway -->|Server protocol exchanges| Identity
     Gateway --> Sessions[Shared authentication session store]
     Sessions --> Primary[Relational primary]
     SQL[Relational write and read routes] --> Primary
@@ -98,7 +99,7 @@ Orchestration health checks
 address hosts directly.
 
 Frontend hosting serves the entry page independently of the gateway.
-Authentication, API, and live-update routes share the frontend's public origin.
+Gateway authentication, API, and live-update routes share the frontend's public origin.
 Versioned frontend assets and published media use the CDN;
 authorized file transfers use storage URLs. Authentication and API routes bypass
 CDN caching.
@@ -461,13 +462,15 @@ The gateway is the BFF and the identity provider's confidential client.
 It owns login, token exchange, token refresh, and logout; client credentials
 and access/refresh tokens remain server-side.
 
-Login pages and callbacks share the gateway's public origin. The browser never
-uses a separate identity-provider origin; server-side exchanges use internal connectivity.
-Identity administration remains private.
+Login and logout start at the gateway, which redirects the browser directly to
+the identity provider's public origin. Provider-hosted pages return to callbacks
+on the application's public origin. Server-side protocol exchanges use internal
+connectivity; the provider's public issuer remains the token-validation identity.
+Identity administration uses restricted access independent of browser login routes.
 
 A relational session store holds authentication and protected token state shared
 by gateway replicas. The browser receives a protected session-reference cookie.
-Refresh is coordinated per session. Store unavailability fails authenticated
+Store unavailability fails authenticated
 requests explicitly; cache eviction cannot discard authentication state.
 
 The gateway validates antiforgery tokens for state-changing browser requests.

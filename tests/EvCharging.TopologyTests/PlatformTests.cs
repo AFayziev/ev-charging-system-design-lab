@@ -8,21 +8,22 @@ using static Microsoft.Playwright.Assertions;
 
 namespace EvCharging.TopologyTests;
 
-public sealed class PlatformTests(AppHostFixture fixture) : IClassFixture<AppHostFixture>
+[Collection("Topology")]
+public sealed class PlatformTests(AppHostFixture fixture)
 {
     [Fact]
     [Trait("Category", "Topology")]
-    public async Task Route_UnknownPath_ReturnsProblemDetails()
+    public async Task Route_AnonymousBrowser_ReturnsUnauthorized()
     {
         using var client = fixture.App.CreateHttpClient("gateway", "http");
         client.Timeout = TimeSpan.FromSeconds(15);
 
         using var response = await client.GetAsync("/api/__unmapped-test-route");
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(404, problem.GetProperty("status").GetInt32());
+        Assert.Equal(401, problem.GetProperty("status").GetInt32());
     }
 
     [Fact]
@@ -62,9 +63,7 @@ public sealed class PlatformTests(AppHostFixture fixture) : IClassFixture<AppHos
                 };
             }
             """);
-        Assert.Equal(200, result.GetProperty("status").GetInt32());
+        Assert.Equal(401, result.GetProperty("status").GetInt32());
         Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("gateway").GetString()));
-        Assert.Equal("api", result.GetProperty("body").GetProperty("host").GetString());
-        Assert.True(result.GetProperty("body").GetProperty("stub").GetBoolean());
     }
 }

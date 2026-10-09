@@ -9,6 +9,7 @@
     <PackageReference Include="Microsoft.Playwright" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <ProjectReference Include="../../src/EvCharging.Gateway/EvCharging.Gateway.csproj" />
     <ProjectReference Include="../../src/EvCharging.AppHost/EvCharging.AppHost.csproj" />
   </ItemGroup>
 </Project>

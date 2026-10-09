@@ -15,7 +15,7 @@ public sealed class AppHostFixture : IAsyncLifetime
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_AppHost>(
-            ["--environment=Development"], timeout.Token);
+            ["--environment=Development", "--Parameters:api-instances=2", "--Parameters:gateway-instances=2"], timeout.Token);
         foreach (var resource in builder.Resources.OfType<ContainerResource>())
         {
             foreach (var mount in resource.Annotations.OfType<ContainerMountAnnotation>()

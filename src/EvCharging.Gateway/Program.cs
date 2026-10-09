@@ -1,17 +1,42 @@
 using EvCharging.Gateway.Authentication;
 using EvCharging.Gateway.Persistence;
 using Yarp.ReverseProxy.Configuration;
+using Yarp.ReverseProxy.Transforms;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.AddAuthenticationPersistence();
 builder.AddAuthenticationSessions();
+builder.AddBrowserAuthentication();
 builder.AddHttpApiDefaults();
 
+builder.Services.AddTransient<BrowserApiTransform>();
 builder.Services.AddReverseProxy()
+    .AddTransforms(context =>
+    {
+        context.AddRequestTransform(BrowserApiTransform.StripBrowserHeaders);
+        if (context.Route.RouteId == "platform-api")
+        {
+            context.RequestTransforms.Add(context.Services.GetRequiredService<BrowserApiTransform>());
+        }
+    })
     .AddServiceDiscoveryDestinationResolver()
     .LoadFromMemory(
         [new RouteConfig
+        {
+            RouteId = "platform-machine",
+            ClusterId = "api",
+            Order = -1,
+            Match = new RouteMatch { Path = "/api/internal/{**remainder}" },
+            Transforms = [new Dictionary<string, string> { ["PathRemovePrefix"] = "/api" }]
+        }, new RouteConfig
+        {
+            RouteId = "platform-callbacks",
+            ClusterId = "api",
+            Order = -1,
+            Match = new RouteMatch { Path = "/api/callbacks/{**remainder}" },
+            Transforms = [new Dictionary<string, string> { ["PathRemovePrefix"] = "/api" }]
+        }, new RouteConfig
         {
             RouteId = "platform-api",
             ClusterId = "api",
@@ -41,6 +66,8 @@ builder.Services.AddReverseProxy()
 var app = builder.Build();
 
 app.UseHttpApiDefaults();
+app.UseAuthentication();
+app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
 {
@@ -52,6 +79,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHttpApiDiagnostics("gateway");
+app.MapBrowserAuthentication();
 app.MapReverseProxy();
 
 app.Run();

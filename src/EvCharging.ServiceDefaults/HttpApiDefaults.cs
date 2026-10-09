@@ -43,12 +43,8 @@ public static class HttpApiDefaultsExtensions
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
-            app.MapGet("/diagnostics/instance", () => new
-            {
-                host,
-                instance = $"{Environment.MachineName}:{Environment.ProcessId}",
-                stub = true
-            });
+            app.MapGet("/diagnostics/instance", () => TypedResults.Ok(new InstanceResponse(
+                host, $"{Environment.MachineName}:{Environment.ProcessId}", Stub: true)));
         }
 
         return app;

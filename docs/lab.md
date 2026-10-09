@@ -18,7 +18,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Orchestration | Aspire 13.6 C# AppHost, local processes and Docker Linux containers |
 | Frontend | React 19, TypeScript, Vite, React Router, Mantine, TanStack Query |
 | API gateway | YARP |
-| Identity | Keycloak; OIDC Authorization Code with PKCE through the gateway, using ASP.NET Core OpenID Connect and cookie authentication |
+| Identity | Keycloak; gateway-owned OIDC Authorization Code with PKCE, using ASP.NET Core OpenID Connect and cookie authentication |
 | Live delivery | SignalR .NET/JavaScript clients; StackExchange.Redis backplane on Valkey |
 | Relational access / pooling | PostgreSQL 17; EF Core 10/Npgsql provider and long-lived Npgsql data sources; managed PgBouncer in Azure |
 | Managed database exercise | Azure Database for PostgreSQL Flexible Server; readable replica and provider-managed HA |
@@ -157,8 +157,12 @@ fan-out, disconnect, and reconnection.
 Browser routes follow the [gateway authentication design](architecture.md#131-gateway-authentication).
 
 Gateway session persistence uses PostgreSQL; ticket protection uses ASP.NET Core
-Data Protection with EF Core key storage. The local key ring is unencrypted at
+Data Protection with EF Core key storage. The free Apache-2.0 Duende
+AccessTokenManagement OpenIdConnect package provides token refresh and revocation
+with process-local coordination.
+The local key ring is unencrypted at
 rest. Hosted key protection and retention remain deployment dependencies.
+[Duende AccessTokenManagement](https://docs.duendesoftware.com/accesstokenmanagement/web-apps/),
 [Data Protection configuration](https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/configuration/overview?view=aspnetcore-10.0)
 
 | Browser route | Responsibility |
@@ -168,17 +172,19 @@ rest. Hosted key protection and retention remain deployment dependencies.
 | `/auth/session` | Sign-in state, display claims, and antiforgery token; no OIDC tokens |
 | `/auth/logout` | Antiforgery-protected logout of the application and provider session |
 | `/auth/logout-callback` | Complete the provider's post-logout redirect |
-| `/identity/*` | Required Keycloak login/protocol resources; administrative routes stay private |
 
-Keycloak's public hostname, issuer, and redirects match the gateway identity route;
-server-side exchanges use internal connectivity. Browser session cookies require
-Secure, HttpOnly, and SameSite=Lax settings.
+Hosted public origins require HTTPS; discovery transport can use internal HTTP
+independently of public HTTPS. Browser session cookies use
+HttpOnly and SameSite=Lax; hosted execution requires Secure. Explicitly enabled
+local HTTP uses loopback browser origins without TLS provisioning.
+Keycloak administration is directly accessible through its local loopback endpoint.
+Hosted ingress must restrict administration and management endpoints.
 Keycloak uses a dedicated PostgreSQL database. Its pool starts with the configured
 number of connections and remains within configured limits; identity connections
 count toward database connection budgets.
 
-Identity provisioning supports local and hosted execution. The gateway's public
-origin remains stable across restarts so registered redirects stay valid.
+Identity provisioning supports local and hosted execution. Public origins remain
+stable across restarts so registered redirects and the issuer stay valid.
 Provisioning preserves existing realm state. Changes to realm configuration,
 credentials, or the public origin require an explicit administrative update;
 restart alone does not apply them.
@@ -191,7 +197,7 @@ Worker and provider callback routes validate their service/source credentials an
 forward the authenticated machine identity. Browser token substitution and cookie
 handling apply only to browser-session routes; machine callers do not enter the
 interactive OIDC flow.
-[Keycloak reverse proxy](https://www.keycloak.org/server/reverseproxy),
+[Keycloak hostname and backchannel configuration](https://www.keycloak.org/server/hostname),
 [Antiforgery](https://learn.microsoft.com/en-us/aspnet/core/security/anti-request-forgery?view=aspnetcore-10.0),
 [YARP authentication](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/yarp/authn-authz?view=aspnetcore-10.0)
 
@@ -364,7 +370,7 @@ Verification uses correlated telemetry from the
 | Cross-driver/station access | API and private-file authorization reject unauthorized access |
 | Identity provider unavailable | Login/refresh failures visible; established sessions can use unexpired cached-signing-key-validated tokens while the session store is reachable |
 | Authentication session store unavailable | Protected routes fail explicitly; no anonymous downgrade or use of disposable cache as session authority |
-| Concurrent token refresh / logout | Refresh coordinated across gateway replicas; logout removes shared session and old cookies cannot recover it |
+| Concurrent token refresh / logout | Concurrent requests follow the identity provider's supported refresh policy; logout revokes refresh tokens and removes the shared ticket |
 | Browser authentication boundaries | No OIDC tokens exposed to JavaScript; login uses gateway routes, state-changing requests require antiforgery, and API access still enforces ownership |
 | Dashboard export unavailable | Bounded buffering/drop; core processing continues and export loss is observable through local diagnostics |
 | Collector or observability backend lost (optional profile) | Bounded buffering/drop and inspectable pipeline loss; core processing continues and telemetry delivery resumes after recovery |

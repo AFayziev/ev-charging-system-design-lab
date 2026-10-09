@@ -54,11 +54,11 @@ public static class ServiceDefaultsExtensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
-        app.MapHealthChecks("/health");
+        app.MapHealthChecks("/health").AllowAnonymous();
         app.MapHealthChecks("/alive", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains("live")
-        });
+        }).AllowAnonymous();
 
         return app;
     }
