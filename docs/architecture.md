@@ -169,6 +169,11 @@ not an event store for all business entities. The document database serves
 independent observational and diagnostic queries; cache and search loss do not
 invalidate transactional records.
 
+Authentication and charging records have separate ownership and access boundaries
+within the relational store. Each owner controls its schema changes; application
+processes use scoped runtime credentials. Separate schemas share database capacity
+and availability. Message-storage ownership follows each API/worker host family.
+
 [Domain policies](domain.md#5-reservations) are enforced in primary-side
 transactions. Database constraints preserve reservation/session exclusivity and
 permitted transitions across API instances. Operation identity prevents duplicate

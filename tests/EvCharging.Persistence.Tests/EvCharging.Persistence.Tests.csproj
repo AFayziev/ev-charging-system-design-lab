@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <ProjectReference Include="../../src/EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />
+    <ProjectReference Include="../../src/EvCharging.Gateway.Migrations/EvCharging.Gateway.Migrations.csproj" />
+    <Content Include="../../infra/postgres/*.sql" Link="provisioning/%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

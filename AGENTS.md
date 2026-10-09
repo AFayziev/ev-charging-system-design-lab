@@ -42,6 +42,9 @@ implementation progress is recorded in the plan.
 | `EvCharging.QueuedChargingProviderApi` | Simulator with queued acknowledgement and no effect deduplication |
 | `EvCharging.NotificationProviderApi` | Third-party notification service simulator; inspectable synthetic outcomes and controlled faults, no real delivery |
 | `EvCharging.Contracts` | Shared application API contracts and canonical role types; a library, not a resource |
+| `EvCharging.Domain` | Canonical domain facts, measurements, and pure business policies; a library, not a resource |
+| `EvCharging.Persistence` | Shared charging-schema entities and EF mappings for API/worker consumers; a library, not a resource |
+| `EvCharging.Persistence.Migrations` | Charging-schema EF migrations, snapshot, design-time tooling, and one-shot migrations using schema-owning credentials |
 | `EvCharging.ServiceDefaults` | Shared discovery, HTTP resilience, OpenTelemetry, and health checks; a library, not a resource |
 
 Projects dedicated to handling incoming HTTP/gRPC requests use the `Api` suffix.
@@ -70,6 +73,11 @@ metadata or existing options, and reuse existing registration helpers instead of
 copying literals or policies. Independent public-contract assertions may repeat
 expected values; tests must explicitly configure scenario settings rather than
 depend on application defaults.
+
+Choose identifier types per entity's requirements. GUIDs require a concrete
+justification; referencing a record across APIs, messages, or workers alone does
+not justify them. Prefer database-generated numeric keys for database-owned
+records when no requirement warrants another identifier type.
 
 ## Frontend
 

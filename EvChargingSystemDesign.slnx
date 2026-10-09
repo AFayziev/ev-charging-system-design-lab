@@ -11,11 +11,14 @@
     <Project Path="src/EvCharging.MediaWorker/EvCharging.MediaWorker.csproj" />
     <Project Path="src/EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
     <Project Path="src/EvCharging.Contracts/EvCharging.Contracts.csproj" />
+    <Project Path="src/EvCharging.Domain/EvCharging.Domain.csproj" />
     <Project Path="src/EvCharging.Gateway.Migrations/EvCharging.Gateway.Migrations.csproj" />
     <Project Path="src/EvCharging.Gateway/EvCharging.Gateway.csproj" />
     <Project Path="src/EvCharging.NotificationProviderApi/EvCharging.NotificationProviderApi.csproj" />
     <Project Path="src/EvCharging.NotificationWorker/EvCharging.NotificationWorker.csproj" />
     <Project Path="src/EvCharging.ObservationWorker/EvCharging.ObservationWorker.csproj" />
+    <Project Path="src/EvCharging.Persistence/EvCharging.Persistence.csproj" />
+    <Project Path="src/EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />
     <Project Path="src/EvCharging.SearchIndexWorker/EvCharging.SearchIndexWorker.csproj" />
     <Project Path="src/EvCharging.CacheWorker/EvCharging.CacheWorker.csproj" />
     <Project Path="src/EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
@@ -23,7 +26,9 @@
     <Project Path="src/EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/EvCharging.Domain.Tests/EvCharging.Domain.Tests.csproj" />
     <Project Path="tests/EvCharging.Gateway.Tests/EvCharging.Gateway.Tests.csproj" />
+    <Project Path="tests/EvCharging.Persistence.Tests/EvCharging.Persistence.Tests.csproj" />
     <Project Path="tests/EvCharging.E2E.Tests/EvCharging.E2E.Tests.csproj" />
   </Folder>
 </Solution>

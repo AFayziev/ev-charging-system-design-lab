@@ -10,8 +10,6 @@ WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'gateway_auth_migrator') 
 ALTER ROLE gateway_auth_runtime PASSWORD :'runtime_password';
 ALTER ROLE gateway_auth_migrator PASSWORD :'migration_password';
 
-REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-REVOKE TEMPORARY ON DATABASE :"DBNAME" FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"DBNAME" TO gateway_auth_runtime, gateway_auth_migrator;
 
 CREATE SCHEMA IF NOT EXISTS gateway_auth AUTHORIZATION gateway_auth_migrator;

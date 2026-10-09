@@ -4,13 +4,19 @@ using Microsoft.Extensions.Configuration;
 var builder = DistributedApplication.CreateBuilder(args);
 
 var database = builder.AddPlatformDatabase();
-var authentication = builder.AddAuthenticationDatabase(database.Direct);
+var databaseAccess = builder.AddDatabaseAccess(database);
 var authenticationMigrations = builder.AddProject<Projects.EvCharging_Gateway_Migrations>(
     "gateway-auth-migrations",
     launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
-    .WithReference(authentication.Migration)
-    .WaitForCompletion(authentication.Bootstrap);
+    .WithReference(databaseAccess.AuthenticationMigration)
+    .WaitForCompletion(databaseAccess.Bootstrap);
+var platformMigrations = builder.AddProject<Projects.EvCharging_Persistence_Migrations>(
+    "platform-migrations",
+    launchProfileName: null)
+    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithReference(databaseAccess.Migration)
+    .WaitForCompletion(databaseAccess.Bootstrap);
 
 var gatewayOidcSecret = builder.AddPersistentSecret("gateway-oidc-secret");
 var identity = builder.AddIdentityProvider(gatewayOidcSecret);
@@ -33,10 +39,9 @@ var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: 
 api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
     .WithReference(searchIndex)
     .WaitFor(searchIndex)
-    .WithReference(database.Write)
-    .WithReference(database.Read)
-    .WithReference(database.Direct)
-    .WaitFor(database.Direct)
+    .WithReference(databaseAccess.Write)
+    .WithReference(databaseAccess.Read)
+    .WaitForCompletion(platformMigrations)
     .WithReference(documents)
     .WaitFor(documents)
     .WithReference(cacheStore)
@@ -55,7 +60,7 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchP
     .WithReference(api)
     .WaitFor(api);
 
-gateway.WithReference(authentication.Runtime)
+gateway.WithReference(databaseAccess.Authentication)
     .WaitForCompletion(authenticationMigrations)
     .WithReference(identity.GetEndpoint("http"))
     .WaitFor(identity);
@@ -145,8 +150,8 @@ var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("n
 
 foreach (var worker in new[] { charging, observation, search, cache, media, notification })
 {
-    worker.WithReference(database.Write)
-        .WaitFor(database.Direct)
+    worker.WithReference(databaseAccess.Write)
+        .WaitForCompletion(platformMigrations)
         .WithReference(broker)
         .WaitFor(broker);
 }
@@ -159,7 +164,7 @@ foreach (var consumer in new[] { observation, search, cache })
 observation.WithReference(documents).WaitFor(documents);
 foreach (var reader in new[] { search, cache })
 {
-    reader.WithReference(database.Read);
+    reader.WithReference(databaseAccess.Read);
 }
 
 cache.WithReference(cacheStore).WaitFor(cacheStore);

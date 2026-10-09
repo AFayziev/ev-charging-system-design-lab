@@ -76,7 +76,14 @@ pooler. Logical routes remain separate across environments:
 |---|---|---|
 | `platform-write` | Application database | Primary through managed PgBouncer |
 | `platform-read` | Same database with a read-only application role | Readable replica, with managed pooling when enabled |
-| `platform-direct` | Direct application database connection | Direct primary for migrations and session-affine operations |
+| `platform-migration` | Direct connection with charging-schema owner credentials | Direct primary for charging migrations |
+
+The application database uses `gateway_auth` for gateway persistence and `charging`
+for shared business records, each with its own migration history and schema-owning
+credentials. Gateway runtime access is limited to authentication records; platform
+writer/reader roles access charging records. Provisioning owns database-wide
+permissions and extensions. Schema migration jobs gate their consumers.
+Host-specific Wolverine schemas are introduced with message durability.
 
 Application roles enforce route permissions; read/write paths retain separate
 Npgsql data sources and budgets. Authoritative reads use the write route; replica

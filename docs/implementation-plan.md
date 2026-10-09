@@ -42,7 +42,7 @@ is needed only when changes invalidate their results.
 | M00 | Repository and design baseline | None | Done |
 | M01 | Bootable Aspire topology | M00 | Done |
 | M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | Done |
-| M03 | Domain persistence, read/write routes, and pooling | M02 | Planned |
+| M03 | Domain persistence, read/write routes, and pooling | M02 | In progress |
 | M04 | Durable jobs, scheduling, and notification delivery | M03 | Planned |
 | M05 | Station catalog and reservations | M03, M04 | Planned |
 | M06 | Charging providers and start/stop execution | M05 | Planned |
@@ -204,15 +204,15 @@ access.
 
 ### M03 — Domain persistence, read/write routes, and pooling
 
-- [ ] M03.01 Implement canonical identifiers, UTC/time-zone handling, state
+- [x] M03.01 Implement canonical identifiers, UTC/time-zone handling, state
   dimensions, measurement types, and domain policy tests from the domain reference.
-- [ ] M03.02 Add PostgreSQL migrations for equipment, assignments, reservations,
+- [x] M03.02 Add PostgreSQL migrations for equipment, assignments, reservations,
   sessions, operations/attempts, deadlines, and file metadata; define boundaries
   between domain persistence and host-specific Wolverine message-storage schemas.
 - [ ] M03.03 Add synthetic equipment, driver, operator-assignment, and provider
   mappings linked to the M02 identity fixtures; provide reproducible fixture seeding
   and lab-data reset.
-- [ ] M03.04 Extend database roles with least-privilege domain access, read-only
+- [x] M03.04 Extend database roles with least-privilege domain access, read-only
   query credentials, and dedicated migration credentials.
 - [ ] M03.05 Implement separate long-lived Npgsql read/write data sources and
   EF Core command and no-tracking query contexts.
@@ -224,7 +224,7 @@ access.
 - [ ] M03.08 Establish ownership/assignment authorization
   and audit infrastructure for protected workflows; verify cross-driver and
   unassigned-operator denial against seeded records.
-- [ ] M03.09 Verify SQL round trips through the local read/write/direct routes,
+- [ ] M03.09 Verify SQL round trips through the local read/write routes,
   route selection and permissions, client-pool saturation, database interruption,
   and uncertain-commit lookup by operation identity.
 

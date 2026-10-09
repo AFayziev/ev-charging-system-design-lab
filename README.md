@@ -151,6 +151,15 @@ an isolated PostgreSQL container.
 dotnet test tests/EvCharging.Gateway.Tests
 ```
 
+### Database access tests
+
+- Isolated PostgreSQL container; requires Docker.
+- Verify charging/authentication schema isolation and runtime-role permissions.
+
+```sh
+dotnet test tests/EvCharging.Persistence.Tests
+```
+
 ### Frontend component tests
 
 | Mode | Command |

@@ -23,11 +23,8 @@ internal static class ResourceExtensions
         return ReferenceExpression.Create($"{builder.AddParameter(parameterName)}");
     }
 
-    public static (
-        IResourceBuilder<PostgresDatabaseResource> Direct,
-        IResourceBuilder<ConnectionStringResource> Write,
-        IResourceBuilder<ConnectionStringResource> Read)
-        AddPlatformDatabase(this IDistributedApplicationBuilder builder)
+    public static IResourceBuilder<PostgresDatabaseResource> AddPlatformDatabase(
+        this IDistributedApplicationBuilder builder)
     {
         var password = builder.AddPersistentSecret("postgres-password");
         var primary = builder.AddPostgres("postgres-primary", password: password)
@@ -40,10 +37,7 @@ internal static class ResourceExtensions
             primary.WithPgAdmin(gui => gui.WithImageTag("9.15.0").WaitFor(primary));
         }
 
-        var direct = primary.AddDatabase("platform-direct", "evcharging");
-        var write = builder.AddConnectionString("platform-write", direct.Resource.ConnectionStringExpression);
-        var read = builder.AddConnectionString("platform-read", direct.Resource.ConnectionStringExpression);
-        return (direct, write, read);
+        return primary.AddDatabase("platform-direct", "evcharging");
     }
 
     public static IResourceBuilder<ContainerResource> AddIdentityProvider(
