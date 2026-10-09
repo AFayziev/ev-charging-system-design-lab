@@ -5,7 +5,9 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var database = builder.AddPlatformDatabase();
 var authentication = builder.AddAuthenticationDatabase(database.Direct);
-var authenticationMigrations = builder.AddProject<Projects.EvCharging_Gateway_Migrations>("gateway-auth-migrations", launchProfileName: null)
+var authenticationMigrations = builder.AddProject<Projects.EvCharging_Gateway_Migrations>(
+    "gateway-auth-migrations",
+    launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithReference(authentication.Migration)
     .WaitForCompletion(authentication.Bootstrap);
@@ -29,28 +31,49 @@ var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: 
     .WithHttpHealthCheck("/health");
 
 api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
-    .WithReference(searchIndex).WaitFor(searchIndex)
-    .WithReference(database.Write).WithReference(database.Read).WithReference(database.Direct)
+    .WithReference(searchIndex)
+    .WaitFor(searchIndex)
+    .WithReference(database.Write)
+    .WithReference(database.Read)
+    .WithReference(database.Direct)
     .WaitFor(database.Direct)
-    .WithReference(documents).WaitFor(documents)
-    .WithReference(cacheStore).WaitFor(cacheStore)
-    .WithReference(broker).WaitFor(broker)
-    .WithReference(stream).WaitFor(stream);
+    .WithReference(documents)
+    .WaitFor(documents)
+    .WithReference(cacheStore)
+    .WaitFor(cacheStore)
+    .WithReference(broker)
+    .WaitFor(broker)
+    .WithReference(stream)
+    .WaitFor(stream);
 
 var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
-    .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode ? builder.Configuration.GetValue("Gateway:HttpPort", 5100) : null)
+    .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode
+        ? builder.Configuration.GetValue("Gateway:HttpPort", 5100) : null)
     .WithReplicas(gatewayCount)
     .WithHttpHealthCheck("/health")
     .WithReference(api)
     .WaitFor(api);
 
-gateway.WithReference(authentication.Runtime).WaitForCompletion(authenticationMigrations)
-    .WithReference(identity.GetEndpoint("http")).WaitFor(identity);
+gateway.WithReference(authentication.Runtime)
+    .WaitForCompletion(authenticationMigrations)
+    .WithReference(identity.GetEndpoint("http"))
+    .WaitFor(identity);
+
+var frontendDiagnosticsSettings = builder.Configuration.GetSection("FrontendDiagnostics")
+    .AsEnumerable()
+    .Where(setting => setting.Value is not null);
+
+foreach (var setting in frontendDiagnosticsSettings)
+{
+    gateway.WithEnvironment(setting.Key.Replace(":", "__", StringComparison.Ordinal), setting.Value!);
+}
 
 var frontend = builder.AddViteApp("frontend", "../EvCharging.Web")
-    .WithEndpoint("http", endpoint => endpoint.Port = builder.ExecutionContext.IsRunMode
-        ? builder.Configuration.GetValue("Frontend:HttpPort", 5173) : null)
+    .WithEndpoint(
+        "http",
+        endpoint => endpoint.Port = builder.ExecutionContext.IsRunMode
+            ? builder.Configuration.GetValue("Frontend:HttpPort", 5173) : null)
     .WithExternalHttpEndpoints()
     .WithReference(gateway)
     .WaitFor(gateway);
@@ -64,7 +87,8 @@ identity.WithEnvironment("GATEWAY_PUBLIC_ORIGIN", gatewayPublicOrigin)
 var identityAuthority = ReferenceExpression.Create($"{identityPublicOrigin}/realms/evcharging");
 const string IdentityMetadataAddress = "http://keycloak/realms/evcharging/.well-known/openid-configuration";
 
-api.WithReference(identity.GetEndpoint("http")).WaitFor(identity)
+api.WithReference(identity.GetEndpoint("http"))
+    .WaitFor(identity)
     .WithEnvironment("ApiAuthentication__Authority", identityAuthority)
     .WithEnvironment("ApiAuthentication__MetadataAddress", IdentityMetadataAddress)
     .WithEnvironment("ApiAuthentication__Audience", "evcharging-api")
@@ -121,8 +145,10 @@ var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("n
 
 foreach (var worker in new[] { charging, observation, search, cache, media, notification })
 {
-    worker.WithReference(database.Write).WaitFor(database.Direct)
-        .WithReference(broker).WaitFor(broker);
+    worker.WithReference(database.Write)
+        .WaitFor(database.Direct)
+        .WithReference(broker)
+        .WaitFor(broker);
 }
 
 foreach (var consumer in new[] { observation, search, cache })
@@ -140,7 +166,8 @@ cache.WithReference(cacheStore).WaitFor(cacheStore);
 search.WithReference(searchIndex).WaitFor(searchIndex);
 
 media.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
-    .WithReference(documents).WaitFor(documents);
+    .WithReference(documents)
+    .WaitFor(documents);
 synchronousChargingProviderApi.WithReference(gateway).WaitFor(gateway);
 queuedChargingProviderApi.WithReference(gateway).WaitFor(gateway);
 
@@ -149,7 +176,8 @@ builder.Build().Run();
 async Task<int> InstanceCountAsync(string name)
 {
     var parameter = builder.AddParameter(name, () => builder.Configuration[$"Parameters:{name}"] ?? "2");
-    if (!int.TryParse(await parameter.Resource.GetValueAsync(CancellationToken.None), out var count) || count is < 1 or > 8)
+    if (!int.TryParse(await parameter.Resource.GetValueAsync(CancellationToken.None), out var count)
+        || count is < 1 or > 8)
     {
         throw new InvalidOperationException($"Parameters:{name} must be an integer between 1 and 8.");
     }

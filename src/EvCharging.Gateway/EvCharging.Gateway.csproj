@@ -8,7 +8,11 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.Extensions.ServiceDiscovery.Yarp" />
+    <PackageReference Include="Sentry.AspNetCore" />
     <PackageReference Include="Yarp.ReverseProxy" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EvCharging.Contracts\EvCharging.Contracts.csproj" />
   </ItemGroup>
 </Project>

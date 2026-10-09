@@ -16,7 +16,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 |---|---|
 | Backend | .NET 10, C# 14, ASP.NET Core 10 Minimal APIs, OpenAPI, Problem Details |
 | Orchestration | Aspire 13.6 C# AppHost, local processes and Docker Linux containers |
-| Frontend | React 19, TypeScript, Vite, React Router, Mantine, TanStack Query |
+| Frontend | React 19, TypeScript, Vite, React Router, Mantine, TanStack Query, Axios |
 | API gateway | YARP |
 | Identity | Keycloak; gateway-owned OIDC Authorization Code with PKCE, using ASP.NET Core OpenID Connect and cookie authentication |
 | Live delivery | SignalR .NET/JavaScript clients; StackExchange.Redis backplane on Valkey |
@@ -33,7 +33,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | HTTP resilience | Microsoft.Extensions.Http.Resilience and Polly |
 | Default diagnostics | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export to Aspire Dashboard |
 | Optional observability profile | OpenTelemetry Collector, Prometheus, Loki, Tempo, Grafana |
-| Frontend error tracking | Hosted Sentry service; [configuration and constraints](#19-frontend-diagnostics) |
+| Frontend error tracking | Hosted Sentry service, React SDK, and ASP.NET Core SDK tunnel; [configuration and constraints](#19-frontend-diagnostics) |
 
 ### 1.2 Application wiring
 
@@ -226,8 +226,8 @@ dependencies. Provider SDKs and wire formats remain inside their adapters.
 Frontend diagnostics cover error capture, structured logs, breadcrumbs, release
 context, and browser tracing. Captured failures include
 JavaScript exceptions, unhandled rejections, and React error-boundary reports.
-Reports include the route, browser, anonymous browser-session ID, and recent
-actions/request outcomes. Tokens, form values, and signed URLs are excluded.
+Reports include the route, browser, and recent actions/request outcomes.
+Tokens, form values, and signed URLs are excluded.
 
 | Configuration | Behavior |
 |---|---|
@@ -238,6 +238,10 @@ actions/request outcomes. Tokens, form values, and signed URLs are excluded.
 | Source-map access | Source maps remain private and match the deployed release; excluded from public CDN assets |
 
 Local builds with Sentry disabled require no Sentry account or upload credentials.
+Runtime settings are defined by [gateway diagnostics options](../src/EvCharging.Gateway/Diagnostics/FrontendDiagnosticsOptions.cs);
+[frontend initialization](../src/EvCharging.Web/src/lib/diagnostics/sentry.ts) applies collection controls and
+[Vite build configuration](../src/EvCharging.Web/vite.config.ts) controls private source-map upload.
+The build and startup release identifiers must refer to the same deployed build.
 
 ## 2. Experiments and verification
 

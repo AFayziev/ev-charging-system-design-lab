@@ -6,20 +6,34 @@ internal static class ResourceExtensions
 {
     internal const string PostgresImageTag = "17.11-bookworm";
 
-    public static ReferenceExpression AddBrowserOrigin(this IDistributedApplicationBuilder builder,
-        EndpointReference endpoint, string parameterName) =>
-        builder.ExecutionContext.IsRunMode && builder.Configuration[$"Parameters:{parameterName}"] is null
-            ? ReferenceExpression.Create($"{new EndpointReference(endpoint.Resource, endpoint.EndpointName, KnownNetworkIdentifiers.LocalhostNetwork)}")
-            : ReferenceExpression.Create($"{builder.AddParameter(parameterName)}");
+    public static ReferenceExpression AddBrowserOrigin(
+        this IDistributedApplicationBuilder builder,
+        EndpointReference endpoint,
+        string parameterName)
+    {
+        if (builder.ExecutionContext.IsRunMode && builder.Configuration[$"Parameters:{parameterName}"] is null)
+        {
+            var localEndpoint = new EndpointReference(
+                endpoint.Resource,
+                endpoint.EndpointName,
+                KnownNetworkIdentifiers.LocalhostNetwork);
+            return ReferenceExpression.Create($"{localEndpoint}");
+        }
+
+        return ReferenceExpression.Create($"{builder.AddParameter(parameterName)}");
+    }
 
     public static (
         IResourceBuilder<PostgresDatabaseResource> Direct,
         IResourceBuilder<ConnectionStringResource> Write,
-        IResourceBuilder<ConnectionStringResource> Read) AddPlatformDatabase(this IDistributedApplicationBuilder builder)
+        IResourceBuilder<ConnectionStringResource> Read)
+        AddPlatformDatabase(this IDistributedApplicationBuilder builder)
     {
         var password = builder.AddPersistentSecret("postgres-password");
         var primary = builder.AddPostgres("postgres-primary", password: password)
-            .WithImageRegistry("docker.io").WithImage("library/postgres").WithImageTag(PostgresImageTag)
+            .WithImageRegistry("docker.io")
+            .WithImage("library/postgres")
+            .WithImageTag(PostgresImageTag)
             .WithDataVolume();
         if (builder.ExecutionContext.IsRunMode)
         {
@@ -32,19 +46,30 @@ internal static class ResourceExtensions
         return (direct, write, read);
     }
 
-    public static IResourceBuilder<ContainerResource> AddIdentityProvider(this IDistributedApplicationBuilder builder,
+    public static IResourceBuilder<ContainerResource> AddIdentityProvider(
+        this IDistributedApplicationBuilder builder,
         IResourceBuilder<ParameterResource> gatewayOidcSecret)
     {
-        var database = builder.AddPostgres("identity-postgres", password: builder.AddPersistentSecret("identity-postgres-password"))
-            .WithImageRegistry("docker.io").WithImage("library/postgres").WithImageTag(PostgresImageTag)
-            .WithDataVolume().AddDatabase("identity-database", "keycloak");
+        var database = builder.AddPostgres(
+            "identity-postgres",
+            password: builder.AddPersistentSecret("identity-postgres-password"))
+            .WithImageRegistry("docker.io")
+            .WithImage("library/postgres")
+            .WithImageTag(PostgresImageTag)
+            .WithDataVolume()
+            .AddDatabase("identity-database", "keycloak");
+        var databaseEndpoint = database.Resource.Parent.GetEndpoint("tcp");
         var identity = builder.AddDockerfile("keycloak", "../../infra/keycloak")
             .WithBuildArg("KEYCLOAK_IMAGE", "quay.io/keycloak/keycloak:26.8.0")
             .WithArgs("start-dev", "--import-realm")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", builder.AddPersistentSecret("keycloak-admin-password"))
             .WithEnvironment("KC_DB", "postgres")
-            .WithEnvironment("KC_DB_URL", ReferenceExpression.Create($"jdbc:postgresql://{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Host)}:{database.Resource.Parent.GetEndpoint("tcp").Property(EndpointProperty.Port)}/{database.Resource.DatabaseName}"))
+            .WithEnvironment(
+                "KC_DB_URL",
+                ReferenceExpression.Create(
+                    $"jdbc:postgresql://{databaseEndpoint.Property(EndpointProperty.Host)}:" +
+                    $"{databaseEndpoint.Property(EndpointProperty.Port)}/{database.Resource.DatabaseName}"))
             .WithEnvironment("KC_DB_USERNAME", "postgres")
             .WithEnvironment("KC_DB_PASSWORD", database.Resource.Parent.PasswordParameter)
             .WithEnvironment("KC_DB_POOL_INITIAL_SIZE", "5")
@@ -54,8 +79,11 @@ internal static class ResourceExtensions
             .WithEnvironment("SYNTHETIC_DRIVER_PASSWORD", builder.AddPersistentSecret("synthetic-driver-password"))
             .WithEnvironment("SYNTHETIC_OPERATOR_PASSWORD", builder.AddPersistentSecret("synthetic-operator-password"))
             .WithEnvironment("KC_HEALTH_ENABLED", "true")
-            .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode
-                ? builder.Configuration.GetValue("Keycloak:HttpPort", 8080) : null, targetPort: 8080, name: "http")
+            .WithHttpEndpoint(
+                port: builder.ExecutionContext.IsRunMode
+                    ? builder.Configuration.GetValue("Keycloak:HttpPort", 8080) : null,
+                targetPort: 8080,
+                name: "http")
             .WithHttpEndpoint(targetPort: 9000, name: "management")
             .WithEndpoint("management", e => e.ExcludeReferenceEndpoint = true)
             .WithHttpHealthCheck("/health/ready", endpointName: "management")
@@ -69,27 +97,40 @@ internal static class ResourceExtensions
         return identity;
     }
 
-    public static IResourceBuilder<MongoDBDatabaseResource> AddDocumentDatabase(this IDistributedApplicationBuilder builder) =>
+    public static IResourceBuilder<MongoDBDatabaseResource> AddDocumentDatabase(
+        this IDistributedApplicationBuilder builder) =>
         builder.AddMongoDB("mongodb", password: builder.AddPersistentSecret("mongodb-password"))
-            .WithImageRegistry("docker.io").WithImage("library/mongo").WithImageTag("8.3.11-noble")
+            .WithImageRegistry("docker.io")
+            .WithImage("library/mongo")
+            .WithImageTag("8.3.11-noble")
             .WithDataVolume()
             .WithLocalMongoExpress()
             .AddDatabase("observations");
 
     public static IResourceBuilder<ValkeyResource> AddCache(this IDistributedApplicationBuilder builder) =>
         builder.AddValkey("valkey", password: builder.AddPersistentSecret("valkey-password"))
-            .WithImageRegistry("docker.io").WithImage("valkey/valkey").WithImageTag("9.1.2")
-            .WithDataVolume().WithPersistence().WithLocalValkeyAdmin();
+            .WithImageRegistry("docker.io")
+            .WithImage("valkey/valkey")
+            .WithImageTag("9.1.2")
+            .WithDataVolume()
+            .WithPersistence()
+            .WithLocalValkeyAdmin();
 
-    public static IResourceBuilder<RabbitMQServerResource> AddMessageBroker(this IDistributedApplicationBuilder builder) =>
+    public static IResourceBuilder<RabbitMQServerResource> AddMessageBroker(
+        this IDistributedApplicationBuilder builder) =>
         builder.AddRabbitMQ("rabbitmq")
             .WithLocalManagementPlugin()
-            .WithImageRegistry("docker.io").WithImage("library/rabbitmq").WithImageTag("4.3.6-management")
+            .WithImageRegistry("docker.io")
+            .WithImage("library/rabbitmq")
+            .WithImageTag("4.3.6-management")
             .WithDataVolume();
 
-    public static IResourceBuilder<KafkaServerResource> AddObservationStream(this IDistributedApplicationBuilder builder) =>
+    public static IResourceBuilder<KafkaServerResource> AddObservationStream(
+        this IDistributedApplicationBuilder builder) =>
         builder.AddKafka("kafka")
-            .WithImageRegistry("docker.io").WithImage("apache/kafka").WithImageTag("4.3.1")
+            .WithImageRegistry("docker.io")
+            .WithImage("apache/kafka")
+            .WithImageTag("4.3.1")
             .WithDataVolume()
             // Apache Kafka needs explicit KRaft settings alongside Aspire's listener configuration.
             .WithEnvironment("KAFKA_NODE_ID", "1")
@@ -105,14 +146,17 @@ internal static class ResourceExtensions
 
     public static IResourceBuilder<ElasticsearchResource> AddSearchIndex(this IDistributedApplicationBuilder builder) =>
         builder.AddElasticsearch("elasticsearch", password: builder.AddPersistentSecret("elasticsearch-password"))
-            .WithImageRegistry("docker.elastic.co").WithImage("elasticsearch/elasticsearch").WithImageTag("9.5.4")
+            .WithImageRegistry("docker.elastic.co")
+            .WithImage("elasticsearch/elasticsearch")
+            .WithImageTag("9.5.4")
             .WithDataVolume()
             .WithEnvironment("xpack.security.http.ssl.enabled", "false")
             .WithEnvironment("xpack.security.transport.ssl.enabled", "false")
             .WithEnvironment("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
             .WithLocalElasticvue();
 
-    private static IResourceBuilder<MongoDBServerResource> WithLocalMongoExpress(this IResourceBuilder<MongoDBServerResource> database)
+    private static IResourceBuilder<MongoDBServerResource> WithLocalMongoExpress(
+        this IResourceBuilder<MongoDBServerResource> database)
     {
         if (database.ApplicationBuilder.ExecutionContext.IsRunMode)
         {
@@ -122,7 +166,8 @@ internal static class ResourceExtensions
         return database;
     }
 
-    private static IResourceBuilder<RabbitMQServerResource> WithLocalManagementPlugin(this IResourceBuilder<RabbitMQServerResource> broker)
+    private static IResourceBuilder<RabbitMQServerResource> WithLocalManagementPlugin(
+        this IResourceBuilder<RabbitMQServerResource> broker)
     {
         if (broker.ApplicationBuilder.ExecutionContext.IsRunMode)
         {
@@ -133,12 +178,14 @@ internal static class ResourceExtensions
         return broker;
     }
 
-    private static IResourceBuilder<KafkaServerResource> WithLocalKafkaUI(this IResourceBuilder<KafkaServerResource> stream)
+    private static IResourceBuilder<KafkaServerResource> WithLocalKafkaUI(
+        this IResourceBuilder<KafkaServerResource> stream)
     {
         if (stream.ApplicationBuilder.ExecutionContext.IsRunMode)
         {
             stream.WithKafkaUI(gui => gui.WithImageTag("v1.5.0")
-                .WithHttpHealthCheck("/actuator/health").WaitFor(stream));
+                .WithHttpHealthCheck("/actuator/health")
+                .WaitFor(stream));
         }
 
         return stream;
@@ -167,7 +214,8 @@ internal static class ResourceExtensions
         return cache;
     }
 
-    private static IResourceBuilder<ElasticsearchResource> WithLocalElasticvue(this IResourceBuilder<ElasticsearchResource> search)
+    private static IResourceBuilder<ElasticsearchResource> WithLocalElasticvue(
+        this IResourceBuilder<ElasticsearchResource> search)
     {
         if (search.ApplicationBuilder.ExecutionContext.IsRunMode)
         {
@@ -204,13 +252,21 @@ internal static class ResourceExtensions
         return (storage, accessKey, secretKey);
     }
 
-    public static IResourceBuilder<T> WithObjectStorage<T>(this IResourceBuilder<T> host,
+    public static IResourceBuilder<T> WithObjectStorage<T>(
+        this IResourceBuilder<T> host,
         IResourceBuilder<ContainerResource> storage,
         IResourceBuilder<ParameterResource> accessKey,
         IResourceBuilder<ParameterResource> secretKey) where T : IResourceWithEnvironment, IResourceWithWaitSupport =>
-        host.WithReference(storage.GetEndpoint("http")).WaitFor(storage)
-            .WithEnvironment("Storage__AccessKey", accessKey).WithEnvironment("Storage__SecretKey", secretKey);
+        host.WithReference(storage.GetEndpoint("http"))
+            .WaitFor(storage)
+            .WithEnvironment("Storage__AccessKey", accessKey)
+            .WithEnvironment("Storage__SecretKey", secretKey);
 
-    internal static IResourceBuilder<ParameterResource> AddPersistentSecret(this IDistributedApplicationBuilder builder, string name) =>
-        builder.AddParameter(name, new GenerateParameterDefault { MinLength = 32, Special = false }, secret: true, persist: true);
+    internal static IResourceBuilder<ParameterResource> AddPersistentSecret(
+        this IDistributedApplicationBuilder builder, string name) =>
+        builder.AddParameter(
+            name,
+            new GenerateParameterDefault { MinLength = 32, Special = false },
+            secret: true,
+            persist: true);
 }

@@ -11,7 +11,8 @@ using Xunit;
 
 namespace EvCharging.Gateway.Tests;
 
-public sealed class SessionStoreTests(AuthenticationDatabaseFixture database) : IClassFixture<AuthenticationDatabaseFixture>
+public sealed class SessionStoreTests(AuthenticationDatabaseFixture database)
+    : IClassFixture<AuthenticationDatabaseFixture>
 {
     [Fact]
     public async Task Retrieve_SharedProtectedSession_PreservesIdentityAndExpires()
@@ -29,7 +30,8 @@ public sealed class SessionStoreTests(AuthenticationDatabaseFixture database) : 
         var contexts = second.Services.GetRequiredService<IDbContextFactory<AuthenticationDbContext>>();
         await using var context = await contexts.CreateDbContextAsync();
         var payload = await context.Sessions.Where(session => session.Id == Guid.Parse(key))
-            .Select(session => session.ProtectedTicket).SingleAsync();
+            .Select(session => session.ProtectedTicket)
+            .SingleAsync();
         Assert.DoesNotContain("refresh-secret", payload, StringComparison.Ordinal);
 
         clock.Advance(TimeSpan.FromMinutes(10));
@@ -51,7 +53,10 @@ public sealed class SessionStoreTests(AuthenticationDatabaseFixture database) : 
     {
         var properties = new AuthenticationProperties { ExpiresUtc = clock.GetUtcNow() + TimeSpan.FromMinutes(10) };
         properties.StoreTokens([new AuthenticationToken { Name = "refresh_token", Value = refreshToken }]);
-        return new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, "driver")], "session")), properties, "session");
+        return new AuthenticationTicket(
+            new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.NameIdentifier, "driver")], "session")),
+            properties,
+            "session");
     }
 }

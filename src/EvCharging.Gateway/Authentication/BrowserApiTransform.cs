@@ -37,7 +37,8 @@ internal sealed class BrowserApiTransform(IAntiforgery antiforgery) : RequestTra
             return;
         }
 
-        context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", result.Token.AccessToken.ToString());
+        context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            "Bearer", result.Token.AccessToken.ToString());
     }
 
     internal static ValueTask StripBrowserHeaders(RequestTransformContext context)

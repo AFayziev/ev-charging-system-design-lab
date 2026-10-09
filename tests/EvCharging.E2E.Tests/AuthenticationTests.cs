@@ -15,9 +15,9 @@ using Microsoft.Playwright;
 using Xunit;
 using static Microsoft.Playwright.Assertions;
 
-namespace EvCharging.TopologyTests;
+namespace EvCharging.E2E.Tests;
 
-[Collection("Topology")]
+[Collection(nameof(E2ECollection))]
 public sealed class AuthenticationTests(AppHostFixture fixture)
 {
     [Fact]
@@ -44,7 +44,8 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
                 }
             };
             var password = await model.Resources.OfType<ParameterResource>()
-                .Single(resource => resource.Name == $"synthetic-{username}-password").GetValueAsync(CancellationToken.None)
+                .Single(resource => resource.Name == $"synthetic-{username}-password")
+                .GetValueAsync(CancellationToken.None)
                 ?? throw new InvalidOperationException("The synthetic user's password is required.");
 
             await page.GotoAsync(new Uri(frontend, "/auth/login?returnUrl=/").AbsoluteUri);
@@ -54,13 +55,30 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
             await Expect(page).ToHaveURLAsync(new Uri(frontend, "/").AbsoluteUri);
 
+            await Expect(page.GetByRole(
+                AriaRole.Link,
+                new() { Name = username == "driver" ? "Driver area" : "Operator area" }))
+                .ToBeVisibleAsync();
+            await page.GetByRole(
+                AriaRole.Link,
+                new() { Name = username == "driver" ? "Driver area" : "Operator area" })
+                .ClickAsync();
+            await Expect(page.GetByRole(
+                AriaRole.Heading,
+                new() { Name = username == "driver" ? "Driver area" : "Operator area" }))
+                .ToBeVisibleAsync();
+
             var instances = new HashSet<string>();
             for (var request = 0; request < 12; request++)
             {
                 var session = await page.EvaluateAsync<JsonElement>("""
                     async () => {
                         const response = await fetch('/auth/session');
-                        return { status: response.status, instance: response.headers.get('X-Gateway-Instance'), body: await response.text() };
+                        return {
+                            status: response.status,
+                            instance: response.headers.get('X-Gateway-Instance'),
+                            body: await response.text()
+                        };
                     }
                     """);
                 Assert.Equal(200, session.GetProperty("status").GetInt32());
@@ -68,23 +86,32 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
                     ?? throw new InvalidOperationException("Session response body is required."));
                 var body = bodyDocument.RootElement;
                 Assert.True(body.GetProperty("signedIn").GetBoolean());
-                Assert.Equal(username, body.GetProperty("display").GetProperty("username").GetString());
-                Assert.Equal(new[] { "email", "name", "username" },
-                    body.GetProperty("display").EnumerateObject().Select(property => property.Name).Order().ToArray());
-                Assert.Equal(new[] { "antiforgeryToken", "display", "signedIn" },
+                Assert.Equal(username, body.GetProperty("user").GetProperty("username").GetString());
+                Assert.Equal(
+                    new[] { "email", "name", "roles", "username" },
+                    body.GetProperty("user").EnumerateObject().Select(property => property.Name).Order().ToArray());
+                Assert.Equal(
+                    new[] { "antiforgeryToken", "signedIn", "user" },
                     body.EnumerateObject().Select(property => property.Name).Order().ToArray());
                 instances.Add(session.GetProperty("instance").GetString() ?? "");
             }
 
             Assert.Equal(2, instances.Count);
-            var apiResponse = await page.EvaluateAsync<int>("async () => (await fetch('/api/diagnostics/instance', {headers: {Authorization: 'Bearer forged', 'X-User-Id': 'forged', 'X-Forwarded-Host': 'forged.test'}})).status");
+            var apiResponse = await page.EvaluateAsync<int>(
+                "async () => (await fetch('/api/diagnostics/instance', {headers: "
+                + "{Authorization: 'Bearer forged', 'X-User-Id': 'forged', "
+                + "'X-Forwarded-Host': 'forged.test'}})).status");
             Assert.Equal(200, apiResponse);
-            var missingCsrf = await page.EvaluateAsync<int>("async () => (await fetch('/api/__unmapped-test-route', {method: 'POST'})).status");
+            var missingCsrf = await page.EvaluateAsync<int>(
+                "async () => (await fetch('/api/__unmapped-test-route', "
+                + "{method: 'POST'})).status");
             Assert.Equal(400, missingCsrf);
             var validCsrf = await page.EvaluateAsync<int>("""
                 async () => {
                     const session = await (await fetch('/auth/session')).json();
-                    return (await fetch('/api/__unmapped-test-route', {method: 'POST', headers: {'X-CSRF-TOKEN': session.antiforgeryToken}})).status;
+                    return (await fetch('/api/__unmapped-test-route', {
+                        method: 'POST', headers: {'X-CSRF-TOKEN': session.antiforgeryToken}
+                    })).status;
                 }
                 """);
             Assert.Equal(404, validCsrf);
@@ -104,13 +131,16 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
             var previousToken = beforeRefresh.Properties.GetTokenValue("access_token");
             beforeRefresh.Properties.UpdateTokenValue("expires_at", DateTimeOffset.UtcNow.AddMinutes(-1).ToString("o"));
             await tickets.RenewAsync(key, beforeRefresh);
-            var refreshResponses = await page.EvaluateAsync<int[]>("async () => Promise.all(Array.from({length: 8}, async () => (await fetch('/api/diagnostics/instance')).status))");
+            var refreshResponses = await page.EvaluateAsync<int[]>(
+                "async () => Promise.all(Array.from({length: 8}, async () => "
+                + "(await fetch('/api/diagnostics/instance')).status))");
             Assert.All(refreshResponses, status => Assert.Equal(200, status));
             var afterRefresh = Assert.IsType<AuthenticationTicket>(await tickets.RetrieveAsync(key));
             Assert.NotEqual(previousToken, afterRefresh.Properties.GetTokenValue("access_token"));
 
             using var api = fixture.App.CreateHttpClient("api", "http");
-            api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", afterRefresh.Properties.GetTokenValue("access_token"));
+            api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                "Bearer", afterRefresh.Properties.GetTokenValue("access_token"));
             using var acceptedBearer = await api.GetAsync("/diagnostics/instance");
             Assert.Equal(HttpStatusCode.OK, acceptedBearer.StatusCode);
             api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "forged");
@@ -119,9 +149,11 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
 
             using var provider = fixture.App.CreateHttpClient("keycloak", "http");
             var adminPassword = await model.Resources.OfType<ParameterResource>()
-                .Single(resource => resource.Name == "keycloak-admin-password").GetValueAsync(CancellationToken.None)
+                .Single(resource => resource.Name == "keycloak-admin-password")
+                .GetValueAsync(CancellationToken.None)
                 ?? throw new InvalidOperationException("The identity administrator password is required.");
-            using var adminResponse = await provider.PostAsync("/realms/master/protocol/openid-connect/token",
+            using var adminResponse = await provider.PostAsync(
+                "/realms/master/protocol/openid-connect/token",
                 new FormUrlEncodedContent(new Dictionary<string, string>
                 {
                     ["grant_type"] = "password",
@@ -131,19 +163,23 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
                 }));
             adminResponse.EnsureSuccessStatusCode();
             using var adminToken = JsonDocument.Parse(await adminResponse.Content.ReadAsStringAsync());
-            provider.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken.RootElement.GetProperty("access_token").GetString());
+            provider.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                "Bearer", adminToken.RootElement.GetProperty("access_token").GetString());
             var subject = afterRefresh.Principal.FindFirst("sub")?.Value
                 ?? throw new InvalidOperationException("A user subject is required.");
             var rolesPath = $"/admin/realms/evcharging/users/{subject}/role-mappings/realm";
             var roles = await provider.GetFromJsonAsync<JsonElement>(rolesPath);
-            using var removeRoles = new HttpRequestMessage(HttpMethod.Delete, rolesPath) { Content = JsonContent.Create(roles) };
+            using var removeRoles = new HttpRequestMessage(HttpMethod.Delete, rolesPath)
+            { Content = JsonContent.Create(roles) };
             using var removedRoles = await provider.SendAsync(removeRoles);
             removedRoles.EnsureSuccessStatusCode();
             try
             {
-                afterRefresh.Properties.UpdateTokenValue("expires_at", DateTimeOffset.UtcNow.AddMinutes(-1).ToString("o"));
+                afterRefresh.Properties.UpdateTokenValue(
+                    "expires_at", DateTimeOffset.UtcNow.AddMinutes(-1).ToString("o"));
                 await tickets.RenewAsync(key, afterRefresh);
-                var forbidden = await page.EvaluateAsync<int>("async () => (await fetch('/api/diagnostics/instance')).status");
+                var forbidden = await page.EvaluateAsync<int>(
+                    "async () => (await fetch('/api/diagnostics/instance')).status");
                 Assert.Equal(403, forbidden);
             }
             finally
@@ -152,28 +188,37 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
                 restoredRoles.EnsureSuccessStatusCode();
             }
 
-            var sessionCookie = Assert.Single(await context.CookiesAsync(), cookie => cookie.Name == "EvCharging.Session");
+            var sessionCookie = Assert.Single(
+                await context.CookiesAsync(),
+                cookie => cookie.Name == "EvCharging.Session");
             Assert.True(sessionCookie.HttpOnly);
             Assert.Equal(SameSiteAttribute.Lax, sessionCookie.SameSite);
-            var rejected = await page.EvaluateAsync<int>("async () => (await fetch('/auth/logout', { method: 'POST' })).status");
+            var rejected = await page.EvaluateAsync<int>(
+                "async () => (await fetch('/auth/logout', { method: 'POST' })).status");
             Assert.Equal(400, rejected);
 
             // Re-login retains native cookie handling while replacing the protected identity/tokens.
-            foreach (var cookie in (await context.CookiesAsync()).Where(cookie => cookie.Name.StartsWith("KEYCLOAK", StringComparison.Ordinal)))
+            var identityCookies = (await context.CookiesAsync())
+                .Where(cookie => cookie.Name.StartsWith("KEYCLOAK", StringComparison.Ordinal));
+
+            foreach (var cookie in identityCookies)
             {
-                await context.ClearCookiesAsync(new() { Name = cookie.Name, Domain = cookie.Domain, Path = cookie.Path });
+                await context.ClearCookiesAsync(
+                    new() { Name = cookie.Name, Domain = cookie.Domain, Path = cookie.Path });
             }
 
             var replacement = username == "driver" ? "operator" : "driver";
             var replacementPassword = await model.Resources.OfType<ParameterResource>()
-                .Single(resource => resource.Name == $"synthetic-{replacement}-password").GetValueAsync(CancellationToken.None)
+                .Single(resource => resource.Name == $"synthetic-{replacement}-password")
+                .GetValueAsync(CancellationToken.None)
                 ?? throw new InvalidOperationException("The synthetic user's password is required.");
             await page.GotoAsync(new Uri(frontend, "/auth/login?returnUrl=/").AbsoluteUri);
             await page.GetByLabel("Username or email").FillAsync(replacement);
             await page.GetByLabel("Password", new() { Exact = true }).FillAsync(replacementPassword);
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
             await Expect(page).ToHaveURLAsync(new Uri(frontend, "/").AbsoluteUri);
-            var replaced = await page.EvaluateAsync<string>("async () => (await (await fetch('/auth/session')).json()).display.username");
+            var replaced = await page.EvaluateAsync<string>(
+                "async () => (await (await fetch('/auth/session')).json()).user.username");
             Assert.Equal(replacement, replaced);
 
             await page.EvaluateAsync("""
@@ -191,17 +236,21 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
                 }
                 """);
             await page.WaitForURLAsync(new Uri(frontend, "/?signedOut=1").AbsoluteUri);
-            await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Welcome to EV Charging" })).ToBeVisibleAsync();
-            var signedOut = await page.EvaluateAsync<bool>("async () => (await (await fetch('/auth/session')).json()).signedIn");
+            await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Welcome to EV Charging" }))
+                .ToBeVisibleAsync();
+            var signedOut = await page.EvaluateAsync<bool>(
+                "async () => (await (await fetch('/auth/session')).json()).signedIn");
             Assert.False(signedOut);
             Assert.Contains(new Uri(frontend, "/auth/callback").AbsoluteUri, navigations);
             Assert.Contains(new Uri(frontend, "/auth/logout-callback").AbsoluteUri, navigations);
-            Assert.Contains(new Uri(identity, "/realms/evcharging/protocol/openid-connect/logout").AbsoluteUri, navigations);
+            Assert.Contains(
+                new Uri(identity, "/realms/evcharging/protocol/openid-connect/logout").AbsoluteUri,
+                navigations);
         }
     }
 
     [Fact]
-    [Trait("Category", "Topology")]
+    [Trait("Category", "Api")]
     public async Task Login_DirectProvider_EnforcesBoundary()
     {
         using var provider = fixture.App.CreateHttpClient("keycloak", "http");
@@ -209,7 +258,8 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
         using var discovery = await provider.GetAsync("/realms/evcharging/.well-known/openid-configuration");
         Assert.Equal(HttpStatusCode.OK, discovery.StatusCode);
         using var metadata = JsonDocument.Parse(await discovery.Content.ReadAsStringAsync());
-        Assert.Equal(new Uri(identity, "/realms/evcharging").AbsoluteUri,
+        Assert.Equal(
+            new Uri(identity, "/realms/evcharging").AbsoluteUri,
             metadata.RootElement.GetProperty("issuer").GetString());
         Assert.StartsWith(identity.AbsoluteUri, metadata.RootElement.GetProperty("authorization_endpoint").GetString());
         Assert.StartsWith(identity.AbsoluteUri, metadata.RootElement.GetProperty("end_session_endpoint").GetString());

@@ -11,7 +11,8 @@ public sealed class AuthenticationDbContextFactory : IDesignTimeDbContextFactory
         var connection = Environment.GetEnvironmentVariable("ConnectionStrings__gateway-auth-migration-db");
         if (string.IsNullOrWhiteSpace(connection))
         {
-            throw new InvalidOperationException("The ConnectionStrings__gateway-auth-migration-db environment variable is required.");
+            throw new InvalidOperationException(
+                "The ConnectionStrings__gateway-auth-migration-db environment variable is required.");
         }
 
         return new AuthenticationDbContext(new DbContextOptionsBuilder<AuthenticationDbContext>()

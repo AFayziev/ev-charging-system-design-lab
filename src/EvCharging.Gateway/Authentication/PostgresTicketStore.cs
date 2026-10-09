@@ -38,12 +38,14 @@ internal sealed class PostgresTicketStore(
         var payload = _ticketFormat.Protect(ticket);
         var expiry = GetExpiry(ticket);
         await using var database = await contexts.CreateDbContextAsync(cancellationToken);
-        await database.Database.ExecuteSqlInterpolatedAsync($"""
+        await database.Database.ExecuteSqlInterpolatedAsync(
+            $"""
             INSERT INTO gateway_auth.sessions (id, protected_ticket, expires_at)
             VALUES ({id}, {payload}, {expiry})
             ON CONFLICT (id) DO UPDATE
             SET protected_ticket = EXCLUDED.protected_ticket, expires_at = EXCLUDED.expires_at
-            """, cancellationToken);
+            """,
+            cancellationToken);
     }
 
     public async Task<AuthenticationTicket?> RetrieveAsync(string key, CancellationToken cancellationToken)
@@ -84,5 +86,6 @@ internal sealed class PostgresTicketStore(
     }
 
     private static DateTimeOffset GetExpiry(AuthenticationTicket ticket) =>
-        ticket.Properties.ExpiresUtc ?? throw new InvalidOperationException("Authentication tickets must have an expiry.");
+        ticket.Properties.ExpiresUtc
+        ?? throw new InvalidOperationException("Authentication tickets must have an expiry.");
 }

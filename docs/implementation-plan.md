@@ -41,7 +41,7 @@ is needed only when changes invalidate their results.
 |---|---|---|---|
 | M00 | Repository and design baseline | None | Done |
 | M01 | Bootable Aspire topology | M00 | Done |
-| M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | In progress |
+| M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | Done |
 | M03 | Domain persistence, read/write routes, and pooling | M02 | Planned |
 | M04 | Durable jobs, scheduling, and notification delivery | M03 | Planned |
 | M05 | Station catalog and reservations | M03, M04 | Planned |
@@ -154,7 +154,7 @@ criteria.
   [`observability` profile](lab.md#21-execution-profiles). Verify export routing,
   backend queries, custom dashboards, restart, and its
   [fault scenarios](lab.md#24-fault-scenarios).
-- [ ] M01.13 Before M02 frontend acceptance, after M01.03, M01.04, and M01.06:
+- [x] M01.13 Before M02 frontend acceptance, after M01.03, M01.04, and M01.06:
   implement [frontend diagnostics](lab.md#19-frontend-diagnostics), startup
   configuration, gateway tunnel, and build integration. Verify disabled behavior,
   capture metadata, bounded export failure, and local builds without hosted credentials.
@@ -182,9 +182,9 @@ criteria.
   header/cookie stripping, bearer forwarding, and API JWT validation.
   Enforce authenticated access and driver/operator role policies at the API.
   Keep machine routes outside browser session/token-substitution policies.
-- [ ] M02.06 Build the driver/operator navigation shell, session discovery,
+- [x] M02.06 Build the driver/operator navigation shell, session discovery,
   sign-in/sign-out states, and shared API/error handling through the gateway.
-- [ ] M02.07 Verify browser navigation to Keycloak, OIDC discovery and callbacks,
+- [x] M02.07 Verify browser navigation to Keycloak, OIDC discovery and callbacks,
   gateway/API instance loss, concurrent refresh under the supported provider policy,
   logout, session-store outage,
   Keycloak outage, and browser authentication boundaries with real dependencies.

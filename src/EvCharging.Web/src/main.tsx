@@ -1,22 +1,24 @@
-import "@mantine/core/styles.css";
-import { MantineProvider, createTheme } from "@mantine/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router";
-import { App } from "./App";
+import {
+  initializeDiagnostics,
+  type DiagnosticsSettings,
+} from "./lib/diagnostics/sentry";
 
-const queryClient = new QueryClient();
-const theme = createTheme({ primaryColor: "teal" });
+try {
+  const response = await fetch("/diagnostics/config", {
+    credentials: "same-origin",
+    signal: AbortSignal.timeout(10000),
+  });
+  if (response.ok) {
+    initializeDiagnostics((await response.json()) as DiagnosticsSettings);
+  } else {
+    console.warn(
+      "Frontend diagnostics configuration unavailable.",
+      response.status,
+    );
+  }
+} catch (error) {
+  // Optional diagnostics must not prevent application startup.
+  console.warn("Frontend diagnostics could not be initialized.", error);
+}
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <MantineProvider theme={theme}>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </QueryClientProvider>
-    </MantineProvider>
-  </StrictMode>,
-);
+await import("./app/bootstrap");

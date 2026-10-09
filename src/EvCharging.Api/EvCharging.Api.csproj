@@ -3,4 +3,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EvCharging.Contracts\EvCharging.Contracts.csproj" />
+  </ItemGroup>
 </Project>

@@ -1,5 +1,7 @@
 using EvCharging.Gateway.Authentication;
+using EvCharging.Gateway.Diagnostics;
 using EvCharging.Gateway.Persistence;
+using Microsoft.Extensions.Options;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Transforms;
 
@@ -9,6 +11,7 @@ builder.AddAuthenticationPersistence();
 builder.AddAuthenticationSessions();
 builder.AddBrowserAuthentication();
 builder.AddHttpApiDefaults();
+builder.AddFrontendDiagnostics();
 
 builder.Services.AddTransient<BrowserApiTransform>();
 builder.Services.AddReverseProxy()
@@ -66,6 +69,12 @@ builder.Services.AddReverseProxy()
 var app = builder.Build();
 
 app.UseHttpApiDefaults();
+
+if (app.Services.GetRequiredService<IOptions<FrontendDiagnosticsOptions>>().Value.Enabled)
+{
+    app.UseSentryTunneling("/diagnostics/sentry");
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -80,6 +89,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapHttpApiDiagnostics("gateway");
 app.MapBrowserAuthentication();
+app.MapFrontendDiagnostics();
 app.MapReverseProxy();
 
 app.Run();

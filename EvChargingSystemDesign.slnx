@@ -10,6 +10,7 @@
     <Project Path="src/EvCharging.AppHost/EvCharging.AppHost.csproj" />
     <Project Path="src/EvCharging.MediaWorker/EvCharging.MediaWorker.csproj" />
     <Project Path="src/EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
+    <Project Path="src/EvCharging.Contracts/EvCharging.Contracts.csproj" />
     <Project Path="src/EvCharging.Gateway.Migrations/EvCharging.Gateway.Migrations.csproj" />
     <Project Path="src/EvCharging.Gateway/EvCharging.Gateway.csproj" />
     <Project Path="src/EvCharging.NotificationProviderApi/EvCharging.NotificationProviderApi.csproj" />
@@ -23,6 +24,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EvCharging.Gateway.Tests/EvCharging.Gateway.Tests.csproj" />
-    <Project Path="tests/EvCharging.TopologyTests/EvCharging.TopologyTests.csproj" />
+    <Project Path="tests/EvCharging.E2E.Tests/EvCharging.E2E.Tests.csproj" />
   </Folder>
 </Solution>

@@ -3,26 +3,33 @@ using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Xunit;
 
-namespace EvCharging.TopologyTests;
+namespace EvCharging.E2E.Tests;
 
 public sealed class AppHostFixture : IAsyncLifetime
 {
     private DistributedApplication? _app;
 
-    public DistributedApplication App => _app ?? throw new InvalidOperationException("The application has not started.");
+    public DistributedApplication App =>
+        _app ?? throw new InvalidOperationException("The application has not started.");
 
     public async Task InitializeAsync()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_AppHost>(
-            ["--environment=Development", "--Parameters:api-instances=2", "--Parameters:gateway-instances=2"], timeout.Token);
+            ["--environment=Development", "--Parameters:api-instances=2",
+                "--Parameters:gateway-instances=2"],
+            timeout.Token);
         foreach (var resource in builder.Resources.OfType<ContainerResource>())
         {
-            foreach (var mount in resource.Annotations.OfType<ContainerMountAnnotation>()
-                .Where(m => m.Type == ContainerMountType.Volume).ToArray())
+            var volumeMounts = resource.Annotations.OfType<ContainerMountAnnotation>()
+                .Where(m => m.Type == ContainerMountType.Volume)
+                .ToArray();
+
+            foreach (var mount in volumeMounts)
             {
                 resource.Annotations.Remove(mount);
-                resource.Annotations.Add(new ContainerMountAnnotation(null, mount.Target, ContainerMountType.Volume, mount.IsReadOnly));
+                resource.Annotations.Add(new ContainerMountAnnotation(
+                    null, mount.Target, ContainerMountType.Volume, mount.IsReadOnly));
             }
         }
 

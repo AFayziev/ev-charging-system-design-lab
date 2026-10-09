@@ -15,6 +15,17 @@ retain their prescribed names and signatures.
   contracts when their units, invariants, or failure semantics need explanation.
 - Separate distinct logical steps with one blank line; keep closely related
   statements together.
+- Extract long loop expressions into descriptive local variables before the loop.
+  Preserve evaluation order and deferred enumeration.
+- Start a wrapped call chain with its receiver or its first call; avoid grouping
+  several initial calls on that line.
+- Keep expression lambdas on one line when they fit within the configured line
+  length; wrap the surrounding argument list independently.
+- Keep interpolated expressions on one line. Split long interpolated strings into
+  concatenated fragments; extract long expressions into local variables. Preserve
+  string contents and interpolated-string handler conversions.
+- In multiline class and record constructor signatures, use one parameter per
+  line even when multiple parameters would fit on a continuation line.
 
 ## Types and dependencies
 

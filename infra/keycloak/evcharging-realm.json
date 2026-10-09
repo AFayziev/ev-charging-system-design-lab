@@ -52,7 +52,7 @@
             "multivalued": "true",
             "jsonType.label": "String",
             "access.token.claim": "true",
-            "id.token.claim": "false"
+            "id.token.claim": "true"
           }
         }
       ]

@@ -158,7 +158,7 @@ dotnet test tests/EvCharging.Gateway.Tests
 | Single run | `npm --prefix src/EvCharging.Web run test` |
 | Watch | `npm --prefix src/EvCharging.Web run test:watch` |
 
-### Topology and browser tests
+### End-to-end tests
 
 - Isolated Aspire application and disposable container data.
 - Require Docker, frontend dependencies, and Chromium.
@@ -166,22 +166,22 @@ dotnet test tests/EvCharging.Gateway.Tests
 1. Build the test project:
 
    ```sh
-   dotnet build tests/EvCharging.TopologyTests
+   dotnet build tests/EvCharging.E2E.Tests
    ```
 
 2. Install Chromium (first run):
 
    ```sh
-   pwsh tests/EvCharging.TopologyTests/bin/Debug/net10.0/playwright.ps1 install chromium
+   pwsh tests/EvCharging.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install chromium
    ```
 
 3. Run the tests:
 
    ```sh
-   dotnet test tests/EvCharging.TopologyTests
+   dotnet test tests/EvCharging.E2E.Tests
    ```
 
-- Backend only: `--filter "Category=Topology"`.
+- Backend only: `--filter "Category=Api"`.
 - Playwright workflow: `--filter "Category=Browser"`.
 
 ## Documentation

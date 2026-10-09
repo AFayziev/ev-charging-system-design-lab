@@ -37,6 +37,10 @@ csharp_preserve_single_line_statements = false
 dotnet_diagnostic.RCS0042.severity = warning
 dotnet_diagnostic.RCS0021.severity = warning
 dotnet_diagnostic.RCS0008.severity = warning
+dotnet_diagnostic.RCS0053.severity = warning
+dotnet_diagnostic.RCS0054.severity = warning
+dotnet_diagnostic.RCS0056.severity = warning
+roslynator_max_line_length = 120
 roslynator_block_braces_style = multi_line
 
 # Language style
@@ -163,3 +167,6 @@ dotnet_diagnostic.IDE0055.severity = none
 dotnet_diagnostic.RCS0008.severity = none
 dotnet_diagnostic.RCS0021.severity = none
 dotnet_diagnostic.RCS0042.severity = none
+dotnet_diagnostic.RCS0053.severity = none
+dotnet_diagnostic.RCS0054.severity = none
+dotnet_diagnostic.RCS0056.severity = none

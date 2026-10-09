@@ -41,6 +41,7 @@ implementation progress is recorded in the plan.
 | `EvCharging.SynchronousChargingProviderApi` | Simulator with authoritative synchronous results and command deduplication |
 | `EvCharging.QueuedChargingProviderApi` | Simulator with queued acknowledgement and no effect deduplication |
 | `EvCharging.NotificationProviderApi` | Third-party notification service simulator; inspectable synthetic outcomes and controlled faults, no real delivery |
+| `EvCharging.Contracts` | Shared application API contracts and canonical role types; a library, not a resource |
 | `EvCharging.ServiceDefaults` | Shared discovery, HTTP resilience, OpenTelemetry, and health checks; a library, not a resource |
 
 Projects dedicated to handling incoming HTTP/gRPC requests use the `Api` suffix.
@@ -59,11 +60,36 @@ and established conventions for an existing solution. Prefer stable provided
 capabilities when they meet the requirement; custom mechanisms require an identified
 gap. This applies to all languages and components.
 
+Before implementation, identify the provided API or document the concrete
+capability gap using official documentation, package APIs, or library source.
+Include this evidence in the task report, not repository documentation. Custom
+machinery without this evidence is incomplete work and must be rejected during review.
+
 Give configuration values one owner. Derive dependent settings from resource
 metadata or existing options, and reuse existing registration helpers instead of
 copying literals or policies. Independent public-contract assertions may repeat
 expected values; tests must explicitly configure scenario settings rather than
 depend on application defaults.
+
+## Frontend
+
+Organize code by feature: application composition in `app`, feature-owned UI and
+contracts in `features/<feature>`, and shared infrastructure in `lib`. Colocate
+tests with the code they cover; add directories as their contents are needed.
+
+### API access
+
+- Keep shared Axios transport configuration in `lib`. Group named, typed backend
+  operations in `features/<feature>/api.ts`; keep endpoint URLs and response
+  unpacking there rather than in UI components.
+- Preserve cancellation signals and native client errors. Choose user-facing
+  error messages at the presentation boundary.
+- Export readonly query-key arrays and parameterized key factories from the
+  owning feature. Include parameters that affect results; reuse keys for queries
+  and cache operations.
+- Use native TanStack `queryOptions` to share keys, request functions, and query
+  policies. Colocate these definitions with feature API methods; split modules
+  when their contents warrant it.
 
 ## Aspire workflow
 

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Timeouts;
@@ -8,10 +10,13 @@ namespace Microsoft.Extensions.Hosting;
 
 public static class HttpApiDefaultsExtensions
 {
-    public static WebApplicationBuilder AddHttpApiDefaults(this WebApplicationBuilder builder,
+    public static WebApplicationBuilder AddHttpApiDefaults(
+        this WebApplicationBuilder builder,
         string openApiBasePath = "/")
     {
         builder.Services.AddProblemDetails();
+        builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(
+            new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false)));
         builder.Services.AddOpenApi(options => options.AddDocumentTransformer((document, _, _) =>
         {
             document.Servers = [new OpenApiServer { Url = openApiBasePath }];
@@ -43,8 +48,10 @@ public static class HttpApiDefaultsExtensions
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
-            app.MapGet("/diagnostics/instance", () => TypedResults.Ok(new InstanceResponse(
-                host, $"{Environment.MachineName}:{Environment.ProcessId}", Stub: true)));
+            app.MapGet(
+                "/diagnostics/instance",
+                () => TypedResults.Ok(new InstanceResponse(
+                    host, $"{Environment.MachineName}:{Environment.ProcessId}", Stub: true)));
         }
 
         return app;

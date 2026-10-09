@@ -16,7 +16,8 @@ public static class AuthenticationPersistenceExtensions
 
         builder.Services.AddOptions<AuthenticationDatabaseOptions>()
             .Bind(builder.Configuration.GetSection("AuthenticationDatabase"))
-            .ValidateDataAnnotations().ValidateOnStart();
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         builder.Services.AddSingleton(serviceProvider =>
         {
@@ -31,7 +32,11 @@ public static class AuthenticationPersistenceExtensions
                 IncludeErrorDetail = false,
                 ApplicationName = "gateway-auth"
             };
-            return new NpgsqlDataSourceBuilder(connectionSettings.ConnectionString) { Name = "gateway-auth-primary" }.Build();
+            return new NpgsqlDataSourceBuilder(connectionSettings.ConnectionString)
+            {
+                Name = "gateway-auth-primary"
+            }
+                .Build();
         });
 
         builder.Services.AddDbContextFactory<AuthenticationDbContext>((serviceProvider, options) =>

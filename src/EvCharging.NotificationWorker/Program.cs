@@ -1,7 +1,8 @@
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
-builder.Services.AddHttpClient("notification-provider-api", client =>
-    client.BaseAddress = new("https+http://notification-provider-api/"));
+builder.Services.AddHttpClient(
+    "notification-provider-api",
+    client => client.BaseAddress = new("https+http://notification-provider-api/"));
 
 using var host = builder.Build();
 
