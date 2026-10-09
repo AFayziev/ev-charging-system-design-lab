@@ -58,6 +58,10 @@ Industry names differ: a protocol's charge point or charging station need not me
 this project's driver-facing site.
 [OCPI equipment model](https://github.com/ocpi/ocpi/blob/2.3.0/release/core/mod_locations.asciidoc)
 
+Equipment display numbers are scoped to their parent: EVSE numbers within a
+charger, connector numbers within an EVSE. These labels are distinct from entity
+identifiers.
+
 ## 4. Business records
 
 | Concept | Meaning |

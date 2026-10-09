@@ -68,6 +68,10 @@ capability gap using official documentation, package APIs, or library source.
 Include this evidence in the task report, not repository documentation. Custom
 machinery without this evidence is incomplete work and must be rejected during review.
 
+Place code according to its responsibility and expected consumers. Keep
+feature-specific behavior in its feature slice; place capabilities used across
+features in the owning shared area, rather than the first feature that needs them.
+
 Give configuration values one owner. Derive dependent settings from resource
 metadata or existing options, and reuse existing registration helpers instead of
 copying literals or policies. Independent public-contract assertions may repeat
@@ -79,11 +83,26 @@ justification; referencing a record across APIs, messages, or workers alone does
 not justify them. Prefer database-generated numeric keys for database-owned
 records when no requirement warrants another identifier type.
 
+When an external contract must avoid exposing sequential database keys:
+
+- Retain numeric primary/foreign keys internally and add a stable UUIDv4
+  `PublicId` with enforced uniqueness to the externally referenced entity.
+- Use public identifiers in browser routes, API requests/responses, errors, and
+  pagination cursors. Encoding a numeric key does not make it opaque.
+- Keep equipment labels and locally scoped display numbers separate from both
+  database keys and public identifiers. Treat frontend public IDs as strings.
+- Use standard UUID generation and provider/EF mapping. Add public identifiers
+  when a feature requires external references, not to every persisted record.
+- Preserve resource authorization independently of identifier predictability.
+
 ## Frontend
 
 Organize code by feature: application composition in `app`, feature-owned UI and
 contracts in `features/<feature>`, and shared infrastructure in `lib`. Colocate
 tests with the code they cover; add directories as their contents are needed.
+
+Use `@/` imports across application areas and relative imports for nearby files
+within an area or feature.
 
 ### API access
 

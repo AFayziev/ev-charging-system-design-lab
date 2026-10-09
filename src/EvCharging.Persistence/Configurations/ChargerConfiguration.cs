@@ -8,8 +8,11 @@ internal sealed class ChargerConfiguration : IEntityTypeConfiguration<Charger>
 {
     public void Configure(EntityTypeBuilder<Charger> entity)
     {
-        entity.HasOne<Station>()
-            .WithMany()
+        entity.Property(charger => charger.PublicId).HasDefaultValueSql("gen_random_uuid()");
+        entity.HasIndex(charger => charger.PublicId).IsUnique();
+
+        entity.HasOne(charger => charger.Station)
+            .WithMany(station => station.Chargers)
             .HasForeignKey(charger => charger.StationId)
             .OnDelete(DeleteBehavior.Restrict);
     }

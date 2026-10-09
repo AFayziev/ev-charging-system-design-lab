@@ -1,7 +1,7 @@
 import {
   initializeDiagnostics,
   type DiagnosticsSettings,
-} from "./lib/diagnostics/sentry";
+} from "@/lib/diagnostics/sentry";
 
 try {
   const response = await fetch("/diagnostics/config", {
@@ -21,4 +21,4 @@ try {
   console.warn("Frontend diagnostics could not be initialized.", error);
 }
 
-await import("./app/bootstrap");
+await import("@/app/bootstrap");

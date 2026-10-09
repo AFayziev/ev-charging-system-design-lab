@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { api } from "@/lib/api";
 import { type BrowserSession } from "./BrowserSession";
 
 export async function getSession(

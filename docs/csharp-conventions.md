@@ -8,7 +8,7 @@ retain their prescribed names and signatures.
 ## Organization and intent
 
 - Use [domain terminology](domain.md) consistently; name by responsibility.
-- Match filenames to the principal type. Keep one principal type per file;
+- Default to one principal type per file, named after that type;
   small related private types may remain together. Request/response records and
   their child property types may share a file named after the parent contract.
 - Comments explain intent, constraints, or surprising behavior. Document public
@@ -30,6 +30,26 @@ retain their prescribed names and signatures.
 ## Types and dependencies
 
 - Keep types and methods focused; prefer composition to inheritance.
+- Organize application use cases under `Features/<Area>`, with query handlers for
+  reads and command handlers for writes. Namespaces follow the directory layout.
+  Shared infrastructure stays outside `Features`. Keep HTTP binding and response
+  handling at the endpoint boundary.
+- Keep small feature slices in a file named after the use case, grouping its
+  request/response types, exclusive errors, and command/query handler. Shared
+  contracts and errors stay in their owning shared area. Split a slice when its
+  complexity warrants it; group code that changes together.
+- Place contracts in a shared project only when they have actual cross-project
+  consumers; keep contracts owned by a single host with its feature.
+- Keep Minimal API route mappings and their HTTP handlers together in the
+  feature's endpoint file. Keep command/query handlers separate.
+- Commands and queries return typed results for expected failures. Reuse common
+  application errors for missing resources and invalid input; reserve feature-specific
+  errors for business rules. Translate errors to HTTP responses at the endpoint
+  boundary through shared mapping extensions. Keep exceptions for unexpected
+  failures and preserve cancellation.
+- Use method syntax for LINQ.
+- Map between persistence, domain, and API models explicitly through extension
+  methods such as `ToResponse`, `ToEntity`, and `ToDomain`.
 - Default implementation types to `internal`; expose only required contracts.
 - Use records for immutable data/messages and classes for identity or mutable
   lifecycle. Prefer immutable collections where practical.
@@ -73,6 +93,9 @@ retain their prescribed names and signatures.
 - Use parameterized queries. Materialize sequences deliberately; avoid hidden
   multiple enumeration and unbounded result sets. Keep transactions short and
   do not concurrently use one EF Core `DbContext`.
+- Never use lazy loading. Load related data explicitly with projections,
+  eager loading, or explicit loading; do not enable lazy-loading proxies or inject
+  lazy loaders into entities.
 - Map GUID-valued properties as `Guid` in EF Core entities, not `string`.
   For generated primary keys, use EF Core/provider generation when it meets
   the requirements.
@@ -89,6 +112,8 @@ retain their prescribed names and signatures.
   failures. Validate external input at the boundary.
 - Catch exceptions only to handle, translate, or add useful context. Preserve
   the original exception as `InnerException` when translating it.
+- Translate infrastructure exceptions to HTTP responses centrally through
+  ASP.NET Core exception handlers, rather than repeating catches in endpoints.
 - Preserve cancellation as cancellation. Do not convert it into success or retry
   it as a transient dependency failure.
 - Choose meaningful diagnostic properties. Log failures at the boundary

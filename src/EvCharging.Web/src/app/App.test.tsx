@@ -1,4 +1,4 @@
-import { PlatformRole } from "../features/auth/PlatformRole";
+import { PlatformRole } from "@/features/auth/PlatformRole";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
 import { render, screen } from "@testing-library/react";
@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock("../lib/api", () => ({ api: { get } }));
+vi.mock("@/lib/api", () => ({ api: { get } }));
 
 function renderApp(path: string) {
   return render(
@@ -32,11 +32,11 @@ describe("application shell", () => {
       data: { signedIn: false, user: null, antiforgeryToken: "test" },
     });
   });
-  it("renders the shared driver and operator home", () => {
+  it("renders the shared driver and operator home", async () => {
     renderApp("/");
 
     expect(
-      screen.getByRole("heading", { name: "Welcome to EV Charging" }),
+      await screen.findByRole("heading", { name: "Welcome to EV Charging" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText("A shared workspace for drivers and operators."),
@@ -55,23 +55,64 @@ describe("application shell", () => {
     expect(
       await screen.findByRole("heading", { name: "Access denied" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Driver area" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Stations" })).toHaveAttribute(
       "href",
-      "/driver",
+      "/stations",
     );
     expect(
       screen.queryByRole("link", { name: "Operator area" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign out" })).toHaveAttribute(
-      "type",
-      "submit",
-    );
-    const logout = screen
-      .getByRole("button", { name: "Sign out" })
-      .closest("form");
+    expect(
+      screen.queryByRole("menuitem", { name: "Sign out" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Account menu" }));
+    const signOut = await screen.findByRole("menuitem", { name: "Sign out" });
+    expect(signOut).toHaveAttribute("type", "submit");
+    const logout = signOut.closest("form");
     expect(logout).toHaveAttribute("method", "post");
     expect(logout).toHaveAttribute("action", "/auth/logout?returnUrl=/");
     expect(logout).toHaveFormValues({ __RequestVerificationToken: "test" });
+  });
+
+  it.each([
+    { roles: [PlatformRole.Driver], heading: "Find a station" },
+    { roles: [PlatformRole.Operator], heading: "Operator area" },
+    {
+      roles: [PlatformRole.Driver, PlatformRole.Operator],
+      heading: "Find a station",
+    },
+  ])("opens the home workspace for $roles", async ({ roles, heading }) => {
+    get.mockImplementation(async (path: string) => ({
+      data:
+        path === "/auth/session"
+          ? {
+              signedIn: true,
+              user: { name: "User", roles },
+              antiforgeryToken: "test",
+            }
+          : { stations: [], nextAfterId: null },
+    }));
+    renderApp("/");
+
+    expect(
+      await screen.findByRole("heading", { name: heading }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Welcome to EV Charging" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("preserves the requested station URL when signing in", async () => {
+    renderApp(
+      "/stations/709af89a-8fda-4724-a188-1e38aac99dd3?source=catalog#equipment",
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "Sign in" }),
+    ).toHaveAttribute(
+      "href",
+      "/auth/login?returnUrl=%2Fstations%2F709af89a-8fda-4724-a188-1e38aac99dd3%3Fsource%3Dcatalog%23equipment",
+    );
   });
 
   it("retries failed session discovery without exposing transport details", async () => {
@@ -103,7 +144,7 @@ describe("application shell", () => {
     renderApp("/missing-page");
 
     expect(
-      screen.getByRole("heading", { name: "Page not found" }),
+      await screen.findByRole("heading", { name: "Page not found" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Return home" }));
 

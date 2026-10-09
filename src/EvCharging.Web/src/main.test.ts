@@ -3,10 +3,10 @@ const { initializeDiagnostics, bootstrap } = vi.hoisted(() => ({
   initializeDiagnostics: vi.fn(),
   bootstrap: vi.fn(),
 }));
-vi.mock("./lib/diagnostics/sentry", () => ({ initializeDiagnostics }));
+vi.mock("@/lib/diagnostics/sentry", () => ({ initializeDiagnostics }));
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
-  vi.doMock("./app/bootstrap", () => {
+  vi.doMock("@/app/bootstrap", () => {
     bootstrap();
     return {};
   });

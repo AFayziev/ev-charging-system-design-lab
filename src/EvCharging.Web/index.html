@@ -5,10 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#087f5b" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/src/app/global.css" />
     <title>EV Charging</title>
   </head>
   <body>
-    <div id="root"><p role="status">Loading application…</p></div>
+    <div id="root">
+      <div class="app-loading" role="status">
+        <img
+          class="app-loading-icon"
+          src="/favicon.svg"
+          alt=""
+          width="64"
+          height="64"
+        />
+        <span class="app-loading-title" aria-hidden="true">EV Charging</span>
+        <span class="app-loading-message">Loading application…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -30,8 +30,23 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
         var identity = fixture.App.GetEndpoint("keycloak", "http");
         var model = fixture.App.Services.GetRequiredService<DistributedApplicationModel>();
 
+        var authenticationBuilder = Host.CreateApplicationBuilder();
+        authenticationBuilder.Configuration["ConnectionStrings:gateway-auth"] =
+            await fixture.App.GetConnectionStringAsync("gateway-auth");
+        authenticationBuilder.Configuration["AuthenticationDatabase:MaximumPoolSize"] = "1";
+        authenticationBuilder.AddAuthenticationPersistence();
+        authenticationBuilder.AddAuthenticationSessions();
+        using var authenticationHost = authenticationBuilder.Build();
+        var tickets = authenticationHost.Services.GetRequiredService<ITicketStore>();
+        var contexts = authenticationHost.Services.GetRequiredService<IDbContextFactory<AuthenticationDbContext>>();
+        await using var database = await contexts.CreateDbContextAsync();
+
         foreach (var username in new[] { "driver", "operator" })
         {
+            var existingSessionIds = await database.Sessions
+                .AsNoTracking()
+                .Select(session => session.Id)
+                .ToListAsync();
             await using var context = await browser.NewContextAsync();
             var page = await context.NewPageAsync();
             page.SetDefaultTimeout(30_000);
@@ -53,19 +68,20 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
             await page.GetByLabel("Username or email").FillAsync(username);
             await page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
-            await Expect(page).ToHaveURLAsync(new Uri(frontend, "/").AbsoluteUri);
+            await Expect(page).ToHaveURLAsync(
+                new Uri(frontend, username == "driver" ? "/stations" : "/operator").AbsoluteUri);
 
             await Expect(page.GetByRole(
                 AriaRole.Link,
-                new() { Name = username == "driver" ? "Driver area" : "Operator area" }))
+                new() { Name = username == "driver" ? "Stations" : "Operator area" }))
                 .ToBeVisibleAsync();
             await page.GetByRole(
                 AriaRole.Link,
-                new() { Name = username == "driver" ? "Driver area" : "Operator area" })
+                new() { Name = username == "driver" ? "Stations" : "Operator area" })
                 .ClickAsync();
             await Expect(page.GetByRole(
                 AriaRole.Heading,
-                new() { Name = username == "driver" ? "Driver area" : "Operator area" }))
+                new() { Name = username == "driver" ? "Find a station" : "Operator area" }))
                 .ToBeVisibleAsync();
 
             var instances = new HashSet<string>();
@@ -116,17 +132,12 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
                 """);
             Assert.Equal(404, validCsrf);
 
-            var authenticationBuilder = Host.CreateApplicationBuilder();
-            authenticationBuilder.Configuration["ConnectionStrings:gateway-auth"] =
-                await fixture.App.GetConnectionStringAsync("gateway-auth");
-            authenticationBuilder.Configuration["AuthenticationDatabase:MaximumPoolSize"] = "1";
-            authenticationBuilder.AddAuthenticationPersistence();
-            authenticationBuilder.AddAuthenticationSessions();
-            using var authenticationHost = authenticationBuilder.Build();
-            var tickets = authenticationHost.Services.GetRequiredService<ITicketStore>();
-            var contexts = authenticationHost.Services.GetRequiredService<IDbContextFactory<AuthenticationDbContext>>();
-            await using var database = await contexts.CreateDbContextAsync();
-            var key = (await database.Sessions.AsNoTracking().SingleAsync()).Id.ToString();
+            var sessionId = await database.Sessions
+                .AsNoTracking()
+                .Where(session => !existingSessionIds.Contains(session.Id))
+                .Select(session => session.Id)
+                .SingleAsync();
+            var key = sessionId.ToString();
             var beforeRefresh = Assert.IsType<AuthenticationTicket>(await tickets.RetrieveAsync(key));
             var previousToken = beforeRefresh.Properties.GetTokenValue("access_token");
             beforeRefresh.Properties.UpdateTokenValue("expires_at", DateTimeOffset.UtcNow.AddMinutes(-1).ToString("o"));
@@ -216,26 +227,15 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
             await page.GetByLabel("Username or email").FillAsync(replacement);
             await page.GetByLabel("Password", new() { Exact = true }).FillAsync(replacementPassword);
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
-            await Expect(page).ToHaveURLAsync(new Uri(frontend, "/").AbsoluteUri);
+            await Expect(page).ToHaveURLAsync(
+                new Uri(frontend, replacement == "driver" ? "/stations" : "/operator").AbsoluteUri);
             var replaced = await page.EvaluateAsync<string>(
                 "async () => (await (await fetch('/auth/session')).json()).user.username");
             Assert.Equal(replacement, replaced);
 
-            await page.EvaluateAsync("""
-                async () => {
-                    const session = await (await fetch('/auth/session')).json();
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = '/auth/logout?returnUrl=/%3FsignedOut%3D1';
-                    const token = document.createElement('input');
-                    token.name = '__RequestVerificationToken';
-                    token.value = session.antiforgeryToken;
-                    form.append(token);
-                    document.body.append(form);
-                    form.submit();
-                }
-                """);
-            await page.WaitForURLAsync(new Uri(frontend, "/?signedOut=1").AbsoluteUri);
+            await page.GetByRole(AriaRole.Button, new() { Name = "Account menu" }).ClickAsync();
+            await page.GetByRole(AriaRole.Menuitem, new() { Name = "Sign out" }).ClickAsync();
+            await page.WaitForURLAsync(new Uri(frontend, "/").AbsoluteUri);
             await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Welcome to EV Charging" }))
                 .ToBeVisibleAsync();
             var signedOut = await page.EvaluateAsync<bool>(

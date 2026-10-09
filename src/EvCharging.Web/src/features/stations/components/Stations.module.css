@@ -1,0 +1,162 @@
+.backLink {
+  padding: 0 8px;
+  border-radius: var(--mantine-radius-sm);
+  transition: var(--app-hover-transition);
+}
+
+@media (hover: hover) {
+  .backLink:hover {
+    background: var(--app-hover-background);
+    color: var(--app-hover-color);
+  }
+}
+
+.catalogCard {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 20px;
+  padding: 20px;
+  border-color: #dfe5ea;
+  box-shadow: 0 2px 4px rgb(23 43 60 / 3%);
+}
+
+.photo {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+.photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  object-fit: cover;
+}
+
+.photo figcaption {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 3px 6px;
+  background: rgb(17 33 38 / 72%);
+  color: white;
+  font-size: 10px;
+  text-align: center;
+}
+
+.cardBody {
+  min-width: 0;
+  gap: 16px;
+}
+
+.metadata {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #536173;
+}
+
+.metadata svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--mantine-color-teal-9);
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  gap: 32px;
+}
+
+.stationHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: start;
+  gap: 24px;
+}
+
+.stationHeading .photo {
+  height: 168px;
+}
+
+.stationHeading .photo img {
+  min-height: 0;
+}
+
+.equipmentCard {
+  padding: 0;
+  border-color: #dfe5ea;
+}
+
+.chargerHeading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5eaee;
+}
+
+.evse {
+  padding: 0 16px;
+}
+
+.evse + .evse {
+  border-top: 1px solid #e5eaee;
+}
+
+.connector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.connector + .connector {
+  border-top: 1px solid #edf0f2;
+}
+
+.connectorBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.accessCard {
+  border-color: #dfe5ea;
+}
+
+@media (max-width: 61.99em) {
+  .detailGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .catalogCard {
+    grid-template-columns: 105px minmax(0, 1fr);
+    gap: 14px;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 35.99em) {
+  .stationHeading {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .stationHeading .photo {
+    height: 190px;
+  }
+
+  .catalogCard {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .cardBody {
+    gap: 12px;
+  }
+}

@@ -80,12 +80,22 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
                     b.Property<long>("StationId")
                         .HasColumnType("bigint")
                         .HasColumnName("station_id");
 
                     b.HasKey("Id")
                         .HasName("pk_chargers");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_chargers_public_id");
 
                     b.HasIndex("StationId")
                         .HasDatabaseName("ix_chargers_station_id");
@@ -191,10 +201,20 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("evse_id");
 
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
                     b.Property<string>("PowerSupply")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("power_supply");
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<decimal>("RatedPowerKW")
                         .HasColumnType("numeric")
@@ -206,6 +226,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.HasIndex("EvseId")
                         .IsUnique()
                         .HasDatabaseName("ix_connectors_evse_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_connectors_public_id");
 
                     b.ToTable("connectors", "charging");
                 });
@@ -304,11 +328,26 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("charger_id");
 
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
                     b.HasKey("Id")
                         .HasName("pk_evses");
 
-                    b.HasIndex("ChargerId")
-                        .HasDatabaseName("ix_evses_charger_id");
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_evses_public_id");
+
+                    b.HasIndex("ChargerId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_evses_charger_id_number");
 
                     b.ToTable("evses", "charging");
                 });
@@ -700,6 +739,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
                         .HasColumnType("text")
@@ -707,6 +752,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_stations");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_stations_public_id");
 
                     b.ToTable("stations", "charging");
                 });
@@ -723,12 +772,14 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Charger", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Station", null)
-                        .WithMany()
+                    b.HasOne("EvCharging.Persistence.Entities.Station", "Station")
+                        .WithMany("Chargers")
                         .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_chargers_stations_station_id");
+
+                    b.Navigation("Station");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingSession", b =>
@@ -756,12 +807,14 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Connector", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Evse", null)
-                        .WithMany()
+                    b.HasOne("EvCharging.Persistence.Entities.Evse", "Evse")
+                        .WithMany("Connectors")
                         .HasForeignKey("EvseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_connectors_evses_evse_id");
+
+                    b.Navigation("Evse");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Deadline", b =>
@@ -787,12 +840,14 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Evse", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Charger", null)
-                        .WithMany()
+                    b.HasOne("EvCharging.Persistence.Entities.Charger", "Charger")
+                        .WithMany("Evses")
                         .HasForeignKey("ChargerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_evses_chargers_charger_id");
+
+                    b.Navigation("Charger");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
@@ -933,6 +988,21 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_reservations_drivers_driver_id");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.Charger", b =>
+                {
+                    b.Navigation("Evses");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.Evse", b =>
+                {
+                    b.Navigation("Connectors");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.Station", b =>
+                {
+                    b.Navigation("Chargers");
                 });
 #pragma warning restore 612, 618
         }

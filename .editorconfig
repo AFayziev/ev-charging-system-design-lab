@@ -149,6 +149,10 @@ dotnet_naming_style.async_suffix.required_suffix = Async
 dotnet_naming_style.underscore_camel_case.capitalization = camel_case
 dotnet_naming_style.underscore_camel_case.required_prefix = _
 
+[src/**/*Endpoints.cs]
+# HTTP endpoint handlers use action-style names without an Async suffix.
+dotnet_naming_rule.async_methods.style = pascal_case
+
 [tests/**/*.cs]
 # Test methods allow underscore-separated PascalCase parts without an Async suffix.
 dotnet_naming_rule.async_methods.style = test_method

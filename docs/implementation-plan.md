@@ -37,6 +37,11 @@ handling, visible error states, and relevant resilience checks.
 Shared integration contracts are introduced with their first consumer and reused
 by later flows.
 
+Driver-facing screens follow the approved [UI concept](mockups/driver-ui-concept.png).
+User-facing flows support desktop and portrait smartphones, with readable layouts,
+touch-friendly controls, accessible navigation, and no horizontal page scrolling.
+End-to-end verification covers both desktop and phone viewports.
+
 Entry dependencies identify the earliest usable slice of a milestone. Completion
 requires its task dependencies and acceptance criteria. Existing checks count
 toward acceptance; repetition is needed only when changes invalidate their results.
@@ -47,7 +52,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M01 | Bootable Aspire topology | M00 | Done |
 | M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | Done |
 | M03 | Domain and seeded persistence baseline | M02 | Done |
-| M04 | Station browsing and operator edits | M03 | Planned |
+| M04 | Station browsing and operator edits | M03 | In progress |
 | M05 | Reservations, expiry, and notifications | M04.01 | Planned |
 | M06 | Charging start/stop and operator investigation | M05.01; cancellation races require M05.02 | Planned |
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | Planned |
@@ -213,7 +218,7 @@ owners and migration histories. Reset preserves authentication data.
 
 ### M04 — Station browsing and operator edits
 
-- [ ] M04.01 Deliver driver station browsing: station list/detail API contracts,
+- [x] M04.01 Deliver driver station browsing: station list/detail API contracts,
   gateway routes, frontend catalog/detail screens, and loading, empty, missing,
   and failure states. Introduce the long-lived Npgsql read data source and
   no-tracking EF Core queries with bounded waits and pool telemetry. Verify the

@@ -8,8 +8,11 @@ internal sealed class ConnectorConfiguration : IEntityTypeConfiguration<Connecto
 {
     public void Configure(EntityTypeBuilder<Connector> entity)
     {
-        entity.HasOne<Evse>()
-            .WithMany()
+        entity.Property(connector => connector.PublicId).HasDefaultValueSql("gen_random_uuid()");
+        entity.HasIndex(connector => connector.PublicId).IsUnique();
+
+        entity.HasOne(connector => connector.Evse)
+            .WithMany(evse => evse.Connectors)
             .HasForeignKey(connector => connector.EvseId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasIndex(connector => connector.EvseId).IsUnique();

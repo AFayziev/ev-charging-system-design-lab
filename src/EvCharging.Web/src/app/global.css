@@ -1,0 +1,62 @@
+:root {
+  --app-min-width: 320px;
+  --app-background: #f5f7f9;
+  --app-heading-color: #101c3c;
+  --app-muted-color: #59697a;
+}
+
+body {
+  margin: 0;
+}
+
+.app-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: var(--app-min-width);
+  min-height: 100svh;
+  padding: 24px;
+  box-sizing: border-box;
+  background: var(--app-background);
+  color: var(--app-heading-color);
+  font-family: var(--mantine-font-family, system-ui, sans-serif);
+  text-align: center;
+}
+
+.app-loading-icon {
+  display: block;
+  margin-bottom: 8px;
+  border-radius: 16px;
+  animation: app-loading-pulse 1.6s ease-in-out infinite;
+}
+
+.app-loading-title {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.app-loading-message {
+  color: var(--app-muted-color);
+  font-size: 14px;
+}
+
+@keyframes app-loading-pulse {
+  0%,
+  100% {
+    transform: scale(0.96);
+    opacity: 0.75;
+  }
+
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-icon {
+    animation: none;
+  }
+}

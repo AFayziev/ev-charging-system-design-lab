@@ -139,13 +139,14 @@ public static class LabDataSeeder
 
         for (var number = 1; number <= 2; number++)
         {
-            var evse = new Evse { ChargerId = charger.Id };
+            var evse = new Evse { ChargerId = charger.Id, Number = number };
             context.Evses.Add(evse);
             await context.SaveChangesAsync(cancellationToken);
 
             var connector = new Connector
             {
                 EvseId = evse.Id,
+                Number = 1,
                 ConnectorType = connectorType,
                 PowerSupply = powerSupply,
                 RatedPowerKW = ratedPowerKW

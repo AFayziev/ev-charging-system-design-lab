@@ -27,7 +27,7 @@ it("excludes URL secrets and explicitly supplied private data from error reports
   });
   Sentry.addBreadcrumb({
     category: "navigation",
-    data: { from: "/?token=query-secret", to: "/driver#fragment-secret" },
+    data: { from: "/?token=query-secret", to: "/stations#fragment-secret" },
   });
   Sentry.captureException(new Error("Synthetic failure"), {
     extra: { token: "private-value" },
@@ -37,7 +37,7 @@ it("excludes URL secrets and explicitly supplied private data from error reports
   const body = fetch.mock.calls.map((call) => String(call[1]?.body)).join("\n");
   expect(body).toContain("Synthetic failure");
   expect(body).toContain("/api/example");
-  expect(body).toContain("/driver");
+  expect(body).toContain("/stations");
   expect(body).not.toContain("query-secret");
   expect(body).not.toContain("fragment-secret");
   expect(body).not.toContain("private-value");
