@@ -28,9 +28,11 @@ function mockSession(session: unknown = anonymous) {
     data:
       path === "/auth/session"
         ? session
-        : path.startsWith("/api/stations/")
-          ? detail
-          : catalog,
+        : path === "/api/stations/assigned"
+          ? catalog
+          : path.startsWith("/api/stations/")
+            ? detail
+            : catalog,
   }));
 }
 

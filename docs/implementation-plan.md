@@ -225,7 +225,7 @@ owners and migration histories. Reset preserves authentication data.
   anonymous and authenticated browser-to-database flows, read-route permissions,
   session-discovery failure isolation, and database
   unavailability through the feature.
-- [ ] M04.02 Deliver assigned-operator station editing: edit forms, validated API
+- [x] M04.02 Deliver assigned-operator station editing: edit forms, validated API
   commands, station-assignment authorization, and persisted audit records.
   Introduce the independent write data source and EF Core command context with
   bounded transaction waits. Return authoritative mutation results from the

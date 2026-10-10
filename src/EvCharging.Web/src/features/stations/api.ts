@@ -45,9 +45,83 @@ export interface StationDetail {
 }
 
 export const stationKeys = {
+  lists: ["stations", "list"] as const,
   list: (afterId: string | null) => ["stations", "list", afterId] as const,
   detail: (id: string) => ["stations", "detail", id] as const,
+  editor: (id: string) => ["stations", "editor", id] as const,
+  assignedLists: ["stations", "assigned"] as const,
+  assigned: (afterId: string | null) =>
+    ["stations", "assigned", afterId] as const,
 };
+
+export interface StationEditor {
+  readonly id: string;
+  readonly version: number;
+  readonly name: string;
+  readonly address: string;
+  readonly accessInstructions: string;
+}
+
+export type StationEdit = Omit<StationEditor, "id">;
+
+export interface AssignedStationList {
+  readonly stations: readonly Pick<StationSummary, "id" | "name" | "address">[];
+  readonly nextAfterId: string | null;
+}
+
+export async function getStationEditor(
+  id: string,
+  signal?: AbortSignal,
+): Promise<StationEditor> {
+  const response = await api.get<StationEditor>(
+    `/api/stations/${encodeURIComponent(id)}/edit`,
+    { signal },
+  );
+  return response.data;
+}
+
+export async function updateStation(
+  id: string,
+  edit: StationEdit,
+  antiforgeryToken: string,
+  signal?: AbortSignal,
+): Promise<StationEditor> {
+  const response = await api.put<StationEditor>(
+    `/api/stations/${encodeURIComponent(id)}`,
+    edit,
+    {
+      headers: { "X-CSRF-TOKEN": antiforgeryToken },
+      signal,
+    },
+  );
+  return response.data;
+}
+
+export async function getAssignedStations(
+  afterId: string | null,
+  signal?: AbortSignal,
+): Promise<AssignedStationList> {
+  const response = await api.get<AssignedStationList>(
+    "/api/stations/assigned",
+    { params: { afterId, limit: 5 }, signal },
+  );
+  return response.data;
+}
+
+export const stationEditorQuery = (id: string) =>
+  queryOptions({
+    queryKey: stationKeys.editor(id),
+    queryFn: ({ signal }) => getStationEditor(id, signal),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+export const assignedStationsQuery = (afterId: string | null) =>
+  queryOptions({
+    queryKey: stationKeys.assigned(afterId),
+    queryFn: ({ signal }) => getAssignedStations(afterId, signal),
+    retry: false,
+  });
 
 export async function getStations(
   afterId: string | null,

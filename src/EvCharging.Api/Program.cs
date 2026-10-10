@@ -7,7 +7,9 @@ builder.AddServiceDefaults();
 builder.AddApiAuthentication();
 builder.AddHttpApiDefaults("/api");
 builder.AddPlatformPersistence();
-builder.AddStationBrowsing();
+builder.AddStations();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddValidation();
 
 var app = builder.Build();
 
@@ -16,6 +18,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHttpApiDiagnostics("api");
-app.MapStationBrowsing();
+app.MapStations();
 
 app.Run();

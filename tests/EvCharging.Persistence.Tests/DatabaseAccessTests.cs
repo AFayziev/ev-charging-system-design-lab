@@ -13,6 +13,23 @@ public sealed class DatabaseAccessTests(PlatformDatabaseFixture database)
     public Task ReadRoute_Mutation_Denied(string sql) => AssertDeniedAsync("platform_reader", sql);
 
     [Theory]
+    [InlineData("UPDATE charging.audit_entries SET details_version = 2")]
+    [InlineData("DELETE FROM charging.audit_entries")]
+    public Task AuditHistory_RuntimeMutation_Denied(string sql) => AssertDeniedAsync("platform_writer", sql);
+
+    [Fact]
+    public async Task AuditHistory_Reprovisioned_ReaderAccessAndAppendOnlyPrivilegesPreserved()
+    {
+        await database.ReprovisionAsync();
+        await AssertDeniedAsync("platform_writer", "UPDATE charging.audit_entries SET details_version = 2");
+        await AssertDeniedAsync("platform_writer", "DELETE FROM charging.audit_entries");
+        await using var reader = database.CreateConnection("platform_reader");
+        await reader.OpenAsync();
+        await using var read = new NpgsqlCommand("SELECT COUNT(*) FROM charging.audit_entries", reader);
+        Assert.IsType<long>(await read.ExecuteScalarAsync());
+    }
+
+    [Theory]
     [InlineData("platform_writer", "gateway_auth")]
     [InlineData("platform_reader", "gateway_auth")]
     [InlineData("platform_migrator", "gateway_auth")]

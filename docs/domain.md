@@ -33,6 +33,9 @@ diagnostic bundles. An operator role does not grant access to every station.
 Account administration, assignment-management workflows, and manual overrides of
 physical charging state are outside the feature set.
 
+Station content edits reject a stale editor version rather than overwrite changes
+saved after that version was loaded. Rejected edits do not create a saved-change audit record.
+
 ## 3. Equipment
 
 | Term | Definition |

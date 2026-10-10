@@ -6,6 +6,11 @@ internal static class ErrorResponseMappings
 {
     public static NotFound ToResponse<TId>(this NotFoundError<TId> error) => TypedResults.NotFound();
 
+    public static ProblemHttpResult ToResponse(this ConcurrencyConflictError error) => TypedResults.Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: "Resource changed",
+        detail: error.Message);
+
     public static ValidationProblem ToResponse(this IEnumerable<ValidationError> errors)
     {
         var fieldErrors = errors

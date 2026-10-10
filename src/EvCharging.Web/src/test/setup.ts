@@ -4,6 +4,8 @@ import { afterEach, vi } from "vitest";
 
 afterEach(cleanup);
 
+Object.defineProperty(document, "fonts", { value: new EventTarget() });
+
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({

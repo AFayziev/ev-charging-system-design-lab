@@ -76,7 +76,7 @@ public sealed class PlatformTests(AppHostFixture fixture)
                 });
                 return {
                     status: response.status,
-                    gateway: response.headers.get('X-Gateway-Instance'),
+                    contentType: response.headers.get('Content-Type'),
                     body: await response.json()
                 };
             }
@@ -86,6 +86,7 @@ public sealed class PlatformTests(AppHostFixture fixture)
         using var disabledTunnel = await gateway.PostAsync("/diagnostics/sentry", new StringContent("synthetic"));
         Assert.Equal(HttpStatusCode.NotFound, disabledTunnel.StatusCode);
         Assert.Equal(401, result.GetProperty("status").GetInt32());
-        Assert.False(string.IsNullOrWhiteSpace(result.GetProperty("gateway").GetString()));
+        Assert.Equal("application/problem+json", result.GetProperty("contentType").GetString());
+        Assert.Equal(401, result.GetProperty("body").GetProperty("status").GetInt32());
     }
 }

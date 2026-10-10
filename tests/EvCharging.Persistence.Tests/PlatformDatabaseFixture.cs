@@ -42,10 +42,7 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         await _postgres.StartAsync(timeout.Token);
 
-        var result = await _postgres.ExecAsync(
-            ["psql", "-X", "-q", "-U", "postgres", "-d", "evcharging", "-f", "/provisioning/bootstrap.sql"],
-            timeout.Token);
-        Assert.True(result.ExitCode == 0, result.Stderr);
+        await ReprovisionAsync(timeout.Token);
 
         await using var authenticationConnection = CreateConnection("gateway_auth_migrator");
         await using var authentication = new AuthenticationDbContext(
@@ -59,4 +56,12 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
     }
 
     public async Task DisposeAsync() => await _postgres.DisposeAsync();
+
+    public async Task ReprovisionAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await _postgres.ExecAsync(
+            ["psql", "-X", "-q", "-U", "postgres", "-d", "evcharging", "-f", "/provisioning/bootstrap.sql"],
+            cancellationToken);
+        Assert.True(result.ExitCode == 0, result.Stderr);
+    }
 }

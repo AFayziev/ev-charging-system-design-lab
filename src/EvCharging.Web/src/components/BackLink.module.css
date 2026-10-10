@@ -1,0 +1,12 @@
+.link {
+  padding: 0 8px;
+  border-radius: var(--mantine-radius-sm);
+  transition: var(--app-hover-transition);
+}
+
+@media (hover: hover) {
+  .link:hover {
+    background: var(--app-hover-background);
+    color: var(--app-hover-color);
+  }
+}

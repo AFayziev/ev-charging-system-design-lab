@@ -31,7 +31,7 @@
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "${GATEWAY_PUBLIC_ORIGIN}/auth/logout-callback"
       },
-      "defaultClientScopes": ["profile", "email", "roles"],
+      "defaultClientScopes": ["basic", "profile", "email", "roles"],
       "protocolMappers": [
         {
           "name": "platform audience",

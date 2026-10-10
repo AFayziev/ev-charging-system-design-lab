@@ -36,7 +36,8 @@ public static class LabDataSeeder
 
         await context.SaveChangesAsync(cancellationToken);
 
-        var assignedStationId = await SeedStationAsync(
+        var assignedStationIds = new List<long>();
+        assignedStationIds.Add(await SeedStationAsync(
             context,
             "Synchronous Charging Provider",
             "north",
@@ -50,7 +51,7 @@ public static class LabDataSeeder
             1,
             2,
             "Fictional lab site. Enter the synthetic public car park from Synthetic Avenue; bays are beside the north exit.",
-            cancellationToken);
+            cancellationToken));
         await SeedStationAsync(
             context,
             "Queued Charging Provider",
@@ -67,7 +68,7 @@ public static class LabDataSeeder
             "Fictional lab site. Use the south entrance off Synthetic Avenue; charging bays are beside the marked pedestrian route.",
             cancellationToken);
 
-        await SeedStationAsync(
+        assignedStationIds.Add(await SeedStationAsync(
             context,
             "Synchronous Charging Provider",
             "canal",
@@ -81,8 +82,8 @@ public static class LabDataSeeder
             2,
             2,
             "Fictional lab site. Enter from Mock Canal Lane; four charging bays line the courtyard wall.",
-            cancellationToken);
-        await SeedStationAsync(
+            cancellationToken));
+        assignedStationIds.Add(await SeedStationAsync(
             context,
             "Queued Charging Provider",
             "market",
@@ -96,8 +97,8 @@ public static class LabDataSeeder
             2,
             1,
             "Fictional lab site. Follow the signed car-park ramp from Example Market Road; chargers are on the upper deck.",
-            cancellationToken);
-        await SeedStationAsync(
+            cancellationToken));
+        assignedStationIds.Add(await SeedStationAsync(
             context,
             "Synchronous Charging Provider",
             "library",
@@ -111,8 +112,8 @@ public static class LabDataSeeder
             1,
             1,
             "Fictional lab site. The charging bay is in the side courtyard, reached from Imaginary Library Street.",
-            cancellationToken);
-        await SeedStationAsync(
+            cancellationToken));
+        assignedStationIds.Add(await SeedStationAsync(
             context,
             "Queued Charging Provider",
             "riverside",
@@ -126,8 +127,8 @@ public static class LabDataSeeder
             3,
             2,
             "Fictional lab site. Enter the surface car park from Mock River Walk; six bays are along the east boundary.",
-            cancellationToken);
-        await SeedStationAsync(
+            cancellationToken));
+        assignedStationIds.Add(await SeedStationAsync(
             context,
             "Synchronous Charging Provider",
             "garden",
@@ -141,8 +142,8 @@ public static class LabDataSeeder
             2,
             1,
             "Fictional lab site. Access the two bays through the car-park entrance on Sample Garden Mews.",
-            cancellationToken);
-        await SeedStationAsync(
+            cancellationToken));
+        assignedStationIds.Add(await SeedStationAsync(
             context,
             "Queued Charging Provider",
             "exchange",
@@ -156,15 +157,19 @@ public static class LabDataSeeder
             1,
             2,
             "Fictional lab site. Enter from Fictional Exchange Way; chargers face the car-park exit lane.",
-            cancellationToken);
+            cancellationToken));
 
-        if (!await context.OperatorAssignments.AnyAsync(
-            assignment => assignment.OperatorUserId == operatorUser.Id && assignment.StationId == assignedStationId,
-            cancellationToken))
+        var existingAssignments = await context.OperatorAssignments
+            .Where(assignment => assignment.OperatorUserId == operatorUser.Id)
+            .Select(assignment => assignment.StationId)
+            .ToListAsync(cancellationToken);
+        var missingAssignments = assignedStationIds.Except(existingAssignments);
+        foreach (long stationId in missingAssignments)
         {
-            context.OperatorAssignments.Add(new() { OperatorUserId = operatorUser.Id, StationId = assignedStationId });
-            await context.SaveChangesAsync(cancellationToken);
+            context.OperatorAssignments.Add(new() { OperatorUserId = operatorUser.Id, StationId = stationId });
         }
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static string SubjectForRole(JsonElement users, string role) => users.EnumerateArray()

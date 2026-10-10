@@ -11,7 +11,6 @@ import {
   Loader,
   Stack,
   Text,
-  Title,
   UnstyledButton,
 } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
@@ -24,12 +23,17 @@ import {
   Routes,
   useLocation,
   matchPath,
+  createPath,
 } from "react-router";
 import classes from "./App.module.css";
 import { AppLoading } from "./AppLoading";
 import { StationListPage } from "@/features/stations/components/StationListPage";
 import { StationDetailPage } from "@/features/stations/components/StationDetailPage";
-import { sessionQuery } from "@/features/auth/api";
+import { StationEditPage } from "@/features/stations/components/StationEditPage";
+import { AssignedStationsPage } from "@/features/stations/components/AssignedStationsPage";
+import { PageHeading } from "@/components/PageHeading";
+import type { ReactNode } from "react";
+import { getSignInUrl, sessionQuery } from "@/features/auth/api";
 
 const SentryRoutes = wrapReactRouterRouting(Routes);
 
@@ -38,7 +42,7 @@ export function App() {
   const session = useQuery(sessionQuery);
   const currentSession = session.isSuccess ? session.data : undefined;
   const roles = currentSession?.user?.roles ?? [];
-  const currentUrl = location.pathname + location.search + location.hash;
+  const currentUrl = createPath(location);
   const logoutReturnUrl =
     matchPath("/stations", location.pathname) ||
     matchPath("/stations/:stationId", location.pathname)
@@ -50,35 +54,36 @@ export function App() {
       component="a"
       size="sm"
       className={`${classes.account} ${classes.accountAction}`}
-      href={`/auth/login?returnUrl=${encodeURIComponent(currentUrl)}`}
+      href={getSignInUrl(currentUrl)}
     >
       Sign in
     </Button>
   );
-  const area = (role: PlatformRole, title: string) =>
-    session.isPending ? (
-      <AppLoading />
-    ) : session.isError ? (
-      <Stack>
-        <Text role="alert">Unable to check your session.</Text>
-        <Button onClick={() => void session.refetch()}>Try again</Button>
-      </Stack>
-    ) : !currentSession?.signedIn ? (
-      <Stack>
-        <Title order={1}>Sign in to continue</Title>
-        <Text>Use Sign in in the header to access this area.</Text>
-      </Stack>
-    ) : !roles.includes(role) ? (
-      <Stack>
-        <Title order={1}>Access denied</Title>
-        <Text>You do not have permission to access this area.</Text>
-      </Stack>
-    ) : (
-      <Stack>
-        <Title order={1}>{title}</Title>
-        <Text c="dimmed">No activity to display yet.</Text>
-      </Stack>
-    );
+  const area = (role: PlatformRole, content: ReactNode) => {
+    if (session.isPending) return <AppLoading />;
+    if (session.isError)
+      return (
+        <Stack>
+          <Text role="alert">Unable to check your session.</Text>
+          <Button onClick={() => void session.refetch()}>Try again</Button>
+        </Stack>
+      );
+    if (!currentSession?.signedIn)
+      return (
+        <PageHeading
+          title="Sign in to continue"
+          description="Use Sign in in the header to access this area."
+        />
+      );
+    if (!roles.includes(role))
+      return (
+        <PageHeading
+          title="Access denied"
+          description="You do not have permission to access this area."
+        />
+      );
+    return content;
+  };
 
   return (
     <AppShell
@@ -204,24 +209,38 @@ export function App() {
         </Container>
       </AppShell.Header>
       <AppShell.Main className={classes.main}>
-        <Container size="lg" px={{ base: 0, sm: "md" }}>
+        <Container
+          size="lg"
+          px={{ base: 0, sm: "md" }}
+          py={{ base: "sm", sm: "lg" }}
+        >
           <SentryRoutes>
             <Route path="/" element={<Navigate to="/stations" replace />} />
             <Route path="/stations" element={<StationListPage />} />
             <Route
               path="/stations/:stationId"
-              element={<StationDetailPage />}
+              element={
+                <StationDetailPage
+                  canEdit={roles.includes(PlatformRole.Operator)}
+                />
+              }
             />
             <Route
               path="/operator"
-              element={area(PlatformRole.Operator, "Operator area")}
+              element={area(PlatformRole.Operator, <AssignedStationsPage />)}
+            />
+            <Route
+              path="/stations/:stationId/edit"
+              element={area(PlatformRole.Operator, <StationEditPage />)}
             />
             <Route
               path="*"
               element={
                 <Stack>
-                  <Title order={1}>Page not found</Title>
-                  <Text c="dimmed">This page is unavailable.</Text>
+                  <PageHeading
+                    title="Page not found"
+                    description="This page is unavailable."
+                  />
                   <Anchor component={Link} to="/">
                     Return home
                   </Anchor>

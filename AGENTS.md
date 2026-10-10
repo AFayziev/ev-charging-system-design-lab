@@ -72,6 +72,21 @@ Place code according to its responsibility and expected consumers. Keep
 feature-specific behavior in its feature slice; place capabilities used across
 features in the owning shared area, rather than the first feature that needs them.
 
+Implement cross-cutting behavior through established framework pipelines and
+extension points where available. Features declare their participation and
+configuration rather than repeat the underlying mechanics.
+
+Generalize shared mechanisms through common contracts or framework metadata.
+Avoid concrete feature/entity branches in shared processing. Keep business-specific
+intent explicit at the feature boundary.
+
+Make participation and data collection explicit. A shared contract does not imply
+that every operation or property participates.
+
+Preserve the owning operation's transaction, cancellation, and failure semantics.
+Verify meaningful behavior, including failure and retry cases, rather than merely
+checking registrations or framework configuration.
+
 Give configuration values one owner. Derive dependent settings from resource
 metadata or existing options, and reuse existing registration helpers instead of
 copying literals or policies. Independent public-contract assertions may repeat

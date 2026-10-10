@@ -8,6 +8,7 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
     private const string Schema = "charging";
 
     public DbSet<Station> Stations => Set<Station>();
+    public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<Charger> Chargers => Set<Charger>();
     public DbSet<Evse> Evses => Set<Evse>();
     public DbSet<Connector> Connectors => Set<Connector>();

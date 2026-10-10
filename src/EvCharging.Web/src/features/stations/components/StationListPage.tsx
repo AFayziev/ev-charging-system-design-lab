@@ -15,6 +15,7 @@ import {
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
+import { PageHeading } from "@/components/PageHeading";
 import { stationListQuery } from "../api";
 import { StationPhoto } from "./StationPhoto";
 import {
@@ -30,18 +31,14 @@ export function StationListPage() {
   const query = useQuery(stationListQuery(afterId));
 
   return (
-    <Stack gap="xl" py={{ base: "sm", sm: "lg" }}>
-      <Stack gap={8}>
-        <Title order={1}>Find a station</Title>
-        <Text c="dimmed">
-          Browse fictional lab stations and check equipment and access details.
-        </Text>
-      </Stack>
-      {query.isPending ? (
-        <StationLoading />
-      ) : query.isError ? (
-        <StationFailure retry={() => void query.refetch()} />
-      ) : (
+    <Stack gap="xl">
+      <PageHeading
+        title="Find a station"
+        description="Browse fictional lab stations and check equipment and access details."
+      />
+      {query.isPending && <StationLoading />}
+      {query.isError && <StationFailure retry={() => void query.refetch()} />}
+      {query.isSuccess && (
         <>
           {query.data.stations.length === 0 ? (
             <Card withBorder padding="xl">
@@ -144,6 +141,7 @@ export function StationListPage() {
             {query.data.nextAfterId !== null && (
               <Button
                 variant="light"
+                ml="auto"
                 onClick={() =>
                   setSearchParams({ after: String(query.data.nextAfterId) })
                 }

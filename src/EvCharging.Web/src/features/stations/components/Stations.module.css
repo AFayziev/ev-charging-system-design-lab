@@ -1,16 +1,3 @@
-.backLink {
-  padding: 0 8px;
-  border-radius: var(--mantine-radius-sm);
-  transition: var(--app-hover-transition);
-}
-
-@media (hover: hover) {
-  .backLink:hover {
-    background: var(--app-hover-background);
-    color: var(--app-hover-color);
-  }
-}
-
 .catalogCard {
   display: grid;
   grid-template-columns: 138px minmax(0, 1fr);

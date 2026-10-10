@@ -32,3 +32,7 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA charging TO platform_writer;
 -- Migration history belongs to the schema owner, including after reprovisioning.
 SELECT 'REVOKE ALL ON TABLE charging.ef_migrations_history FROM platform_writer, platform_reader'
 WHERE to_regclass('charging.ef_migrations_history') IS NOT NULL \gexec
+
+-- Audit history remains append-only after reprovisioning.
+SELECT 'REVOKE UPDATE, DELETE ON TABLE charging.audit_entries FROM platform_writer'
+WHERE to_regclass('charging.audit_entries') IS NOT NULL \gexec

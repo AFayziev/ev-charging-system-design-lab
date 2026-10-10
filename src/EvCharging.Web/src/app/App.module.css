@@ -51,7 +51,6 @@
 .navigation {
   display: flex;
   align-self: stretch;
-  gap: 24px;
 }
 
 .navLink {
@@ -59,7 +58,7 @@
   align-items: center;
   min-height: 44px;
   border-bottom: 3px solid transparent;
-  padding: 3px 8px 0;
+  padding: 3px 20px 0;
   color: #536173;
   font-size: 14px;
   font-weight: 600;

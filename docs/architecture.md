@@ -180,6 +180,26 @@ permitted transitions across API instances. Operation identity prevents duplicat
 command acceptance. Observation projections follow the
 [domain ordering rules](domain.md#8-time-identity-and-ordering).
 
+### 4.1 Audit history
+
+The platform maintains shared, append-only audit history in the relational store.
+Records identify the authenticated actor, time, action, affected resource, and
+structured details.
+
+- Automatic change records use add/update/delete actions and explicitly selected
+  entity properties.
+- Explicit events express business intent, including publication, reconciliation
+  requests, and diagnostic access. Each action uses one capture path to avoid
+  duplicate records.
+
+Business changes and their audit records commit together; a failed transaction
+persists neither. External request acceptance and confirmed outcomes are distinct
+events. Audit history preserves attribution; diagnostic logs, outgoing messages,
+and operational state retain their separate responsibilities.
+
+Only selected fields are collected; credentials, tokens, and signed URLs are
+excluded. Audit queries enforce the affected resource's access rules.
+
 ## 5. Read and write paths
 
 Command and query handling use distinct database routes within the same API
@@ -503,8 +523,8 @@ Callbacks, internal services, and infrastructure connections are authenticated.
 Database/storage roles have least privilege; replicas are read-only and migrations
 use a separate role. Upload size/types, decoding resources, and signed URL lifetimes
 are bounded. Credentials, tokens, and private data stay out of Git and diagnostics.
-Station edits, publication, reconciliation, and diagnostic access are audited.
 All business fixtures are synthetic.
+[Audit history](#41-audit-history) records protected actions and changes.
 [Authentication conventions](lab.md#17-gateway-authentication-conventions)
 
 ## 14. Orchestration and cloud boundaries

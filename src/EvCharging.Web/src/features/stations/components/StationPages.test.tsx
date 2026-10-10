@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
+import { HttpStatusCode } from "axios";
 import { StationListPage } from "./StationListPage";
 import { StationDetailPage } from "./StationDetailPage";
 
@@ -69,7 +70,7 @@ it("shows a safe failure and retries the query", async () => {
 it("distinguishes a missing station from transport failure", async () => {
   const missing = Object.assign(new Error("missing"), {
     isAxiosError: true,
-    response: { status: 404 },
+    response: { status: HttpStatusCode.NotFound },
   });
   get.mockRejectedValue(missing);
   renderScreen("/stations/709af89a-8fda-4724-a188-1e38aac99dd3");

@@ -21,6 +21,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Identity | Keycloak; gateway-owned OIDC Authorization Code with PKCE, using ASP.NET Core OpenID Connect and cookie authentication |
 | Live delivery | SignalR .NET/JavaScript clients; StackExchange.Redis backplane on Valkey |
 | Relational access / pooling | PostgreSQL 17; EF Core 10/Npgsql provider and long-lived Npgsql data sources; managed PgBouncer in Azure |
+| Auditing | EF Core save interception; PostgreSQL JSONB; [audit design](architecture.md#41-audit-history) |
 | Application outcomes | FluentResults typed results |
 | Managed database exercise | Azure Database for PostgreSQL Flexible Server; readable replica and provider-managed HA |
 | Documents | MongoDB with the official C# driver |

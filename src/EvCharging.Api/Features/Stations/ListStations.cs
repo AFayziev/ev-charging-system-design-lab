@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
 
-internal sealed record ListStationsRequest(Guid? AfterId = null, int Limit = 20);
+internal sealed record ListStationsRequest(Guid? AfterId = null, int Limit = 20)
+{
+    public const int MaximumPageSize = 50;
+}
 
 internal sealed record StationListResponse(IReadOnlyList<StationSummaryResponse> Stations, Guid? NextAfterId);
 
@@ -22,8 +25,6 @@ internal sealed record ConnectorCapabilityResponse(string ConnectorType, string 
 
 internal sealed class ListStationsQueryHandler(PlatformDbContext database)
 {
-    private const int MaximumPageSize = 50;
-
     public async Task<Result<StationListResponse>> HandleAsync(
         ListStationsRequest request,
         CancellationToken cancellationToken)
@@ -47,10 +48,12 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
             }
         }
 
-        if (request.Limit is < 1 or > MaximumPageSize)
+        if (request.Limit is < 1 or > ListStationsRequest.MaximumPageSize)
         {
             errors.Add(
-                new ValidationError(nameof(request.Limit), $"The limit must be between 1 and {MaximumPageSize}."));
+                new ValidationError(
+                    nameof(request.Limit),
+                    $"The limit must be between 1 and {ListStationsRequest.MaximumPageSize}."));
         }
 
         if (errors.Count > 0)

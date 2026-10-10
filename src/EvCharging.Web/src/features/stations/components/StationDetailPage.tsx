@@ -2,22 +2,23 @@ import {
   Anchor,
   Badge,
   Card,
-  Group,
   Stack,
   Text,
   ThemeIcon,
   Title,
 } from "@mantine/core";
 import {
-  IconArrowLeft,
   IconChargingPile,
   IconClock,
   IconMapPin,
   IconPlug,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { HttpStatusCode } from "axios";
 import { Link, useParams } from "react-router";
+import { BackLink } from "@/components/BackLink";
+import { PageHeading } from "@/components/PageHeading";
+import { getHttpStatus } from "@/lib/http-errors";
 import { stationDetailQuery } from "../api";
 import { StationPhoto } from "./StationPhoto";
 import {
@@ -27,13 +28,11 @@ import {
 } from "./StationPresentation";
 import classes from "./Stations.module.css";
 
-export function StationDetailPage() {
+export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
   const { stationId = "" } = useParams();
   const query = useQuery(stationDetailQuery(stationId));
   const missing =
-    query.isError &&
-    axios.isAxiosError(query.error) &&
-    query.error.response?.status === 404;
+    query.isError && getHttpStatus(query.error) === HttpStatusCode.NotFound;
   const coordinates = query.data
     ? `${query.data.latitude},${query.data.longitude}`
     : null;
@@ -44,48 +43,35 @@ export function StationDetailPage() {
 
   return (
     <Stack gap="xs">
-      <Anchor
-        component={Link}
-        to="/stations"
-        className={classes.backLink}
-        underline="never"
-        w="fit-content"
-        mih={44}
-        display="inline-flex"
-      >
-        <Group gap={6}>
-          <IconArrowLeft size={18} aria-hidden="true" />
-          <Text size="sm" fw={600}>
-            All stations
-          </Text>
-        </Group>
-      </Anchor>
-      {query.isPending ? (
-        <StationLoading />
-      ) : missing ? (
-        <Stack>
-          <Title order={1}>Station not found</Title>
-          <Text c="dimmed">
-            This station is unavailable or no longer exists.
-          </Text>
-        </Stack>
-      ) : query.isError ? (
+      <BackLink to="/stations">All stations</BackLink>
+      {query.isPending && <StationLoading />}
+      {missing && (
+        <PageHeading
+          title="Station not found"
+          description="This station is unavailable or no longer exists."
+        />
+      )}
+      {query.isError && !missing && (
         <StationFailure retry={() => void query.refetch()} />
-      ) : (
+      )}
+      {query.isSuccess && (
         <div className={classes.detailGrid}>
           <Stack gap="xl">
             <div className={classes.stationHeading}>
-              <Stack gap="sm">
-                <Title order={1}>{query.data.name}</Title>
+              <PageHeading
+                title={query.data.name}
+                description="Review charging equipment and station access before your visit."
+              >
+                {canEdit && (
+                  <Anchor component={Link} to={`/stations/${stationId}/edit`}>
+                    Edit station
+                  </Anchor>
+                )}
                 <div className={classes.metadata}>
                   <IconMapPin size={19} aria-hidden="true" />
                   <Text size="sm">{query.data.address}</Text>
                 </div>
-                <Text size="sm" c="dimmed">
-                  Review charging equipment and station access before your
-                  visit.
-                </Text>
-              </Stack>
+              </PageHeading>
               <StationPhoto />
             </div>
             <Stack gap="md" id="equipment">
