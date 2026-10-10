@@ -27,8 +27,15 @@ internal static class BrowserAuthenticationEndpoints
 
         endpoints.MapGet(
             "/auth/session",
-            (HttpContext context, IAntiforgery antiforgery) =>
+            async (HttpContext context, IAntiforgery antiforgery) =>
             {
+                var authentication = await context.AuthenticateAsync(
+                    CookieAuthenticationDefaults.AuthenticationScheme);
+                if (authentication.Succeeded)
+                {
+                    context.User = authentication.Principal!;
+                }
+
                 var tokens = antiforgery.GetAndStoreTokens(context);
                 var signedIn = context.User.Identity?.IsAuthenticated == true;
                 var user = signedIn ? new BrowserSessionUser(
@@ -64,7 +71,8 @@ internal static class BrowserAuthenticationEndpoints
                 return TypedResults.SignOut(
                     new AuthenticationProperties { RedirectUri = destination },
                     [CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme]);
-            });
+            })
+            .RequireAuthorization(BrowserAuthenticationExtensions.BrowserSessionPolicy);
         return endpoints;
     }
 

@@ -477,6 +477,11 @@ A relational session store holds authentication and protected token state shared
 by gateway replicas. The browser receives a protected session-reference cookie.
 Store unavailability fails authenticated
 requests explicitly; cache eviction cannot discard authentication state.
+Public catalogue reads are stateless at the gateway and do not depend on session
+discovery or the session store. The frontend renders public content independently
+of account discovery; protected content remains unavailable when identity cannot
+be established. [Domain permissions](domain.md#2-actors-and-permissions) define
+the public and protected operations.
 
 The gateway validates antiforgery tokens for state-changing browser requests.
 API/live authentication failures return unauthorized responses rather than HTML
@@ -489,9 +494,10 @@ the permissions of a driver or operator user.
 
 ### 13.2 Backend authorization
 
-The gateway attaches authenticated identity to upstream requests. APIs validate
-that identity and check ownership and station assignments against authoritative
-records. Gateway authentication does not replace resource authorization.
+For protected browser requests, the gateway attaches authenticated identity to
+upstream requests. APIs validate that identity and check ownership and station
+assignments against authoritative records. Gateway authentication does not replace
+resource authorization.
 
 Callbacks, internal services, and infrastructure connections are authenticated.
 Database/storage roles have least privilege; replicas are read-only and migrations

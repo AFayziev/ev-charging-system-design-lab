@@ -4,7 +4,11 @@ namespace EvCharging.Api.Features.Stations;
 
 internal static class StationResponseMappings
 {
-    public static StationSummaryResponse ToResponse(this Station station, IReadOnlyList<Connector> connectors)
+    public static StationSummaryResponse ToResponse(
+        this Station station,
+        int chargerCount,
+        int evseCount,
+        IReadOnlyList<Connector> connectors)
     {
         var capabilities = connectors.Select(connector => connector.ToCapabilityResponse())
             .Distinct()
@@ -12,7 +16,14 @@ internal static class StationResponseMappings
             .ThenBy(capability => capability.PowerSupply)
             .ThenBy(capability => capability.RatedPowerKW)
             .ToArray();
-        return new(station.PublicId, station.Name, station.Address, connectors.Count, capabilities);
+        return new(
+            station.PublicId,
+            station.Name,
+            station.Address,
+            chargerCount,
+            evseCount,
+            connectors.Count,
+            capabilities);
     }
 
     public static StationDetailResponse ToResponse(this Station station) => new(

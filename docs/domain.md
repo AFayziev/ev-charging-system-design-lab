@@ -22,6 +22,11 @@ boundaries. APIs, messages, tests, and frontend labels preserve the same meaning
 | Notification provider | Third-party service responsible for message delivery; the lab can substitute a simulator |
 | Driver area / operator area | Separate navigation and workflows within the shared frontend |
 
+Station catalogue and equipment details are public, including address, coordinates,
+photos, and access instructions. Browsing does not require an account or a driver role.
+Reservations, charging controls, personal records, and operator workflows require
+authentication and their applicable role, ownership, or station assignment.
+
 Drivers access their own reservations, sessions, and summaries. Assigned operator
 users edit station content, inspect operations, request reconciliation, and access
 diagnostic bundles. An operator role does not grant access to every station.

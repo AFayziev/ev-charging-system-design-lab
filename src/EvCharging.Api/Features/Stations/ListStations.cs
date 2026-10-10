@@ -13,6 +13,8 @@ internal sealed record StationSummaryResponse(
     Guid Id,
     string Name,
     string Address,
+    int ChargerCount,
+    int EvseCount,
     int ConnectorCount,
     IReadOnlyList<ConnectorCapabilityResponse> Capabilities);
 
@@ -65,6 +67,8 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
                 station => new
                 {
                     Station = station,
+                    ChargerCount = station.Chargers.Count,
+                    EvseCount = station.Chargers.SelectMany(charger => charger.Evses).Count(),
                     Connectors = station.Chargers
                         .SelectMany(charger => charger.Evses)
                         .SelectMany(evse => evse.Connectors)
@@ -78,7 +82,7 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
         }
 
         var summaries = stations
-            .Select(item => item.Station.ToResponse(item.Connectors))
+            .Select(item => item.Station.ToResponse(item.ChargerCount, item.EvseCount, item.Connectors))
             .ToArray();
         return Result.Ok(new StationListResponse(summaries, hasMore ? stations[^1].Station.PublicId : null));
     }

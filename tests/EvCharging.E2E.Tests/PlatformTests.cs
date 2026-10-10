@@ -64,10 +64,10 @@ public sealed class PlatformTests(AppHostFixture fixture)
             AriaRole.Heading,
             new()
             {
-                Name = "Welcome to EV Charging"
+                Name = "Find a station"
             }))
             .ToBeVisibleAsync();
-        await Expect(page).ToHaveURLAsync(new Uri(frontend, "/").AbsoluteUri);
+        await Expect(page).ToHaveURLAsync(new Uri(frontend, "/stations").AbsoluteUri);
 
         var result = await page.EvaluateAsync<JsonElement>("""
             async () => {

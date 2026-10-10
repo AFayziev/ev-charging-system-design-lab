@@ -41,24 +41,121 @@ public static class LabDataSeeder
             "Synchronous Charging Provider",
             "north",
             "North Station",
-            "1 Synthetic Avenue",
+            "1 Synthetic Avenue, Demo North Quarter, London",
             51.51m,
             -0.12m,
             "Type2",
             "AC",
             22m,
+            1,
+            2,
+            "Fictional lab site. Enter the synthetic public car park from Synthetic Avenue; bays are beside the north exit.",
             cancellationToken);
         await SeedStationAsync(
             context,
             "Queued Charging Provider",
             "south",
             "South Station",
-            "2 Synthetic Avenue",
+            "2 Synthetic Avenue, Demo South Quarter, London",
             51.49m,
             -0.11m,
             "CCS2",
             "DC",
             50m,
+            1,
+            2,
+            "Fictional lab site. Use the south entrance off Synthetic Avenue; charging bays are beside the marked pedestrian route.",
+            cancellationToken);
+
+        await SeedStationAsync(
+            context,
+            "Synchronous Charging Provider",
+            "canal",
+            "Demo Canal Yard",
+            "14 Mock Canal Lane, Demo Wharf, London",
+            51.5168m,
+            -0.1284m,
+            "Type2",
+            "AC",
+            11m,
+            2,
+            2,
+            "Fictional lab site. Enter from Mock Canal Lane; four charging bays line the courtyard wall.",
+            cancellationToken);
+        await SeedStationAsync(
+            context,
+            "Queued Charging Provider",
+            "market",
+            "Demo Market Square",
+            "8 Example Market Road, Demo North Quarter, London",
+            51.5126m,
+            -0.1168m,
+            "CCS2",
+            "DC",
+            150m,
+            2,
+            1,
+            "Fictional lab site. Follow the signed car-park ramp from Example Market Road; chargers are on the upper deck.",
+            cancellationToken);
+        await SeedStationAsync(
+            context,
+            "Synchronous Charging Provider",
+            "library",
+            "Demo Library Court",
+            "27 Imaginary Library Street, Demo Wharf, London",
+            51.5081m,
+            -0.1331m,
+            "Type2",
+            "AC",
+            7.4m,
+            1,
+            1,
+            "Fictional lab site. The charging bay is in the side courtyard, reached from Imaginary Library Street.",
+            cancellationToken);
+        await SeedStationAsync(
+            context,
+            "Queued Charging Provider",
+            "riverside",
+            "Demo Riverside Hub",
+            "42 Mock River Walk, Demo South Quarter, London",
+            51.4972m,
+            -0.1062m,
+            "CCS2",
+            "DC",
+            100m,
+            3,
+            2,
+            "Fictional lab site. Enter the surface car park from Mock River Walk; six bays are along the east boundary.",
+            cancellationToken);
+        await SeedStationAsync(
+            context,
+            "Synchronous Charging Provider",
+            "garden",
+            "Demo Garden Mews",
+            "6 Sample Garden Mews, Demo South Quarter, London",
+            51.4928m,
+            -0.1214m,
+            "Type2",
+            "AC",
+            22m,
+            2,
+            1,
+            "Fictional lab site. Access the two bays through the car-park entrance on Sample Garden Mews.",
+            cancellationToken);
+        await SeedStationAsync(
+            context,
+            "Queued Charging Provider",
+            "exchange",
+            "Demo Exchange Park",
+            "19 Fictional Exchange Way, Demo North Quarter, London",
+            51.5204m,
+            -0.1108m,
+            "CCS2",
+            "DC",
+            75m,
+            1,
+            2,
+            "Fictional lab site. Enter from Fictional Exchange Way; chargers face the car-park exit lane.",
             cancellationToken);
 
         if (!await context.OperatorAssignments.AnyAsync(
@@ -86,6 +183,9 @@ public static class LabDataSeeder
         string connectorType,
         string powerSupply,
         decimal ratedPowerKW,
+        int chargerCount,
+        int evsesPerCharger,
+        string accessInstructions,
         CancellationToken cancellationToken)
     {
         var provider = await context.ChargingProviders.SingleOrDefaultAsync(
@@ -112,61 +212,66 @@ public static class LabDataSeeder
             Latitude = latitude,
             Longitude = longitude,
             TimeZoneId = "Europe/London",
-            AccessInstructions = "Synthetic public car park; no access code required."
+            AccessInstructions = accessInstructions
         };
         context.Stations.Add(station);
         await context.SaveChangesAsync(cancellationToken);
 
-        var charger = new Charger { StationId = station.Id, Name = $"{name} Charger" };
         var providerStation = new ProviderStation
         {
             ChargingProviderId = provider.Id,
             StationId = station.Id,
             ExternalId = externalStationId
         };
-        context.Chargers.Add(charger);
         context.ProviderStations.Add(providerStation);
         await context.SaveChangesAsync(cancellationToken);
 
-        var providerCharger = new ProviderCharger
+        for (var chargerNumber = 1; chargerNumber <= chargerCount; chargerNumber++)
         {
-            ProviderStationId = providerStation.Id,
-            ChargerId = charger.Id,
-            ExternalId = "charger-1"
-        };
-        context.ProviderChargers.Add(providerCharger);
-        await context.SaveChangesAsync(cancellationToken);
-
-        for (var number = 1; number <= 2; number++)
-        {
-            var evse = new Evse { ChargerId = charger.Id, Number = number };
-            context.Evses.Add(evse);
+            var charger = new Charger { StationId = station.Id, Name = $"Charger {chargerNumber}" };
+            context.Chargers.Add(charger);
             await context.SaveChangesAsync(cancellationToken);
 
-            var connector = new Connector
+            var providerCharger = new ProviderCharger
             {
-                EvseId = evse.Id,
-                Number = 1,
-                ConnectorType = connectorType,
-                PowerSupply = powerSupply,
-                RatedPowerKW = ratedPowerKW
+                ProviderStationId = providerStation.Id,
+                ChargerId = charger.Id,
+                ExternalId = $"charger-{chargerNumber}"
             };
-            var providerEvse = new ProviderEvse
-            {
-                ProviderChargerId = providerCharger.Id,
-                EvseId = evse.Id,
-                ExternalId = $"evse-{number}"
-            };
-            context.Connectors.Add(connector);
-            context.ProviderEvses.Add(providerEvse);
+            context.ProviderChargers.Add(providerCharger);
             await context.SaveChangesAsync(cancellationToken);
 
-            context.ProviderConnectors.Add(new()
+            for (var number = 1; number <= evsesPerCharger; number++)
             {
-                ProviderEvseId = providerEvse.Id,
-                ConnectorId = connector.Id,
-                ExternalId = "connector-1"
-            });
+                var evse = new Evse { ChargerId = charger.Id, Number = number };
+                context.Evses.Add(evse);
+                await context.SaveChangesAsync(cancellationToken);
+
+                var connector = new Connector
+                {
+                    EvseId = evse.Id,
+                    Number = 1,
+                    ConnectorType = connectorType,
+                    PowerSupply = powerSupply,
+                    RatedPowerKW = ratedPowerKW
+                };
+                var providerEvse = new ProviderEvse
+                {
+                    ProviderChargerId = providerCharger.Id,
+                    EvseId = evse.Id,
+                    ExternalId = $"evse-{number}"
+                };
+                context.Connectors.Add(connector);
+                context.ProviderEvses.Add(providerEvse);
+                await context.SaveChangesAsync(cancellationToken);
+
+                context.ProviderConnectors.Add(new()
+                {
+                    ProviderEvseId = providerEvse.Id,
+                    ConnectorId = connector.Id,
+                    ExternalId = "connector-1"
+                });
+            }
         }
 
         await context.SaveChangesAsync(cancellationToken);

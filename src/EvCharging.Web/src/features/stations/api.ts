@@ -11,6 +11,8 @@ export interface StationSummary {
   readonly id: string;
   readonly name: string;
   readonly address: string;
+  readonly chargerCount: number;
+  readonly evseCount: number;
   readonly connectorCount: number;
   readonly capabilities: readonly ConnectorCapability[];
 }

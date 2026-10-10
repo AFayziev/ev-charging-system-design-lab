@@ -1,3 +1,4 @@
+using Duende.AccessTokenManagement;
 using Duende.AccessTokenManagement.OpenIdConnect;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -8,6 +9,8 @@ namespace EvCharging.Gateway.Authentication;
 
 internal static class BrowserAuthenticationExtensions
 {
+    internal const string BrowserSessionPolicy = "browser-session";
+
     public static IHostApplicationBuilder AddBrowserAuthentication(this IHostApplicationBuilder builder)
     {
         builder.Services.AddOptions<BrowserAuthenticationOptions>()
@@ -36,7 +39,6 @@ internal static class BrowserAuthenticationExtensions
         builder.Services.AddHttpClient("oidc-backchannel");
         builder.Services.AddAuthentication(options =>
         {
-            options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
             options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
         })
             .AddCookie()
@@ -52,7 +54,12 @@ internal static class BrowserAuthenticationExtensions
                 options.Cookie.SecurePolicy = new Uri(settings.Value.PublicOrigin).Scheme == "http"
                     ? CookieSecurePolicy.None : CookieSecurePolicy.Always;
                 options.Events.OnSigningOut = context =>
-                    context.HttpContext.RevokeRefreshTokenAsync(ct: context.HttpContext.RequestAborted);
+                    context.HttpContext.RevokeRefreshTokenAsync(
+                        new UserTokenRequestParameters
+                        {
+                            SignInScheme = Scheme.Parse(CookieAuthenticationDefaults.AuthenticationScheme)
+                        },
+                        ct: context.HttpContext.RequestAborted);
                 options.Events.OnRedirectToAccessDenied = context =>
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -106,7 +113,16 @@ internal static class BrowserAuthenticationExtensions
             });
 
         builder.Services.AddOpenIdConnectAccessTokenManagement();
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy(
+                BrowserSessionPolicy,
+                policy =>
+                {
+                    policy.AddAuthenticationSchemes(CookieAuthenticationDefaults.AuthenticationScheme);
+                    policy.RequireAuthenticatedUser();
+                });
+        });
         builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
         builder.Services.AddOptions<Microsoft.AspNetCore.Antiforgery.AntiforgeryOptions>()
             .Configure<IOptions<BrowserAuthenticationOptions>>((options, settings) =>

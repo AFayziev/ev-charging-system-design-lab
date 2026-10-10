@@ -34,6 +34,13 @@ export function StationDetailPage() {
     query.isError &&
     axios.isAxiosError(query.error) &&
     query.error.response?.status === 404;
+  const coordinates = query.data
+    ? `${query.data.latitude},${query.data.longitude}`
+    : null;
+  const mapsUrl =
+    coordinates === null
+      ? undefined
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coordinates)}`;
 
   return (
     <Stack gap="xs">
@@ -162,6 +169,9 @@ export function StationDetailPage() {
                   Coordinates: {query.data.latitude}, {query.data.longitude}
                 </Text>
               </div>
+              <Anchor href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                Open in maps
+              </Anchor>
             </Stack>
           </Card>
         </div>

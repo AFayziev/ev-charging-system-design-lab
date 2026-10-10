@@ -1,9 +1,11 @@
 using System.Net.Http.Headers;
+using Duende.AccessTokenManagement;
 using Duende.AccessTokenManagement.OpenIdConnect;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Yarp.ReverseProxy.Transforms;
 
-namespace EvCharging.Gateway.Authentication;
+namespace EvCharging.Gateway.Proxy;
 
 internal sealed class BrowserApiTransform(IAntiforgery antiforgery) : RequestTransform
 {
@@ -30,7 +32,12 @@ internal sealed class BrowserApiTransform(IAntiforgery antiforgery) : RequestTra
             }
         }
 
-        var result = await http.GetUserAccessTokenAsync(ct: http.RequestAborted);
+        var result = await http.GetUserAccessTokenAsync(
+            new UserTokenRequestParameters
+            {
+                SignInScheme = Scheme.Parse(CookieAuthenticationDefaults.AuthenticationScheme)
+            },
+            ct: http.RequestAborted);
         if (!result.Succeeded)
         {
             http.Response.StatusCode = StatusCodes.Status401Unauthorized;

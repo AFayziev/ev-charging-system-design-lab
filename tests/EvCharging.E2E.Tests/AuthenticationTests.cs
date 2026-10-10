@@ -69,7 +69,7 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
             await page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
             await Expect(page).ToHaveURLAsync(
-                new Uri(frontend, username == "driver" ? "/stations" : "/operator").AbsoluteUri);
+                new Uri(frontend, "/stations").AbsoluteUri);
 
             await Expect(page.GetByRole(
                 AriaRole.Link,
@@ -228,15 +228,17 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
             await page.GetByLabel("Password", new() { Exact = true }).FillAsync(replacementPassword);
             await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
             await Expect(page).ToHaveURLAsync(
-                new Uri(frontend, replacement == "driver" ? "/stations" : "/operator").AbsoluteUri);
+                new Uri(frontend, "/stations").AbsoluteUri);
             var replaced = await page.EvaluateAsync<string>(
                 "async () => (await (await fetch('/auth/session')).json()).user.username");
             Assert.Equal(replacement, replaced);
 
             await page.GetByRole(AriaRole.Button, new() { Name = "Account menu" }).ClickAsync();
             await page.GetByRole(AriaRole.Menuitem, new() { Name = "Sign out" }).ClickAsync();
-            await page.WaitForURLAsync(new Uri(frontend, "/").AbsoluteUri);
-            await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Welcome to EV Charging" }))
+            await page.WaitForURLAsync(new Uri(frontend, "/stations").AbsoluteUri);
+            await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Find a station" }))
+                .ToBeVisibleAsync();
+            await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Sign in", Exact = true }))
                 .ToBeVisibleAsync();
             var signedOut = await page.EvaluateAsync<bool>(
                 "async () => (await (await fetch('/auth/session')).json()).signedIn");

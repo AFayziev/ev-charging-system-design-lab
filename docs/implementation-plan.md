@@ -63,7 +63,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M12 | Managed PostgreSQL pooling, replication, and failover | M04; charging failover requires M08 | Planned |
 | M13 | Complete lab demonstrations and fault verification | M01–M12; hosted email gate M05.06 | Planned |
 
-M04.01 is the first charging-domain feature: an authenticated driver browses
+M04.01 is the first charging-domain feature: a visitor browses
 stations and equipment from the seeded relational data. Notifications, live
 updates, discovery, and media add independent consumers to established flows.
 The hosted email, files/CDN, and managed-database exercises have independent
@@ -218,11 +218,12 @@ owners and migration histories. Reset preserves authentication data.
 
 ### M04 — Station browsing and operator edits
 
-- [x] M04.01 Deliver driver station browsing: station list/detail API contracts,
+- [x] M04.01 Deliver public station browsing: station list/detail API contracts,
   gateway routes, frontend catalog/detail screens, and loading, empty, missing,
   and failure states. Introduce the long-lived Npgsql read data source and
   no-tracking EF Core queries with bounded waits and pool telemetry. Verify the
-  authenticated browser-to-database flow, read-route permissions, and database
+  anonymous and authenticated browser-to-database flows, read-route permissions,
+  session-discovery failure isolation, and database
   unavailability through the feature.
 - [ ] M04.02 Deliver assigned-operator station editing: edit forms, validated API
   commands, station-assignment authorization, and persisted audit records.
@@ -235,7 +236,7 @@ owners and migration histories. Reset preserves authentication data.
   aggregate client-pool budgets, saturation, bounded rejection, and recovery.
   Depends on M04.01 and M04.02.
 
-Acceptance: a signed-in driver browses seeded equipment and an assigned operator
+Acceptance: visitors browse seeded equipment and an assigned operator
 edits station content. Read and write routes use separate pools. Permission and
 dependency failures are visible without reporting unsuccessful writes as saved.
 

@@ -8,21 +8,22 @@ import {
   Container,
   Group,
   Menu,
+  Loader,
   Stack,
   Text,
   Title,
   UnstyledButton,
 } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
 import { IconBolt, IconChevronDown, IconLogout } from "@tabler/icons-react";
 import {
   Link,
   NavLink,
+  Navigate,
   Route,
   Routes,
   useLocation,
-  useNavigate,
+  matchPath,
 } from "react-router";
 import classes from "./App.module.css";
 import { AppLoading } from "./AppLoading";
@@ -34,50 +35,38 @@ const SentryRoutes = wrapReactRouterRouting(Routes);
 
 export function App() {
   const location = useLocation();
-  const navigate = useNavigate();
   const session = useQuery(sessionQuery);
-  const roles = session.data?.user?.roles ?? [];
-  const homePath =
-    session.isSuccess && session.data.signedIn
-      ? roles.includes(PlatformRole.Driver)
-        ? "/stations"
-        : roles.includes(PlatformRole.Operator)
-          ? "/operator"
-          : null
-      : null;
-
-  useEffect(() => {
-    if (location.pathname === "/" && homePath) {
-      void navigate(homePath, { replace: true });
-    }
-  }, [homePath, location.pathname, navigate]);
-
-  if (session.isPending || (location.pathname === "/" && homePath)) {
-    return <AppLoading />;
-  }
+  const currentSession = session.isSuccess ? session.data : undefined;
+  const roles = currentSession?.user?.roles ?? [];
+  const currentUrl = location.pathname + location.search + location.hash;
+  const logoutReturnUrl =
+    matchPath("/stations", location.pathname) ||
+    matchPath("/stations/:stationId", location.pathname)
+      ? currentUrl
+      : "/stations";
 
   const signIn = (
     <Button
       component="a"
-      href={`/auth/login?returnUrl=${encodeURIComponent(location.pathname + location.search + location.hash)}`}
+      size="sm"
+      className={`${classes.account} ${classes.accountAction}`}
+      href={`/auth/login?returnUrl=${encodeURIComponent(currentUrl)}`}
     >
       Sign in
     </Button>
   );
-  const area = (
-    role: PlatformRole,
-    title: string,
-    content?: React.ReactNode,
-  ) =>
-    session.isError ? (
+  const area = (role: PlatformRole, title: string) =>
+    session.isPending ? (
+      <AppLoading />
+    ) : session.isError ? (
       <Stack>
         <Text role="alert">Unable to check your session.</Text>
         <Button onClick={() => void session.refetch()}>Try again</Button>
       </Stack>
-    ) : !session.data?.signedIn ? (
+    ) : !currentSession?.signedIn ? (
       <Stack>
         <Title order={1}>Sign in to continue</Title>
-        {signIn}
+        <Text>Use Sign in in the header to access this area.</Text>
       </Stack>
     ) : !roles.includes(role) ? (
       <Stack>
@@ -85,12 +74,10 @@ export function App() {
         <Text>You do not have permission to access this area.</Text>
       </Stack>
     ) : (
-      (content ?? (
-        <Stack>
-          <Title order={1}>{title}</Title>
-          <Text c="dimmed">No activity to display yet.</Text>
-        </Stack>
-      ))
+      <Stack>
+        <Title order={1}>{title}</Title>
+        <Text c="dimmed">No activity to display yet.</Text>
+      </Stack>
     );
 
   return (
@@ -112,16 +99,14 @@ export function App() {
               EV Charging
             </Anchor>
             <nav className={classes.navigation} aria-label="Main navigation">
-              {roles.includes(PlatformRole.Driver) && (
-                <Anchor
-                  component={NavLink}
-                  to="/stations"
-                  className={classes.navLink}
-                  underline="never"
-                >
-                  Stations
-                </Anchor>
-              )}
+              <Anchor
+                component={NavLink}
+                to="/stations"
+                className={classes.navLink}
+                underline="never"
+              >
+                Stations
+              </Anchor>
               {roles.includes(PlatformRole.Operator) && (
                 <Anchor
                   component={NavLink}
@@ -133,11 +118,37 @@ export function App() {
                 </Anchor>
               )}
             </nav>
-            {session.data?.signedIn && (
+            {session.isPending ? (
+              <Group
+                className={classes.account}
+                gap="xs"
+                role="status"
+                aria-label="Loading account"
+              >
+                <Loader size="xs" />
+                <Text size="sm" visibleFrom="sm">
+                  Loading account
+                </Text>
+              </Group>
+            ) : session.isError ? (
+              <Stack className={classes.account} gap={2} align="flex-end">
+                <Text size="xs" role="alert">
+                  Account unavailable
+                </Text>
+                <Button
+                  size="compact-xs"
+                  variant="subtle"
+                  loading={session.isFetching}
+                  onClick={() => void session.refetch()}
+                >
+                  Try again
+                </Button>
+              </Stack>
+            ) : currentSession?.signedIn ? (
               <Menu position="bottom-end" width={220} shadow="md">
                 <Menu.Target>
                   <UnstyledButton
-                    className={classes.account}
+                    className={`${classes.account} ${classes.accountAction} ${classes.accountMenu}`}
                     aria-label="Account menu"
                   >
                     <Group gap="xs" wrap="nowrap">
@@ -148,15 +159,16 @@ export function App() {
                         aria-hidden="true"
                       >
                         {(
-                          session.data.user?.name ??
-                          session.data.user?.username ??
+                          currentSession.user?.name ??
+                          currentSession.user?.username ??
                           ""
                         )
                           .slice(0, 1)
                           .toUpperCase()}
                       </Avatar>
                       <Text size="sm" visibleFrom="sm" maw={180} truncate>
-                        {session.data.user?.name ?? session.data.user?.username}
+                        {currentSession.user?.name ??
+                          currentSession.user?.username}
                       </Text>
                       <IconChevronDown size={16} aria-hidden="true" />
                     </Group>
@@ -164,13 +176,16 @@ export function App() {
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Label hiddenFrom="sm">
-                    {session.data.user?.name ?? session.data.user?.username}
+                    {currentSession.user?.name ?? currentSession.user?.username}
                   </Menu.Label>
-                  <form method="post" action="/auth/logout?returnUrl=/">
+                  <form
+                    method="post"
+                    action={`/auth/logout?returnUrl=${encodeURIComponent(logoutReturnUrl)}`}
+                  >
                     <input
                       type="hidden"
                       name="__RequestVerificationToken"
-                      value={session.data.antiforgeryToken ?? ""}
+                      value={currentSession.antiforgeryToken ?? ""}
                     />
                     <Menu.Item
                       type="submit"
@@ -182,53 +197,20 @@ export function App() {
                   </form>
                 </Menu.Dropdown>
               </Menu>
+            ) : (
+              signIn
             )}
           </div>
         </Container>
       </AppShell.Header>
-      <AppShell.Main>
+      <AppShell.Main className={classes.main}>
         <Container size="lg" px={{ base: 0, sm: "md" }}>
           <SentryRoutes>
-            <Route
-              path="/"
-              element={
-                <Stack>
-                  <Title order={1}>Welcome to EV Charging</Title>
-                  <Text c="dimmed">
-                    A shared workspace for drivers and operators.
-                  </Text>
-                  {session.isError ? (
-                    <Stack>
-                      <Text role="alert">Unable to check your session.</Text>
-                      <Button onClick={() => void session.refetch()}>
-                        Try again
-                      </Button>
-                    </Stack>
-                  ) : !session.data?.signedIn ? (
-                    signIn
-                  ) : (
-                    <Text>
-                      Your account does not have access to a workspace.
-                    </Text>
-                  )}
-                </Stack>
-              }
-            />
-            <Route
-              path="/stations"
-              element={area(
-                PlatformRole.Driver,
-                "Stations",
-                <StationListPage />,
-              )}
-            />
+            <Route path="/" element={<Navigate to="/stations" replace />} />
+            <Route path="/stations" element={<StationListPage />} />
             <Route
               path="/stations/:stationId"
-              element={area(
-                PlatformRole.Driver,
-                "Station",
-                <StationDetailPage />,
-              )}
+              element={<StationDetailPage />}
             />
             <Route
               path="/operator"
@@ -249,6 +231,18 @@ export function App() {
           </SentryRoutes>
         </Container>
       </AppShell.Main>
+      <footer className={classes.footer}>
+        <Container size="lg" px={{ base: 0, sm: "md" }}>
+          <Group justify="space-between" gap="xs">
+            <Text size="xs" fw={500} c="dimmed">
+              EV Charging
+            </Text>
+            <Text size="xs" c="dimmed">
+              System design lab
+            </Text>
+          </Group>
+        </Container>
+      </footer>
     </AppShell>
   );
 }

@@ -4,9 +4,23 @@
   --app-hover-transition: background-color 150ms ease, color 150ms ease;
   --mantine-color-dimmed: var(--app-muted-color);
 
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
   min-width: var(--app-min-width);
   background: var(--app-background);
   color: #273444;
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+}
+
+.footer {
+  border-top: 1px solid var(--mantine-color-gray-3);
+  padding: var(--mantine-spacing-md) var(--app-shell-padding);
+  background: var(--mantine-color-gray-1);
 }
 
 .appHeader {
@@ -59,7 +73,7 @@
 }
 
 .navLink,
-.account {
+.accountMenu {
   transition: var(--app-hover-transition);
 }
 
@@ -69,7 +83,7 @@
   }
 
   .navLink:hover,
-  .account:hover {
+  .accountMenu:hover {
     background: var(--app-hover-background);
     color: var(--app-hover-color);
   }
@@ -77,7 +91,13 @@
 
 .account {
   min-width: 0;
+}
+
+.accountAction {
   min-height: 44px;
+}
+
+.accountMenu {
   padding: 4px 8px;
   border-radius: var(--mantine-radius-sm);
 }

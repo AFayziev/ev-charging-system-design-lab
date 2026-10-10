@@ -1,5 +1,4 @@
 using EvCharging.Api.Errors;
-using EvCharging.Contracts;
 using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace EvCharging.Api.Features.Stations;
@@ -8,9 +7,9 @@ internal static class StationEndpoints
 {
     public static WebApplication MapStationBrowsing(this WebApplication app)
     {
-        var stations = app.MapGroup("/stations").RequireAuthorization(PlatformRole.Driver.ToClaimValue());
-        stations.MapGet("/", List);
-        stations.MapGet("/{id:guid}", Detail);
+        var stations = app.MapGroup("/stations");
+        stations.MapGet("/", List).AllowAnonymous();
+        stations.MapGet("/{id:guid}", Detail).AllowAnonymous();
         return app;
     }
 
