@@ -31,8 +31,10 @@ import { StationListPage } from "@/features/stations/components/StationListPage"
 import { StationDetailPage } from "@/features/stations/components/StationDetailPage";
 import { StationEditPage } from "@/features/stations/components/StationEditPage";
 import { AssignedStationsPage } from "@/features/stations/components/AssignedStationsPage";
+import { ReservationsPage } from "@/features/reservations/components/ReservationsPage";
+
 import { PageHeading } from "@/components/PageHeading";
-import type { ReactNode } from "react";
+import { Activity, type ReactNode } from "react";
 import { getSignInUrl, sessionQuery } from "@/features/auth/api";
 
 const SentryRoutes = wrapReactRouterRouting(Routes);
@@ -60,29 +62,35 @@ export function App() {
     </Button>
   );
   const area = (role: PlatformRole, content: ReactNode) => {
-    if (session.isPending) return <AppLoading />;
-    if (session.isError)
-      return (
+    let fallback: ReactNode = null;
+    if (session.isPending) fallback = <AppLoading />;
+    else if (session.isError)
+      fallback = (
         <Stack>
           <Text role="alert">Unable to check your session.</Text>
           <Button onClick={() => void session.refetch()}>Try again</Button>
         </Stack>
       );
-    if (!currentSession?.signedIn)
-      return (
+    else if (!currentSession?.signedIn)
+      fallback = (
         <PageHeading
           title="Sign in to continue"
           description="Use Sign in in the header to access this area."
         />
       );
-    if (!roles.includes(role))
-      return (
+    else if (!roles.includes(role))
+      fallback = (
         <PageHeading
           title="Access denied"
           description="You do not have permission to access this area."
         />
       );
-    return content;
+    return (
+      <>
+        {fallback}
+        <Activity mode={fallback ? "hidden" : "visible"}>{content}</Activity>
+      </>
+    );
   };
 
   return (
@@ -120,6 +128,16 @@ export function App() {
                   underline="never"
                 >
                   Operator area
+                </Anchor>
+              )}
+              {roles.includes(PlatformRole.Driver) && (
+                <Anchor
+                  component={NavLink}
+                  to="/reservations"
+                  className={classes.navLink}
+                  underline="never"
+                >
+                  My reservations
                 </Anchor>
               )}
             </nav>
@@ -228,6 +246,10 @@ export function App() {
             <Route
               path="/operator"
               element={area(PlatformRole.Operator, <AssignedStationsPage />)}
+            />
+            <Route
+              path="/reservations"
+              element={area(PlatformRole.Driver, <ReservationsPage />)}
             />
             <Route
               path="/stations/:stationId/edit"

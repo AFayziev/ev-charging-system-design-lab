@@ -1,13 +1,15 @@
 import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
 import "@mantine/core/styles.css";
+import "@mantine/dates/styles.css";
 import { MantineProvider, Text, Title, createTheme } from "@mantine/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
+import { createAppQueryClient } from "./query-client";
 
-const queryClient = new QueryClient();
+const queryClient = createAppQueryClient();
 const fontFamily = '"Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif';
 const theme = createTheme({
   primaryColor: "teal",

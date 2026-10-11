@@ -1,10 +1,10 @@
-namespace EvCharging.Persistence.Entities;
+namespace EvCharging.Domain.Equipment;
 
 public sealed class Connector
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
     public Guid PublicId { get; set; }
-    public long EvseId { get; set; }
+    public Guid EvseId { get; set; }
     public int Number { get; set; }
     public required string ConnectorType { get; set; }
     public required string PowerSupply { get; set; }

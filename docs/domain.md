@@ -97,6 +97,10 @@ Slots use UTC half-open intervals `[start, end)`; adjacent intervals do not over
 Applicable reservations for the same connector cannot overlap. Simulators receive
 charging commands, not external reservation requests.
 
+Booking admission requires finite instants, an end after the start, and an end
+after the current UTC time. A slot that has already started can be booked while
+its end remains in the future; no lead-time or duration limit applies.
+
 | State | Meaning |
 |---|---|
 | Active | Accepted allocation not cancelled, consumed, or expired |
@@ -267,6 +271,9 @@ injected; infrastructure time synchronization is outside scope.
 | `observationId` | Platform observation-envelope identity |
 | Source event ID | Provider event identity under its integration contract |
 | Correlation ID | Links workflow records; does not deduplicate effects |
+
+Resource IDs in public contracts identify resources independently of internal
+storage keys.
 
 The same external ID can exist at different charging providers. Equal measurement values
 can represent distinct events.

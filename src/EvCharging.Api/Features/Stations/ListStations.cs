@@ -1,14 +1,12 @@
 using EvCharging.Api.Errors;
+using EvCharging.Api.Pagination;
 using EvCharging.Persistence;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
 
-internal sealed record ListStationsRequest(Guid? AfterId = null, int Limit = 20)
-{
-    public const int MaximumPageSize = 50;
-}
+internal sealed record ListStationsRequest(Guid? AfterId = null, int Limit = CursorPagination.DefaultPageSize);
 
 internal sealed record StationListResponse(IReadOnlyList<StationSummaryResponse> Stations, Guid? NextAfterId);
 
@@ -30,12 +28,12 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
         CancellationToken cancellationToken)
     {
         var errors = new List<ValidationError>();
-        long afterId = 0;
+        Guid afterId = Guid.Empty;
         if (request.AfterId is { } cursor)
         {
             var anchorId = await database.Stations
                 .Where(station => station.PublicId == cursor)
-                .Select(station => (long?)station.Id)
+                .Select(station => (Guid?)station.Id)
                 .SingleOrDefaultAsync(cancellationToken);
             if (anchorId is null)
             {
@@ -48,12 +46,9 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
             }
         }
 
-        if (request.Limit is < 1 or > ListStationsRequest.MaximumPageSize)
+        if (CursorPagination.ValidateLimit(request.Limit, nameof(request.Limit)) is { } error)
         {
-            errors.Add(
-                new ValidationError(
-                    nameof(request.Limit),
-                    $"The limit must be between 1 and {ListStationsRequest.MaximumPageSize}."));
+            errors.Add(error);
         }
 
         if (errors.Count > 0)
@@ -63,7 +58,7 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
 
         var stations = await database.Stations
             .AsNoTracking()
-            .Where(station => station.Id > afterId)
+            .Where(station => station.Id.CompareTo(afterId) > 0)
             .OrderBy(station => station.Id)
             .Take(request.Limit + 1)
             .Select(
@@ -78,15 +73,11 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
                         .ToList()
                 })
             .ToListAsync(cancellationToken);
-        bool hasMore = stations.Count > request.Limit;
-        if (hasMore)
-        {
-            stations.RemoveAt(request.Limit);
-        }
+        var nextAfterId = CursorPagination.TrimPage(stations, request.Limit, item => item.Station.PublicId);
 
         var summaries = stations
             .Select(item => item.Station.ToResponse(item.ChargerCount, item.EvseCount, item.Connectors))
             .ToArray();
-        return Result.Ok(new StationListResponse(summaries, hasMore ? stations[^1].Station.PublicId : null));
+        return Result.Ok(new StationListResponse(summaries, nextAfterId));
     }
 }

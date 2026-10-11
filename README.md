@@ -136,6 +136,23 @@ dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.
 
 - [Reset scope and synthetic fixtures](docs/lab.md#211-synthetic-fixtures).
 
+### Backend checks
+
+1. Remove unused `using`s and apply formatting:
+
+   ```sh
+   dotnet format style EvChargingSystemDesign.slnx --no-restore --diagnostics IDE0005 --severity info
+   dotnet format EvChargingSystemDesign.slnx --no-restore
+   ```
+
+2. Verify cleanup, formatting, and build:
+
+   ```sh
+   dotnet format style EvChargingSystemDesign.slnx --no-restore --diagnostics IDE0005 --severity info --verify-no-changes
+   dotnet format EvChargingSystemDesign.slnx --no-restore --verify-no-changes
+   dotnet build EvChargingSystemDesign.slnx --no-restore
+   ```
+
 ### Frontend checks
 
 1. Restore dependencies:
@@ -208,7 +225,7 @@ dotnet test tests/EvCharging.Persistence.Tests
 
 ## Documentation
 
-- [C# coding conventions](docs/csharp-conventions.md)
+- [Backend development guidelines](docs/backend-guidelines.md)
 - [Architecture](docs/architecture.md)
 - [Domain reference](docs/domain.md)
 - [External integration contracts](docs/integrations.md)

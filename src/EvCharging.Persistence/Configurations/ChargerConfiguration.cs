@@ -1,4 +1,4 @@
-using EvCharging.Persistence.Entities;
+using EvCharging.Domain.Equipment;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,8 +8,7 @@ internal sealed class ChargerConfiguration : IEntityTypeConfiguration<Charger>
 {
     public void Configure(EntityTypeBuilder<Charger> entity)
     {
-        entity.Property(charger => charger.PublicId).HasDefaultValueSql("gen_random_uuid()");
-        entity.HasIndex(charger => charger.PublicId).IsUnique();
+        entity.HasPublicId(charger => charger.PublicId);
 
         entity.HasOne(charger => charger.Station)
             .WithMany(station => station.Chargers)

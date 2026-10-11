@@ -8,7 +8,7 @@ namespace EvCharging.Gateway.Tests;
 
 public sealed class AuthenticationDatabaseFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17.11-bookworm").Build();
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.6-bookworm").Build();
 
     public string ConnectionString => _postgres.GetConnectionString();
 

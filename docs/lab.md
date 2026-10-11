@@ -20,7 +20,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | API gateway | YARP |
 | Identity | Keycloak; gateway-owned OIDC Authorization Code with PKCE, using ASP.NET Core OpenID Connect and cookie authentication |
 | Live delivery | SignalR .NET/JavaScript clients; StackExchange.Redis backplane on Valkey |
-| Relational access / pooling | PostgreSQL 17; EF Core 10/Npgsql provider and long-lived Npgsql data sources; managed PgBouncer in Azure |
+| Relational access / pooling | PostgreSQL 18; EF Core 10/Npgsql provider and long-lived Npgsql data sources; managed PgBouncer in Azure |
 | Auditing | EF Core save interception; PostgreSQL JSONB; [audit design](architecture.md#41-audit-history) |
 | Application outcomes | FluentResults typed results |
 | Managed database exercise | Azure Database for PostgreSQL Flexible Server; readable replica and provider-managed HA |
@@ -68,8 +68,8 @@ API endpoints are available through the gateway under `/api`.
 PostgreSQL range/exclusion constraints with `btree_gist` enforce booking conflicts.
 Session claims use conditional updates/constraints; operation identity has a unique
 constraint. These mechanisms enforce the [domain rules](domain.md#5-reservations).
-[Range constraints](https://www.postgresql.org/docs/17/rangetypes.html#RANGETYPES-CONSTRAINT),
-[btree_gist](https://www.postgresql.org/docs/17/btree-gist.html)
+[Range constraints](https://www.postgresql.org/docs/18/rangetypes.html#RANGETYPES-CONSTRAINT),
+[btree_gist](https://www.postgresql.org/docs/18/btree-gist.html)
 
 The local baseline uses one application database without a replica or server
 pooler. Logical routes remain separate across environments:

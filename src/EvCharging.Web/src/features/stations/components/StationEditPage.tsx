@@ -17,7 +17,7 @@ import { createPath, Link, useLocation, useParams } from "react-router";
 import { BackLink } from "@/components/BackLink";
 import { PageHeading } from "@/components/PageHeading";
 import { getSignInUrl, sessionQuery } from "@/features/auth/api";
-import { getHttpStatus, getValidationErrors } from "@/lib/http-errors";
+import { getHttpStatus, getFormValidationErrors } from "@/lib/http-errors";
 import {
   getStationEditFailure,
   getStationEditorLoadFailure,
@@ -124,15 +124,9 @@ function StationEditForm({
     },
     onError: (error) => {
       if (getHttpStatus(error) === HttpStatusCode.BadRequest) {
-        const errors = getValidationErrors(error);
+        const errors = getFormValidationErrors(error);
         if (errors) {
-          const fieldErrors = Object.fromEntries(
-            Object.entries(errors).map(([key, errors]) => [
-              key.charAt(0).toLowerCase() + key.slice(1),
-              errors.join(" "),
-            ]),
-          );
-          form.setErrors(fieldErrors);
+          form.setErrors(errors);
         }
       }
     },

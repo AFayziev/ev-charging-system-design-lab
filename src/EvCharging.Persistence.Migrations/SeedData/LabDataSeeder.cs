@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EvCharging.Domain.Equipment;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,7 +37,7 @@ public static class LabDataSeeder
 
         await context.SaveChangesAsync(cancellationToken);
 
-        var assignedStationIds = new List<long>();
+        var assignedStationIds = new List<Guid>();
         assignedStationIds.Add(await SeedStationAsync(
             context,
             "Synchronous Charging Provider",
@@ -164,7 +165,7 @@ public static class LabDataSeeder
             .Select(assignment => assignment.StationId)
             .ToListAsync(cancellationToken);
         var missingAssignments = assignedStationIds.Except(existingAssignments);
-        foreach (long stationId in missingAssignments)
+        foreach (Guid stationId in missingAssignments)
         {
             context.OperatorAssignments.Add(new() { OperatorUserId = operatorUser.Id, StationId = stationId });
         }
@@ -177,7 +178,7 @@ public static class LabDataSeeder
         .GetProperty("id")
         .GetString() ?? throw new InvalidOperationException($"The {role} seed user requires a subject ID.");
 
-    private static async Task<long> SeedStationAsync(
+    private static async Task<Guid> SeedStationAsync(
         PlatformDbContext context,
         string providerName,
         string externalStationId,

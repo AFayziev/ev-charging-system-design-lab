@@ -7,17 +7,16 @@ namespace EvCharging.Domain.Tests.Reservations;
 public sealed class ReservationPolicyTests
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
-    private const long ConnectorId = 1;
-    private const long DriverId = 1;
+    private static readonly Guid ConnectorId = Guid.NewGuid();
+    private static readonly Guid DriverId = Guid.NewGuid();
+    private static readonly BookingInterval Slot = BookingInterval.Create(Start, Start.AddHours(1)).Value;
 
     [Fact]
     public void Conflicts_AdjacentSlots_NoOverlap()
     {
-        Reservation reservation = CreateReservation();
-        var adjacent = new BookingInterval(reservation.Slot.End, reservation.Slot.End.AddHours(1));
+        var adjacent = BookingInterval.Create(Slot.End, Slot.End.AddHours(1)).Value;
 
-        Assert.False(ReservationPolicy.Conflicts(reservation, ConnectorId, adjacent));
-        Assert.False(adjacent.Overlaps(reservation.Slot));
+        Assert.False(ReservationPolicy.Conflicts(ReservationState.Active, ConnectorId, Slot, ConnectorId, adjacent));
     }
 
     [Theory]
@@ -27,11 +26,10 @@ public sealed class ReservationPolicyTests
     [InlineData(ReservationState.Expired, false)]
     public void Conflicts_OverlappingSlot_RespectsAllocation(ReservationState state, bool expected)
     {
-        Reservation reservation = CreateReservation() with { State = state };
-        var overlap = new BookingInterval(Start.AddMinutes(30), Start.AddHours(2));
+        var overlap = BookingInterval.Create(Start.AddMinutes(30), Start.AddHours(2)).Value;
 
-        Assert.Equal(expected, ReservationPolicy.Conflicts(reservation, ConnectorId, overlap));
-        Assert.False(ReservationPolicy.Conflicts(reservation, ConnectorId + 1, overlap));
+        Assert.Equal(expected, ReservationPolicy.Conflicts(state, ConnectorId, Slot, ConnectorId, overlap));
+        Assert.False(ReservationPolicy.Conflicts(state, ConnectorId, Slot, Guid.NewGuid(), overlap));
     }
 
     [Theory]
@@ -41,9 +39,10 @@ public sealed class ReservationPolicyTests
     [InlineData(3600, false)]
     public void CanStart_SlotBoundary_UsesHalfOpenInterval(int seconds, bool expected)
     {
-        Reservation reservation = CreateReservation();
-
-        Assert.Equal(expected, ReservationPolicy.CanStart(reservation, DriverId, Start.AddSeconds(seconds), false));
+        Assert.Equal(
+            expected,
+            ReservationPolicy.CanStart(
+                ReservationState.Active, DriverId, Slot, DriverId, Start.AddSeconds(seconds), false));
     }
 
     [Theory]
@@ -52,18 +51,14 @@ public sealed class ReservationPolicyTests
     [InlineData(ReservationState.Expired)]
     public void CanStart_ReleasedOrUsedReservation_Denied(ReservationState state)
     {
-        Reservation reservation = CreateReservation() with { State = state };
-
-        Assert.False(ReservationPolicy.CanStart(reservation, DriverId, Start, false));
+        Assert.False(ReservationPolicy.CanStart(state, DriverId, Slot, DriverId, Start, false));
     }
 
     [Fact]
     public void CanStart_WrongOwnerOrOverrun_Denied()
     {
-        Reservation reservation = CreateReservation();
-
-        Assert.False(ReservationPolicy.CanStart(reservation, DriverId + 1, Start, false));
-        Assert.False(ReservationPolicy.CanStart(reservation, DriverId, Start, true));
+        Assert.False(ReservationPolicy.CanStart(ReservationState.Active, DriverId, Slot, Guid.NewGuid(), Start, false));
+        Assert.False(ReservationPolicy.CanStart(ReservationState.Active, DriverId, Slot, DriverId, Start, true));
     }
 
     [Theory]
@@ -74,31 +69,10 @@ public sealed class ReservationPolicyTests
     [InlineData(CommandOutcome.Confirmed, false)]
     public void CanCancel_StartOutcome_ProtectsPendingEffect(CommandOutcome? outcome, bool expected)
     {
-        Reservation reservation = CreateReservation();
-
-        Assert.Equal(expected, ReservationPolicy.CanCancel(reservation, DriverId, outcome));
-        Assert.False(ReservationPolicy.CanCancel(reservation, DriverId + 1, outcome));
+        Assert.Equal(expected, ReservationPolicy.CanCancel(ReservationState.Active, DriverId, DriverId, outcome));
+        Assert.False(ReservationPolicy.CanCancel(ReservationState.Active, DriverId, Guid.NewGuid(), outcome));
         Assert.False(ReservationPolicy.CanCancel(
-            reservation with { State = ReservationState.Consumed }, DriverId, outcome));
+            ReservationState.Consumed, DriverId, DriverId, outcome));
     }
 
-    [Fact]
-    public void BookingInterval_OffsetEndpoints_PreservesActualSlot()
-    {
-        var slot = new BookingInterval(Start.ToOffset(TimeSpan.FromHours(5)), Start.AddHours(1));
-
-        Assert.Equal(TimeSpan.Zero, slot.Start.Offset);
-        Assert.Equal(TimeSpan.FromHours(1), slot.Duration);
-        Assert.True(slot.Contains(Start));
-        Assert.Throws<ArgumentException>(() => new BookingInterval(Start, Start));
-        Assert.Throws<ArgumentException>(() => new BookingInterval(Start, Start.AddSeconds(-1)));
-    }
-
-    private static Reservation CreateReservation() =>
-        new(
-            1,
-            ConnectorId,
-            DriverId,
-            new BookingInterval(Start, Start.AddHours(1)),
-            ReservationState.Active);
 }

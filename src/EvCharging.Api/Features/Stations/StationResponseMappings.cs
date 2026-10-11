@@ -1,4 +1,4 @@
-using EvCharging.Persistence.Entities;
+using EvCharging.Domain.Equipment;
 
 namespace EvCharging.Api.Features.Stations;
 

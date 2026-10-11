@@ -13,11 +13,15 @@ public sealed class AuditEntryWriter(
         PlatformDbContext database,
         AuditAction action,
         AuditResourceType resourceType,
-        long resourceId,
+        Guid resourceId,
         TDetails details,
         int detailsVersion)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(resourceId);
+        if (resourceId == Guid.Empty)
+        {
+            throw new ArgumentException("An audit resource ID is required.", nameof(resourceId));
+        }
+
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(detailsVersion);
         var actor = actors.GetActor();
         var audit = new AuditEntry

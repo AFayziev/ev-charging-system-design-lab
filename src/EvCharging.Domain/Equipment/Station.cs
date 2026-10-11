@@ -1,10 +1,10 @@
-using EvCharging.Persistence.Auditing;
+using EvCharging.Domain.Auditing;
 
-namespace EvCharging.Persistence.Entities;
+namespace EvCharging.Domain.Equipment;
 
 public sealed class Station : IAuditableEntity
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
     public Guid PublicId { get; set; }
     public uint Version { get; set; }
     public required string Name { get; set; }

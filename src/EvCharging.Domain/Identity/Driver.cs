@@ -1,8 +1,8 @@
-namespace EvCharging.Persistence.Entities;
+namespace EvCharging.Domain.Identity;
 
 public sealed class Driver
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
     public required string IdentityIssuer { get; set; }
     public required string IdentitySubject { get; set; }
 }

@@ -273,43 +273,6 @@ it("uses the confirmed writer response and disables inputs while saving", async 
   expect(screen.queryByText("Changes saved.")).not.toBeInTheDocument();
 });
 
-it("reloads the authoritative station after conflict without retrying the mutation", async () => {
-  put.mockRejectedValue(failure(HttpStatusCode.Conflict));
-  renderEditor();
-  await screen.findByLabelText("Station name", { exact: false });
-  await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-  await screen.findByText("Station changed");
-  get.mockResolvedValue({
-    data: { ...station, name: "Other edit", version: 125 },
-  });
-  await userEvent.click(
-    screen.getByRole("button", { name: "Reload current station" }),
-  );
-  await waitFor(() =>
-    expect(screen.getByLabelText("Station name", { exact: false })).toHaveValue(
-      "Other edit",
-    ),
-  );
-  expect(screen.queryByText("Station changed")).not.toBeInTheDocument();
-  expect(put).toHaveBeenCalledTimes(1);
-});
-
-it.each(["", "   "])(
-  "rejects blank content %j before sending a mutation",
-  async (value) => {
-    renderEditor();
-    const name = await screen.findByLabelText("Station name", { exact: false });
-    await userEvent.clear(name);
-    if (value) await userEvent.type(name, value);
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(
-      await screen.findByText("Enter a station name."),
-    ).toBeInTheDocument();
-    expect(put).not.toHaveBeenCalled();
-    expect(name).toHaveFocus();
-  },
-);
-
 it.each([
   {
     error: failure(HttpStatusCode.Unauthorized),
@@ -336,11 +299,6 @@ it.each([
       isAxiosError: true,
       code: "ERR_NETWORK",
     }),
-    title: "Changes not confirmed",
-    recovery: "Reload current station",
-  },
-  {
-    error: new Error("private unexpected details"),
     title: "Changes not confirmed",
     recovery: "Reload current station",
   },

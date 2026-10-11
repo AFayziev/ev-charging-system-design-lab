@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Persistence;
+using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
-using EvCharging.Persistence.Entities;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;

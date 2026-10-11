@@ -1,0 +1,125 @@
+.card {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 12px 20px;
+  padding: 14px 16px;
+  border-color: #dfe5ea;
+}
+
+.card[data-active="true"] {
+  grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
+  padding: 18px;
+}
+
+.card[data-highlighted="true"] {
+  border-color: var(--mantine-color-teal-7);
+  background: var(--mantine-color-teal-0);
+}
+
+.photo {
+  width: 100%;
+  height: 64px;
+}
+
+.photo img {
+  min-height: 0;
+}
+
+.photo figcaption {
+  font-size: 8px;
+  padding: 2px;
+}
+
+.card[data-active="true"] .photo {
+  grid-row: 1 / 3;
+  height: 104px;
+}
+
+.station {
+  min-width: 0;
+}
+
+.stationName {
+  color: var(--app-heading-color);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.stationName:hover {
+  color: var(--mantine-color-teal-9);
+}
+
+.equipment,
+.time {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.equipment svg,
+.time svg {
+  flex-shrink: 0;
+  color: var(--mantine-color-teal-9);
+}
+
+.time svg {
+  margin-top: 2px;
+}
+
+.card[data-active="true"] .equipment {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.card[data-active="true"] .slot {
+  grid-column: 3;
+  grid-row: 1 / 3;
+}
+
+@media (max-width: 61.99em) {
+  .card,
+  .card[data-active="true"] {
+    grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .card .photo,
+  .card[data-active="true"] .photo {
+    grid-row: 1 / 3;
+    height: 88px;
+  }
+
+  .equipment {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .card .slot {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+}
+
+@media (max-width: 35.99em) {
+  .card,
+  .card[data-active="true"] {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .card .photo,
+  .card[data-active="true"] .photo {
+    grid-row: 1;
+    height: 72px;
+  }
+
+  .card .equipment,
+  .card[data-active="true"] .equipment,
+  .card .slot,
+  .card[data-active="true"] .slot {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+}

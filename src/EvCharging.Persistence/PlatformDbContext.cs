@@ -1,3 +1,6 @@
+using EvCharging.Domain.Equipment;
+using EvCharging.Domain.Identity;
+using EvCharging.Domain.Reservations;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,7 +8,7 @@ namespace EvCharging.Persistence;
 
 public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : DbContext(options)
 {
-    private const string Schema = "charging";
+    internal const string Schema = "charging";
 
     public DbSet<Station> Stations => Set<Station>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();

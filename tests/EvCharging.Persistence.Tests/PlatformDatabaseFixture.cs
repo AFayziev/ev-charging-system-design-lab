@@ -13,7 +13,7 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
 
     public PlatformDatabaseFixture()
     {
-        _postgres = new PostgreSqlBuilder("postgres:17.11-bookworm")
+        _postgres = new PostgreSqlBuilder("postgres:18.6-bookworm")
             .WithDatabase("evcharging")
             .WithUsername("postgres")
             .WithPassword(_password)

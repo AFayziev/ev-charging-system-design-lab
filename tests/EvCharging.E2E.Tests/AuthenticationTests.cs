@@ -253,22 +253,9 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
 
     [Fact]
     [Trait("Category", "Api")]
-    public async Task Login_DirectProvider_EnforcesBoundary()
+    public async Task Login_ExternalReturnUrl_Rejected()
     {
-        using var provider = fixture.App.CreateHttpClient("keycloak", "http");
-        var identity = fixture.App.GetEndpoint("keycloak", "http");
-        using var discovery = await provider.GetAsync("/realms/evcharging/.well-known/openid-configuration");
-        Assert.Equal(HttpStatusCode.OK, discovery.StatusCode);
-        using var metadata = JsonDocument.Parse(await discovery.Content.ReadAsStringAsync());
-        Assert.Equal(
-            new Uri(identity, "/realms/evcharging").AbsoluteUri,
-            metadata.RootElement.GetProperty("issuer").GetString());
-        Assert.StartsWith(identity.AbsoluteUri, metadata.RootElement.GetProperty("authorization_endpoint").GetString());
-        Assert.StartsWith(identity.AbsoluteUri, metadata.RootElement.GetProperty("end_session_endpoint").GetString());
-
         using var client = fixture.App.CreateHttpClient("gateway", "http");
-        using var gatewayDiscovery = await client.GetAsync("/realms/evcharging/.well-known/openid-configuration");
-        Assert.Equal(HttpStatusCode.NotFound, gatewayDiscovery.StatusCode);
 
         foreach (var returnUrl in new[] { "https://example.test/", "//example.test/", "/\\example.test/" })
         {

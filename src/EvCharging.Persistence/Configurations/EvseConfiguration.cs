@@ -1,4 +1,4 @@
-using EvCharging.Persistence.Entities;
+using EvCharging.Domain.Equipment;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -8,8 +8,7 @@ internal sealed class EvseConfiguration : IEntityTypeConfiguration<Evse>
 {
     public void Configure(EntityTypeBuilder<Evse> entity)
     {
-        entity.Property(evse => evse.PublicId).HasDefaultValueSql("gen_random_uuid()");
-        entity.HasIndex(evse => evse.PublicId).IsUnique();
+        entity.HasPublicId(evse => evse.PublicId);
         entity.HasIndex(evse => new { evse.ChargerId, evse.Number }).IsUnique();
 
         entity.HasOne(evse => evse.Charger)

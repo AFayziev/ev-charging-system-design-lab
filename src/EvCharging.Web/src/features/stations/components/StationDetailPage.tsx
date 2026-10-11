@@ -1,7 +1,9 @@
 import {
   Anchor,
-  Badge,
+  Button,
   Card,
+  Loader,
+  Radio,
   Stack,
   Text,
   ThemeIcon,
@@ -14,11 +16,21 @@ import {
   IconPlug,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
+import { Activity } from "react";
 import { HttpStatusCode } from "axios";
-import { Link, useParams } from "react-router";
+import {
+  createPath,
+  Link,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from "react-router";
 import { BackLink } from "@/components/BackLink";
 import { PageHeading } from "@/components/PageHeading";
 import { getHttpStatus } from "@/lib/http-errors";
+import { getSignInUrl, sessionQuery } from "@/features/auth/api";
+import { PlatformRole } from "@/features/auth/PlatformRole";
+import { BookingForm } from "@/features/reservations/components/BookingForm";
 import { stationDetailQuery } from "../api";
 import { StationPhoto } from "./StationPhoto";
 import {
@@ -31,6 +43,22 @@ import classes from "./Stations.module.css";
 export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
   const { stationId = "" } = useParams();
   const query = useQuery(stationDetailQuery(stationId));
+  const session = useQuery(sessionQuery);
+  const location = useLocation();
+  const [search, setSearch] = useSearchParams();
+  const canBook =
+    session.isSuccess && session.data.user?.roles.includes(PlatformRole.Driver);
+  const connectorId =
+    search.get("connectorId") ??
+    query.data?.chargers
+      .flatMap((charger) => charger.evses)
+      .flatMap((evse) => evse.connectors)[0]?.id ??
+    "";
+  const selectConnector = (id: string) => {
+    const parameters = new URLSearchParams(search);
+    parameters.set("connectorId", id);
+    setSearch(parameters, { replace: true });
+  };
   const missing =
     query.isError && getHttpStatus(query.error) === HttpStatusCode.NotFound;
   const coordinates = query.data
@@ -58,108 +86,160 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
         <div className={classes.detailGrid}>
           <Stack gap="xl">
             <div className={classes.stationHeading}>
-              <PageHeading
-                title={query.data.name}
-                description="Review charging equipment and station access before your visit."
-              >
-                {canEdit && (
-                  <Anchor component={Link} to={`/stations/${stationId}/edit`}>
-                    Edit station
+              <div>
+                <PageHeading
+                  title={query.data.name}
+                  description={
+                    query.data.accessInstructions ||
+                    "No access instructions published."
+                  }
+                >
+                  {canEdit && (
+                    <Anchor component={Link} to={`/stations/${stationId}/edit`}>
+                      Edit station
+                    </Anchor>
+                  )}
+                  <div className={classes.metadata}>
+                    <IconMapPin size={19} aria-hidden="true" />
+                    <Text size="sm">{query.data.address}</Text>
+                  </div>
+                </PageHeading>
+                <div className={classes.stationLinks}>
+                  <div className={classes.metadata}>
+                    <IconClock size={16} aria-hidden="true" />
+                    <Text size="xs">Time zone: {query.data.timeZoneId}</Text>
+                  </div>
+                  <Anchor
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    size="xs"
+                  >
+                    Open in maps
                   </Anchor>
-                )}
-                <div className={classes.metadata}>
-                  <IconMapPin size={19} aria-hidden="true" />
-                  <Text size="sm">{query.data.address}</Text>
                 </div>
-              </PageHeading>
+              </div>
               <StationPhoto />
             </div>
-            <Stack gap="md" id="equipment">
-              <Title order={2} size="h3">
-                Charging equipment
-              </Title>
-              {query.data.chargers.length === 0 && (
-                <Text c="dimmed">No charging equipment listed.</Text>
-              )}
-              {query.data.chargers.map((charger) => (
-                <Card
-                  key={charger.id}
-                  withBorder
-                  className={classes.equipmentCard}
-                >
-                  <div className={classes.chargerHeading}>
-                    <ThemeIcon variant="light" size={32} radius="sm">
-                      <IconChargingPile size={21} aria-hidden="true" />
-                    </ThemeIcon>
-                    <Title order={3} size="h4">
-                      {charger.name}
-                    </Title>
-                  </div>
-                  {charger.evses.length === 0 && (
-                    <Text size="sm" c="dimmed" p="md">
-                      No EVSEs listed.
+            <Radio.Group
+              value={connectorId}
+              onChange={selectConnector}
+              name="station-connector"
+              aria-label="Charging connector"
+            >
+              <Stack gap="md" id="equipment">
+                <Title order={2} size="h3">
+                  Charging equipment
+                </Title>
+                {query.data.chargers.length === 0 && (
+                  <Text c="dimmed">No charging equipment listed.</Text>
+                )}
+                {query.data.chargers.map((charger) => (
+                  <Card
+                    key={charger.id}
+                    withBorder
+                    className={classes.equipmentCard}
+                  >
+                    <div className={classes.chargerHeading}>
+                      <ThemeIcon variant="light" size={32} radius="sm">
+                        <IconChargingPile size={21} aria-hidden="true" />
+                      </ThemeIcon>
+                      <Title order={3} size="h4">
+                        {charger.name}
+                      </Title>
+                    </div>
+                    {charger.evses.length === 0 && (
+                      <Text size="sm" c="dimmed" p="md">
+                        No EVSEs listed.
+                      </Text>
+                    )}
+                    {charger.evses.map((evse) => (
+                      <div key={evse.id} className={classes.evse}>
+                        {evse.connectors.length === 0 && (
+                          <Text size="sm" c="dimmed" py="sm">
+                            EVSE {evse.number}: No connectors listed.
+                          </Text>
+                        )}
+                        {evse.connectors.map((connector) => (
+                          <Radio.Card
+                            key={connector.id}
+                            className={classes.connector}
+                            value={connector.id}
+                            withBorder={false}
+                            aria-label={`${charger.name} · EVSE ${evse.number} · Connector ${connector.number} · ${capabilityLabel(connector)}`}
+                          >
+                            <ThemeIcon variant="light" size={36} radius="xl">
+                              <IconPlug size={21} aria-hidden="true" />
+                            </ThemeIcon>
+                            <Stack gap={2} className={classes.connectorBody}>
+                              <Text size="sm" fw={600}>
+                                EVSE {evse.number} · Connector{" "}
+                                {connector.number}
+                              </Text>
+                              <Text size="sm" c="dimmed">
+                                {capabilityLabel(connector)}
+                              </Text>
+                            </Stack>
+                          </Radio.Card>
+                        ))}
+                      </div>
+                    ))}
+                  </Card>
+                ))}
+              </Stack>
+            </Radio.Group>
+          </Stack>
+          <aside
+            className={classes.bookingSidebar}
+            aria-label="Connector booking"
+          >
+            <Activity mode={canBook ? "visible" : "hidden"}>
+              <BookingForm
+                key={query.data.id}
+                station={query.data}
+                connectorId={connectorId}
+                onConnectorChange={selectConnector}
+              />
+            </Activity>
+            {!canBook && (
+              <Card withBorder padding="lg">
+                <Stack gap="md">
+                  <Title order={2} size="h4">
+                    Book a connector
+                  </Title>
+                  {session.isPending && (
+                    <Loader size="sm" aria-label="Loading booking account" />
+                  )}
+                  {session.isError && (
+                    <Text size="sm" c="dimmed">
+                      Booking is unavailable while your account cannot be
+                      checked.
                     </Text>
                   )}
-                  {charger.evses.map((evse) => (
-                    <div key={evse.id} className={classes.evse}>
-                      {evse.connectors.length === 0 && (
-                        <Text size="sm" c="dimmed" py="sm">
-                          EVSE {evse.number}: No connectors listed.
+                  {session.isSuccess &&
+                    (session.data.signedIn ? (
+                      <Text size="sm" c="dimmed">
+                        Reservations require a driver account.
+                      </Text>
+                    ) : (
+                      <>
+                        <Text size="sm" c="dimmed">
+                          Sign in with a driver account to reserve a connector
+                          and choose your time slot.
                         </Text>
-                      )}
-                      {evse.connectors.map((connector) => (
-                        <div key={connector.id} className={classes.connector}>
-                          <ThemeIcon variant="light" size={36} radius="xl">
-                            <IconPlug size={21} aria-hidden="true" />
-                          </ThemeIcon>
-                          <Stack gap={2} className={classes.connectorBody}>
-                            <Text size="sm" fw={600}>
-                              EVSE {evse.number} · Connector {connector.number}
-                            </Text>
-                            <Text size="sm" c="dimmed">
-                              {capabilityLabel(connector)}
-                            </Text>
-                          </Stack>
-                          <Badge variant="light" radius="sm">
-                            {connector.powerSupply}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </Card>
-              ))}
-            </Stack>
-          </Stack>
-          <Card
-            withBorder
-            padding="lg"
-            className={classes.accessCard}
-            component="aside"
-          >
-            <Stack gap="lg">
-              <Title order={2} size="h3">
-                Station access
-              </Title>
-              <Text size="sm">
-                {query.data.accessInstructions ||
-                  "No access instructions published."}
-              </Text>
-              <div className={classes.metadata}>
-                <IconClock size={18} aria-hidden="true" />
-                <Text size="sm">Time zone: {query.data.timeZoneId}</Text>
-              </div>
-              <div className={classes.metadata}>
-                <IconMapPin size={18} aria-hidden="true" />
-                <Text size="sm">
-                  Coordinates: {query.data.latitude}, {query.data.longitude}
-                </Text>
-              </div>
-              <Anchor href={mapsUrl} target="_blank" rel="noopener noreferrer">
-                Open in maps
-              </Anchor>
-            </Stack>
-          </Card>
+                        <Button
+                          component="a"
+                          href={getSignInUrl(createPath(location))}
+                          fullWidth
+                        >
+                          Sign in to book
+                        </Button>
+                      </>
+                    ))}
+                </Stack>
+              </Card>
+            )}
+          </aside>
         </div>
       )}
     </Stack>

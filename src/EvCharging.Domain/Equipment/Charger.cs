@@ -1,10 +1,10 @@
-namespace EvCharging.Persistence.Entities;
+namespace EvCharging.Domain.Equipment;
 
 public sealed class Charger
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
     public Guid PublicId { get; set; }
-    public long StationId { get; set; }
+    public Guid StationId { get; set; }
     public required string Name { get; set; }
 
     public Station? Station { get; set; }

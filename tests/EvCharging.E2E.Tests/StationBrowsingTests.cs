@@ -176,7 +176,7 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
             Assert.Equal(
                 500,
                 await page.EvaluateAsync<int>(
-                    "async () => (await fetch('/api/diagnostics/instance')).status"));
+                    "async () => (await fetch('/api/stations/assigned')).status"));
             await page.GetByRole(AriaRole.Link, new() { Name = "View North Station", Exact = true }).ClickAsync();
             await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Charging equipment" }))
                 .ToBeVisibleAsync();

@@ -18,27 +18,31 @@ internal static class StationEndpoints
         return app;
     }
 
-    private static async Task<Results<Ok<AssignedStationListResponse>, ValidationProblem>> Assigned(
+    private static async Task<Results<Ok<AssignedStationListResponse>, ValidationProblem, ForbidHttpResult>> Assigned(
         [AsParameters] ListStationsRequest request,
         ClaimsPrincipal user,
         ListAssignedStationsQueryHandler handler,
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(request, user, cancellationToken);
-        return result.HasError<ValidationError>(out var errors)
-            ? errors.ToResponse() : TypedResults.Ok(result.Value);
+        return result switch
+        {
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
     }
 
     private static async Task<Results<Ok<StationEditorResponse>, NotFound, ForbidHttpResult>> Editor(
         Guid id, ClaimsPrincipal user, GetStationEditorQueryHandler handler, CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(id, user, cancellationToken);
-        if (result.HasError<NotFoundError<Guid>>(out var errors))
+        return result switch
         {
-            return errors.First().ToResponse();
-        }
-
-        return result.HasError<ForbiddenError>() ? TypedResults.Forbid() : TypedResults.Ok(result.Value);
+            _ when result.HasError<NotFoundError<Guid>>(out var errors) => errors.First().ToResponse(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ => TypedResults.Ok(result.Value)
+        };
     }
 
     private static async Task<Results<Ok<StationEditorResponse>, NotFound, ForbidHttpResult, ProblemHttpResult>> Update(
@@ -49,19 +53,13 @@ internal static class StationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(id, request, user, cancellationToken);
-        if (result.HasError<NotFoundError<Guid>>(out var errors))
+        return result switch
         {
-            return errors.First().ToResponse();
-        }
-
-        if (result.HasError<ForbiddenError>())
-        {
-            return TypedResults.Forbid();
-        }
-
-        return result.HasError<ConcurrencyConflictError>(out var conflicts)
-            ? conflicts.First().ToResponse()
-            : TypedResults.Ok(result.Value);
+            _ when result.HasError<NotFoundError<Guid>>(out var errors) => errors.First().ToResponse(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<ConcurrencyConflictError>(out var conflicts) => conflicts.First().ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
     }
 
     private static async Task<Results<Ok<StationListResponse>, ValidationProblem>> List(
@@ -70,8 +68,11 @@ internal static class StationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(request, cancellationToken);
-        return result.HasError<ValidationError>(out var errors)
-            ? errors.ToResponse() : TypedResults.Ok(result.Value);
+        return result switch
+        {
+            _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
     }
 
     private static async Task<Results<Ok<StationDetailResponse>, NotFound>> Detail(
@@ -80,7 +81,10 @@ internal static class StationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(request, cancellationToken);
-        return result.HasError<NotFoundError<Guid>>(out var errors)
-            ? errors.First().ToResponse() : TypedResults.Ok(result.Value);
+        return result switch
+        {
+            _ when result.HasError<NotFoundError<Guid>>(out var errors) => errors.First().ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
     }
 }

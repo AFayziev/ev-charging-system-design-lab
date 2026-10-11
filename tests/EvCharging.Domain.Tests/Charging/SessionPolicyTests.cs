@@ -9,8 +9,8 @@ namespace EvCharging.Domain.Tests.Charging;
 public sealed class SessionPolicyTests
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
-    private static readonly ProviderIdentity ProviderSession = new(1, "session-1");
-    private static readonly BookingInterval Slot = new(Start, Start.AddHours(1));
+    private static readonly ProviderIdentity ProviderSession = new(Guid.NewGuid(), "session-1");
+    private static readonly BookingInterval Slot = BookingInterval.Create(Start, Start.AddHours(1)).Value;
 
     [Theory]
     [InlineData(CommandOutcome.Pending)]
@@ -154,7 +154,7 @@ public sealed class SessionPolicyTests
     public void Complete_MismatchedOrUnauthoritativeTerminal_RetainsClaim()
     {
         var session = new SessionProgress(SessionLifecycle.Stopping, ProviderSession);
-        var other = new ProviderIdentity(ProviderSession.ProviderId + 1, ProviderSession.ExternalId);
+        var other = new ProviderIdentity(Guid.NewGuid(), ProviderSession.ExternalId);
 
         Assert.Equal(session, SessionPolicy.Complete(session, new(other, true), Reading(5m, true), null));
         Assert.Equal(session, SessionPolicy.Complete(session, new(ProviderSession, false), Reading(5m, true), null));

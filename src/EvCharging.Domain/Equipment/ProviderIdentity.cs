@@ -3,9 +3,13 @@ namespace EvCharging.Domain.Equipment;
 /// <summary>An external identity scoped by integration and, when applicable, its parent.</summary>
 public sealed record ProviderIdentity
 {
-    public ProviderIdentity(long providerId, string externalId, string? parentExternalId = null)
+    public ProviderIdentity(Guid providerId, string externalId, string? parentExternalId = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(providerId);
+        if (providerId == Guid.Empty)
+        {
+            throw new ArgumentException("A provider ID is required.", nameof(providerId));
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
         if (parentExternalId is not null)
         {
@@ -17,7 +21,7 @@ public sealed record ProviderIdentity
         ParentExternalId = parentExternalId;
     }
 
-    public long ProviderId { get; }
+    public Guid ProviderId { get; }
     public string ExternalId { get; }
     public string? ParentExternalId { get; }
 }

@@ -1,6 +1,7 @@
+using EvCharging.Api.Authentication;
 using EvCharging.Api.Persistence;
+using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
-using EvCharging.Persistence.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,14 +22,18 @@ internal sealed class StationAssignmentAuthorizationHandler(
         StationAssignmentRequirement requirement,
         Station resource)
     {
-        string? issuer = context.User.FindFirst("iss")?.Value;
-        string? subject = context.User.FindFirst("sub")?.Value;
+        var identity = context.User.GetUserIdentity();
+        if (identity is null)
+        {
+            return;
+        }
+
         var cancellationToken = httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
         bool assigned = await database.OperatorAssignments
             .AnyAsync(
                 assignment => assignment.StationId == resource.Id
                     && database.OperatorUsers.Any(user => user.Id == assignment.OperatorUserId
-                        && user.IdentityIssuer == issuer && user.IdentitySubject == subject),
+                        && user.IdentityIssuer == identity.Issuer && user.IdentitySubject == identity.Subject),
                 cancellationToken);
         if (assigned)
         {

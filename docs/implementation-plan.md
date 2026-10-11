@@ -52,16 +52,16 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M01 | Bootable Aspire topology | M00 | Done |
 | M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | Done |
 | M03 | Domain and seeded persistence baseline | M02 | Done |
-| M04 | Station browsing and operator edits | M03 | In progress |
-| M05 | Reservations, expiry, and notifications | M04.01 | Planned |
-| M06 | Charging start/stop and operator investigation | M05.01; cancellation races require M05.02 | Planned |
+| M04 | Station browsing and operator edits | M03 | Done |
+| M05 | Reservations, expiry, and notifications | M04.01 | In progress |
+| M06 | Charging start/stop and operator investigation | M05.02; cancellation races require M05.03 | Planned |
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | Planned |
 | M08 | Live updates and cached views | M07.01 | Planned |
 | M09 | Search and station discovery | M04.01, M05.01; availability requires M07.01 | Planned |
 | M10 | Station media, session summaries, and diagnostics | M04.02, M05.01; summaries require M07.02 | Planned |
 | M11 | Hosted R2 and Cloudflare CDN | M10.01 | Planned |
 | M12 | Managed PostgreSQL pooling, replication, and failover | M04; charging failover requires M08 | Planned |
-| M13 | Complete lab demonstrations and fault verification | M01–M12; hosted email gate M05.06 | Planned |
+| M13 | Complete lab demonstrations and fault verification | M01–M12, M04.03; hosted email gate M05.07 | Planned |
 
 M04.01 is the first charging-domain feature: a visitor browses
 stations and equipment from the seeded relational data. Notifications, live
@@ -231,47 +231,57 @@ owners and migration histories. Reset preserves authentication data.
   bounded transaction waits. Return authoritative mutation results from the
   write route. Verify saved changes, driver denial, unassigned-operator denial,
   and visible write failures. Depends on M04.01.
-- [ ] M04.03 Exercise browsing/editing during database interruption and gateway/API
-  instance loss. Use the actual feature workload to verify read/write routing,
-  aggregate client-pool budgets, saturation, bounded rejection, and recovery.
-  Depends on M04.01 and M04.02.
 
 Acceptance: visitors browse seeded equipment and an assigned operator
 edits station content. Read and write routes use separate pools. Permission and
 dependency failures are visible without reporting unsuccessful writes as saved.
 
+#### Independent follow-up tasks
+
+- [ ] M04.03 Deferred to final fault verification, after feature delivery:
+  exercise browsing/editing during database interruption and gateway/API
+  instance loss. Use the actual feature workload to verify read/write routing,
+  aggregate client-pool budgets, saturation, bounded rejection, and recovery.
+  Depends on M04.01 and M04.02; required for M13 acceptance.
+
 ### M05 — Reservations, expiry, and notifications
 
-- [ ] M05.01 Deliver reservation creation, list/detail screens, and automatic
-  expiry from station detail. Add ownership checks, UTC/time-zone display,
-  primary-side booking validation, overlap constraints, and authoritative
-  mutation responses. Introduce RabbitMQ/Wolverine delivery and PostgreSQL
-  inbox/outbox persistence for expiry work, scoped host-family storage/roles,
+- [x] M05.01 Deliver reservation creation from station detail and a driver reservation
+  list with booking confirmation, typed API contracts, and persisted bookings.
+  Add ownership checks,
+  UTC/time-zone display, primary-side booking validation, overlap constraints,
+  public identifiers, and authoritative mutation responses. Verify creation,
+  adjacent/competing bookings across API instances, cross-driver denial, and
+  visible validation, conflict, and dependency failures through the application.
+  Depends on M04.01.
+- [ ] M05.02 Add durable messaging and automatic reservation expiry. Introduce
+  RabbitMQ/Wolverine delivery and PostgreSQL inbox/outbox persistence for expiry
+  work, scoped host-family storage/roles,
   versioned envelopes, confirmations, and embedded relay/recovery. Persist
   deadlines with stable job identities, bounded consumers, current-state checks,
-  and due-work recovery after restart. Verify adjacent/competing bookings across
-  API instances, cross-driver denial, and expiry through the application.
-  Depends on M04.01.
-- [ ] M05.02 Deliver reservation cancellation in the driver's list/detail screens
+  and due-work recovery after restart. Schedule existing active reservations as
+  well as new bookings. Verify expiry in the driver reservation list and
+  restart recovery without duplicate state changes. Depends on M05.01.
+- [ ] M05.03 Deliver reservation cancellation in the driver's reservation list
   with permitted transitions, atomic state/deadline/outbox changes, audit records,
   and immediate authoritative results. Verify repeated cancellation and expiry
-  races. Depends on M05.01.
-- [ ] M05.03 Deliver reservation-created/cancelled/expired notifications through
+  races. Depends on M05.01 and M05.02.
+- [ ] M05.04 Deliver reservation-created/cancelled/expired notifications through
   the notification worker and third-party service simulator. Add independent
   topic subscriptions/queues, persisted delivery attempts, retry/ambiguity
   handling, concurrency isolation, and inspectable failure outcomes. Provide
   simulator and Cloudflare Email Service adapters selected by configuration;
   local delivery remains simulated. Verify recipient/event mapping and failures
-  without changing accepted reservations. Depends on M05.01 and M05.02.
-- [ ] M05.04 Exercise reservation/notification flows through broker outage/drain,
+  without changing accepted reservations. Depends on M05.01–M05.03.
+- [ ] M05.05 Exercise reservation/notification flows through broker outage/drain,
   duplicate delivery, consumer crash, relay recovery, scheduler restart, duplicate
   deadline producers, dead-letter inspection, and poison-message isolation.
   Observe queue/outbox age and verify committed work survives interruption and
   independent subscribers receive their own copies.
-  Depends on M05.01–M05.03.
-- [ ] M05.05 Add three-node RabbitMQ quorum queues and verify leader loss and
+  Depends on M05.01–M05.04.
+- [ ] M05.06 Add three-node RabbitMQ quorum queues and verify leader loss and
   publisher/consumer recovery with reservation/notification workloads.
-  Depends on M05.04.
+  Depends on M05.05.
 
 Acceptance: a driver books, views, and cancels eligible slots. Booking constraints
 hold across replicas and deadlines survive process loss. Notification failure
@@ -279,7 +289,7 @@ leaves accepted reservations intact and remains separately inspectable.
 
 #### Independent follow-up tasks
 
-- [ ] M05.06 Hosted gate, after M05.03: configure Cloudflare Email Service and
+- [ ] M05.07 Hosted gate, after M05.04: configure Cloudflare Email Service and
   verify real delivery to verified test recipients, including acceptance versus
   recipient-delivery evidence, usage, and cleanup. Requires the
   [hosted setup](lab.md#18-notification-adapters).
@@ -294,7 +304,7 @@ leaves accepted reservations intact and remains separately inspectable.
   payload-mismatch checks, conditional transitions, exclusive connector claims,
   persisted attempts/budgets, outcome queries, and scheduled reconciliation.
   Verify confirmed/rejected/uncertain outcomes, duplicate submissions, and lost
-  responses through the flow. Depends on M05.01.
+  responses through the flow. Depends on M05.01 and M05.02.
 - [ ] M06.02 Deliver driver stop with the same operation tracking and recovery;
   display confirmed stop separately from pending final usage. Verify rejected
   and uncertain stops, overruns, and recovery after worker loss.
@@ -313,7 +323,7 @@ leaves accepted reservations intact and remains separately inspectable.
   commits resolve by operation identity. Depends on M06.01–M06.03.
 - [ ] M06.06 Verify cancellation/start races, queued-start expiry, retained
   uncertain claims after expiry, session exclusivity, and shared retry budgets
-  across transport and job layers. Depends on M05.02 and M06.01–M06.03.
+  across transport and job layers. Depends on M05.03 and M06.01–M06.03.
 
 Acceptance: driver start/stop and operator investigation work through the gateway,
 durable workers, and both providers. Uncertain effects remain visible and
@@ -333,7 +343,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   Match provider/session evidence, validate cumulative usage, conditionally
   freeze completion facts, and commit outgoing completion events with SQL state.
   Verify stop-before-usage, early terminal evidence, and late contradictions.
-  Depends on M06.02, M07.01, and M05.03 for notification delivery.
+  Depends on M06.02, M07.01, and M05.04 for notification delivery.
 - [ ] M07.03 Deliver assigned-operator observation history and anomaly inspection
   alongside SQL attempts and provider evidence. Verify authorization, timestamp
   skew, duplicate/out-of-order observations, and missing/decreasing energy in
@@ -504,10 +514,10 @@ use the same application contracts with configured provider endpoints.
 | Keycloak, BFF, shared ticket/key state | M02 | Browser boundaries, refresh/logout races, identity/session-store outage |
 | PostgreSQL, EF Core, Npgsql | M02, M03; runtime feature access M04–M07, M10 | Route permissions, client pooling, conflicts, ordering, commits, ownership, completion |
 | Managed read replica and PgBouncer | M12; application routes introduced in M04 | Lag, read-only routes, server-pool saturation, reconnect/failover |
-| RabbitMQ jobs/topics, Wolverine inbox/outbox | Reservation expiry M05.01; independent subscribers M05.03 onward | Publish/ack crash windows, redelivery, independent subscribers |
-| Durable scheduler / reconciliation | Reservation expiry M05.01; charging M06, files M10 | Restart, deadlines, exhaustion, expiry races, missing notices |
+| RabbitMQ jobs/topics, Wolverine inbox/outbox | Reservation expiry M05.02; independent subscribers M05.04 onward | Publish/ack crash windows, redelivery, independent subscribers |
+| Durable scheduler / reconciliation | Reservation expiry M05.02; charging M06, files M10 | Restart, deadlines, exhaustion, expiry races, missing notices |
 | Provider simulators, HTTP resilience | M06, M07 | Lost responses, idempotency differences, rate limits, physical evidence |
-| Notification provider simulator/adapters and worker | Reservation notifications M05.03; completion M07.02; hosted gate M05.06 | Synthetic faults, real email delivery, ambiguity, independent retry |
+| Notification provider simulator/adapters and worker | Reservation notifications M05.04; completion M07.02; hosted gate M05.07 | Synthetic faults, real email delivery, ambiguity, independent retry |
 | Kafka and observation consumers | M07 | Durable acceptance, lag, offset recovery, replay |
 | MongoDB | M07, M10 | Latest/history ordering, outage catch-up, diagnostic queries |
 | Valkey and SignalR backplane | M08 | Cache flush, bounded fallback, fan-out loss/recovery |
@@ -533,6 +543,6 @@ closes coverage gaps and repeats the integrated demonstrations.
 
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
-| Cloudflare email sender and verified test recipients | Domain onboarding, scoped credentials, and real-delivery setup; cloud integration is already selected | M05.06 |
+| Cloudflare email sender and verified test recipients | Domain onboarding, scoped credentials, and real-delivery setup; cloud integration is already selected | M05.07 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.02 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

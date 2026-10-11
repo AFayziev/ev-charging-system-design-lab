@@ -1,5 +1,6 @@
 import axios, { HttpStatusCode } from "axios";
 import { getHttpStatus, getValidationErrors } from "@/lib/http-errors";
+import { signInRequiredMessage } from "@/features/auth/errors";
 
 export interface StationEditFailure {
   readonly title: string;
@@ -18,8 +19,7 @@ export function getStationEditorLoadFailure(
     case HttpStatusCode.Unauthorized:
       return {
         title: "Sign in required",
-        message:
-          "Your session is no longer valid. Sign in again to edit this station.",
+        message: signInRequiredMessage,
         recovery: "sign-in",
         blocksSave: true,
       };
@@ -67,8 +67,7 @@ export function getStationEditFailure(
     case HttpStatusCode.Unauthorized:
       return {
         title: "Sign in required",
-        message:
-          "Your session is no longer valid. Sign in again before retrying the save.",
+        message: signInRequiredMessage,
         recovery: "sign-in",
       };
     case HttpStatusCode.Forbidden:

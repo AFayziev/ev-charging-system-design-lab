@@ -29,3 +29,16 @@ export function getValidationErrors(
     return undefined;
   return errors;
 }
+
+export function getFormValidationErrors(
+  error: unknown,
+): Record<string, string> | undefined {
+  const errors = getValidationErrors(error);
+  if (!errors) return undefined;
+  return Object.fromEntries(
+    Object.entries(errors).map(([key, messages]) => [
+      key.charAt(0).toLowerCase() + key.slice(1),
+      messages.join(" "),
+    ]),
+  );
+}

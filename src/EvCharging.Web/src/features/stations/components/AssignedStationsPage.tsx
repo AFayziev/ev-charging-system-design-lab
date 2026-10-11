@@ -1,5 +1,18 @@
-import { Button, Card, Group, Stack, Table, Text } from "@mantine/core";
-import { IconArrowLeft, IconArrowRight, IconPencil } from "@tabler/icons-react";
+import {
+  Button,
+  Card,
+  EmptyState,
+  Group,
+  Stack,
+  Table,
+  Text,
+} from "@mantine/core";
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconChargingPile,
+  IconPencil,
+} from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
 import { PageHeading } from "@/components/PageHeading";
@@ -21,7 +34,17 @@ export function AssignedStationsPage() {
       {query.isSuccess && (
         <>
           {query.data.stations.length === 0 && (
-            <Text>No assigned stations to display.</Text>
+            <Card withBorder padding="xl">
+              <EmptyState icon={<IconChargingPile aria-hidden />}>
+                <EmptyState.Title order={2}>
+                  No assigned stations to display
+                </EmptyState.Title>
+                <EmptyState.Description>
+                  Stations will appear here when they are assigned to your
+                  account.
+                </EmptyState.Description>
+              </EmptyState>
+            </Card>
           )}
           {query.data.stations.length > 0 && (
             <Card withBorder padding={0}>

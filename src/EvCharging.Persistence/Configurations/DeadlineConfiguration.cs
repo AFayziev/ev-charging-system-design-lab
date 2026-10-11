@@ -1,3 +1,4 @@
+using EvCharging.Domain.Reservations;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;

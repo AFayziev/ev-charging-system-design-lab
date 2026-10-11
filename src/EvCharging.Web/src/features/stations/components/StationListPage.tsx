@@ -1,6 +1,7 @@
 import {
   Button,
   Card,
+  EmptyState,
   Group,
   SimpleGrid,
   Stack,
@@ -42,12 +43,14 @@ export function StationListPage() {
         <>
           {query.data.stations.length === 0 ? (
             <Card withBorder padding="xl">
-              <Title order={2} size="h3">
-                No stations to display
-              </Title>
-              <Text c="dimmed" mt="xs">
-                Station information will appear here when it is published.
-              </Text>
+              <EmptyState icon={<IconChargingPile aria-hidden />}>
+                <EmptyState.Title order={2}>
+                  No stations to display
+                </EmptyState.Title>
+                <EmptyState.Description>
+                  Station information will appear here when it is published.
+                </EmptyState.Description>
+              </EmptyState>
             </Card>
           ) : (
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">

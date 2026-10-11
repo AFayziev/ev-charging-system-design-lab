@@ -1,6 +1,6 @@
-﻿using System;
+using System;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -16,12 +16,33 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 name: "charging");
 
             migrationBuilder.CreateTable(
+                name: "audit_entries",
+                schema: "charging",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    occurred_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    action = table.Column<string>(type: "text", nullable: false),
+                    resource_type = table.Column<string>(type: "text", nullable: false),
+                    resource_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    actor_type = table.Column<string>(type: "text", nullable: false),
+                    actor_issuer = table.Column<string>(type: "text", nullable: true),
+                    actor_subject = table.Column<string>(type: "text", nullable: false),
+                    details = table.Column<JsonElement>(type: "jsonb", nullable: false),
+                    details_version = table.Column<int>(type: "integer", nullable: false),
+                    trace_id = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_audit_entries", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "charging_providers",
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
                     name = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -34,8 +55,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
                     identity_issuer = table.Column<string>(type: "text", nullable: false),
                     identity_subject = table.Column<string>(type: "text", nullable: false)
                 },
@@ -49,8 +69,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
                     identity_issuer = table.Column<string>(type: "text", nullable: false),
                     identity_subject = table.Column<string>(type: "text", nullable: false)
                 },
@@ -64,8 +83,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    public_id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),
                     name = table.Column<string>(type: "text", nullable: false),
                     address = table.Column<string>(type: "text", nullable: false),
                     latitude = table.Column<decimal>(type: "numeric", nullable: false),
@@ -83,9 +103,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    station_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    public_id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    station_id = table.Column<Guid>(type: "uuid", nullable: false),
                     name = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -105,8 +125,8 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    operator_user_id = table.Column<long>(type: "bigint", nullable: false),
-                    station_id = table.Column<long>(type: "bigint", nullable: false)
+                    operator_user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    station_id = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -132,10 +152,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    charging_provider_id = table.Column<long>(type: "bigint", nullable: false),
-                    station_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    charging_provider_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    station_id = table.Column<Guid>(type: "uuid", nullable: false),
                     external_id = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -162,9 +181,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    charger_id = table.Column<long>(type: "bigint", nullable: false)
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    public_id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    charger_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    number = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -183,10 +203,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    provider_station_id = table.Column<long>(type: "bigint", nullable: false),
-                    charger_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    provider_station_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    charger_id = table.Column<Guid>(type: "uuid", nullable: false),
                     external_id = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -213,9 +232,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    evse_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    public_id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    evse_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    number = table.Column<int>(type: "integer", nullable: false),
                     connector_type = table.Column<string>(type: "text", nullable: false),
                     power_supply = table.Column<string>(type: "text", nullable: false),
                     rated_power_kw = table.Column<decimal>(type: "numeric", nullable: false)
@@ -237,10 +257,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    provider_charger_id = table.Column<long>(type: "bigint", nullable: false),
-                    evse_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    provider_charger_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    evse_id = table.Column<Guid>(type: "uuid", nullable: false),
                     external_id = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -267,10 +286,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    connector_id = table.Column<long>(type: "bigint", nullable: false),
-                    driver_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    public_id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "gen_random_uuid()"),
+                    connector_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    driver_id = table.Column<Guid>(type: "uuid", nullable: false),
                     starts_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     ends_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     state = table.Column<int>(type: "integer", nullable: false),
@@ -279,6 +298,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_reservations", x => x.id);
+                    table.CheckConstraint("ck_reservations_slot", "isfinite(starts_at) AND isfinite(ends_at) AND starts_at < ends_at");
                     table.ForeignKey(
                         name: "fk_reservations_connectors_connector_id",
                         column: x => x.connector_id,
@@ -300,10 +320,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    provider_evse_id = table.Column<long>(type: "bigint", nullable: false),
-                    connector_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    provider_evse_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    connector_id = table.Column<Guid>(type: "uuid", nullable: false),
                     external_id = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -330,12 +349,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    reservation_id = table.Column<long>(type: "bigint", nullable: false),
-                    connector_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    reservation_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    connector_id = table.Column<Guid>(type: "uuid", nullable: false),
                     lifecycle = table.Column<int>(type: "integer", nullable: false),
-                    charging_provider_id = table.Column<long>(type: "bigint", nullable: true),
+                    charging_provider_id = table.Column<Guid>(type: "uuid", nullable: true),
                     provider_session_id = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     started_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -373,13 +391,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
                     kind = table.Column<int>(type: "integer", nullable: false),
                     state = table.Column<int>(type: "integer", nullable: false),
-                    station_id = table.Column<long>(type: "bigint", nullable: true),
-                    session_id = table.Column<long>(type: "bigint", nullable: true),
-                    source_file_id = table.Column<long>(type: "bigint", nullable: true),
+                    station_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    session_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    source_file_id = table.Column<Guid>(type: "uuid", nullable: true),
                     bucket = table.Column<string>(type: "text", nullable: false),
                     object_key = table.Column<string>(type: "text", nullable: false),
                     content_type = table.Column<string>(type: "text", nullable: false),
@@ -417,10 +434,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    session_id = table.Column<long>(type: "bigint", nullable: false),
-                    driver_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    session_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    driver_id = table.Column<Guid>(type: "uuid", nullable: false),
                     kind = table.Column<int>(type: "integer", nullable: false),
                     idempotency_key = table.Column<string>(type: "text", nullable: false),
                     request_fingerprint = table.Column<string>(type: "text", nullable: false),
@@ -451,9 +467,8 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    operation_id = table.Column<long>(type: "bigint", nullable: false),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    operation_id = table.Column<Guid>(type: "uuid", nullable: false),
                     number = table.Column<int>(type: "integer", nullable: false),
                     authorized_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     finished_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -477,12 +492,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
                     kind = table.Column<int>(type: "integer", nullable: false),
-                    reservation_id = table.Column<long>(type: "bigint", nullable: true),
-                    operation_id = table.Column<long>(type: "bigint", nullable: true),
-                    session_id = table.Column<long>(type: "bigint", nullable: true),
+                    reservation_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    operation_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    session_id = table.Column<Guid>(type: "uuid", nullable: true),
                     due_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     handled_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
@@ -520,6 +534,19 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "ix_audit_entries_resource_type_resource_id_occurred_at_id",
+                schema: "charging",
+                table: "audit_entries",
+                columns: new[] { "resource_type", "resource_id", "occurred_at", "id" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_chargers_public_id",
+                schema: "charging",
+                table: "chargers",
+                column: "public_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "ix_chargers_station_id",
                 schema: "charging",
                 table: "chargers",
@@ -530,6 +557,13 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 schema: "charging",
                 table: "connectors",
                 column: "evse_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_connectors_public_id",
+                schema: "charging",
+                table: "connectors",
+                column: "public_id",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -565,10 +599,18 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "ix_evses_charger_id",
+                name: "ix_evses_charger_id_number",
                 schema: "charging",
                 table: "evses",
-                column: "charger_id");
+                columns: new[] { "charger_id", "number" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_evses_public_id",
+                schema: "charging",
+                table: "evses",
+                column: "public_id",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_file_metadata_bucket_object_key",
@@ -685,6 +727,13 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 column: "driver_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_reservations_public_id",
+                schema: "charging",
+                table: "reservations",
+                column: "public_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "ix_sessions_charging_provider_id_provider_session_id",
                 schema: "charging",
                 table: "sessions",
@@ -702,6 +751,20 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 table: "sessions",
                 column: "reservation_id");
 
+            migrationBuilder.CreateIndex(
+                name: "ix_stations_public_id",
+                schema: "charging",
+                table: "stations",
+                column: "public_id",
+                unique: true);
+
+            migrationBuilder.Sql("""
+                ALTER TABLE charging.reservations
+                ADD CONSTRAINT ex_reservations_connector_slot
+                EXCLUDE USING gist (connector_id WITH =, tstzrange(starts_at, ends_at, '[)') WITH &&)
+                WHERE (state IN (0, 1));
+                """);
+            migrationBuilder.Sql("REVOKE UPDATE, DELETE ON TABLE charging.audit_entries FROM platform_writer;");
             migrationBuilder.Sql(
                 "REVOKE ALL ON TABLE charging.ef_migrations_history FROM platform_writer, platform_reader;");
         }
@@ -711,6 +774,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
         {
             migrationBuilder.DropTable(
                 name: "attempts",
+                schema: "charging");
+
+            migrationBuilder.DropTable(
+                name: "audit_entries",
                 schema: "charging");
 
             migrationBuilder.DropTable(

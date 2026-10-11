@@ -5,11 +5,11 @@ namespace EvCharging.Persistence.Entities;
 
 public sealed class AuditEntry
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
     public AuditAction Action { get; set; }
     public AuditResourceType ResourceType { get; set; }
-    public long ResourceId { get; set; }
+    public Guid ResourceId { get; set; }
     public AuditActorType ActorType { get; set; }
     public string? ActorIssuer { get; set; }
     public required string ActorSubject { get; set; }

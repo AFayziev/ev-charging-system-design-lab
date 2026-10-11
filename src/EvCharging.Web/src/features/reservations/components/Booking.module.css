@@ -1,0 +1,23 @@
+.bookingCard {
+  border-color: #dfe5ea;
+}
+
+.bookingCard input {
+  min-width: 0;
+}
+
+.timePreview {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.timePreview summary {
+  cursor: pointer;
+  color: var(--mantine-color-teal-9);
+}
+
+.hintIcon {
+  flex-shrink: 0;
+  color: var(--mantine-color-teal-9);
+  margin-top: 2px;
+}

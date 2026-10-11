@@ -5,25 +5,33 @@ namespace EvCharging.Domain.Reservations;
 public static class ReservationPolicy
 {
     public static bool CanStart(
-        Reservation reservation,
-        long driverId,
+        ReservationState state,
+        Guid ownerDriverId,
+        BookingInterval slot,
+        Guid driverId,
         DateTimeOffset now,
         bool connectorClaimed) =>
-        reservation.State == ReservationState.Active
-        && reservation.DriverId == driverId
-        && reservation.Slot.Contains(now)
+        state == ReservationState.Active
+        && ownerDriverId == driverId
+        && slot.Contains(now)
         && !connectorClaimed;
 
     public static bool CanCancel(
-        Reservation reservation,
-        long driverId,
+        ReservationState state,
+        Guid ownerDriverId,
+        Guid driverId,
         CommandOutcome? startOutcome) =>
-        reservation.State == ReservationState.Active
-        && reservation.DriverId == driverId
+        state == ReservationState.Active
+        && ownerDriverId == driverId
         && startOutcome is null or CommandOutcome.Rejected;
 
-    public static bool Conflicts(Reservation existing, long connectorId, BookingInterval requested) =>
-        existing.ConnectorId == connectorId
-        && existing.State is ReservationState.Active or ReservationState.Consumed
-        && existing.Slot.Overlaps(requested);
+    public static bool Conflicts(
+        ReservationState state,
+        Guid existingConnectorId,
+        BookingInterval existingSlot,
+        Guid connectorId,
+        BookingInterval requested) =>
+        existingConnectorId == connectorId
+        && state is ReservationState.Active or ReservationState.Consumed
+        && existingSlot.Overlaps(requested);
 }

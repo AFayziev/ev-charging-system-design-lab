@@ -1,4 +1,4 @@
-using EvCharging.Persistence.Entities;
+using EvCharging.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

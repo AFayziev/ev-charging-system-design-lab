@@ -1,0 +1,272 @@
+import { MantineProvider } from "@mantine/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import {
+  createMemoryRouter,
+  RouterProvider,
+  type Location,
+} from "react-router";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { BookingForm } from "./BookingForm";
+import type { Reservation } from "../api";
+import { ReservationsPage } from "./ReservationsPage";
+
+const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+vi.mock("@/lib/api", () => ({ api: { get, post } }));
+const station = {
+  id: "station",
+  name: "North Station",
+  address: "Synthetic",
+  latitude: 0,
+  longitude: 0,
+  timeZoneId: "Europe/London",
+  accessInstructions: "",
+  chargers: [
+    {
+      id: "charger",
+      name: "Charger",
+      evses: [
+        {
+          id: "evse",
+          number: 1,
+          connectors: [
+            {
+              id: "connector",
+              number: 1,
+              connectorType: "Type2",
+              powerSupply: "AC",
+              ratedPowerKW: 22,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+const failure = (status: number, data?: unknown) =>
+  Object.assign(new Error("private details"), {
+    isAxiosError: true,
+    response: { status, data },
+  });
+
+function setup(initialEntry: string | Partial<Location> = "/") {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/",
+        element: <BookingForm station={station} connectorId="connector" />,
+      },
+      { path: "/reservations", element: <ReservationsPage /> },
+    ],
+    { initialEntries: [initialEntry] },
+  );
+  const view = render(
+    <MantineProvider env="test">
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+  return { router, ...view };
+}
+
+async function fill() {
+  for (const [label, hours] of [
+    ["Start", "10"],
+    ["End", "11"],
+  ]) {
+    await userEvent.click(
+      screen.getByLabelText(`${label} time`, { exact: false }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "10 January 2029" }),
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: `${label} hours` }),
+      {
+        target: { value: hours },
+      },
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: `${label} minutes` }),
+      {
+        target: { value: "00" },
+      },
+    );
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: `Confirm ${label.toLowerCase()} time`,
+      }),
+    );
+  }
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2029, 0, 2, 10, 0));
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  get.mockReset();
+  post.mockReset();
+  get.mockResolvedValue({ data: { signedIn: true, antiforgeryToken: "csrf" } });
+});
+
+afterEach(() => vi.useRealTimers());
+
+it("shows the created booking once and clears feedback on reload", async () => {
+  const saved: Reservation = {
+    id: "saved",
+    stationId: station.id,
+    stationName: "Authoritative name",
+    stationAddress: "1 Synthetic Avenue",
+    timeZoneId: station.timeZoneId,
+    connectorId: "connector",
+    chargerName: "Charger",
+    evseNumber: 1,
+    connectorNumber: 1,
+    connectorType: "Type2",
+    powerSupply: "AC",
+    ratedPowerKW: 22,
+    startsAt: "2029-01-10T10:00:00Z",
+    endsAt: "2029-01-10T11:00:00Z",
+    state: "active",
+    createdAt: "2029-01-02T10:00:00Z",
+  };
+  get.mockImplementation(async (path: string) => ({
+    data:
+      path === "/auth/session"
+        ? { signedIn: true, antiforgeryToken: "csrf" }
+        : { reservations: [], nextAfterId: "older-booking" },
+  }));
+  post.mockResolvedValue({ data: saved });
+  const view = setup();
+  await userEvent.click(screen.getByRole("button", { name: "Start time" }));
+  expect(
+    await screen.findByRole("button", { name: "1 January 2029" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "2 January 2029" }),
+  ).toHaveAttribute("data-selected", "true");
+  await userEvent.click(
+    await screen.findByRole("spinbutton", { name: "Start hours" }),
+  );
+  expect(await screen.findByRole("button", { name: "10:01" })).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "09:45" }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "10:15" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Confirm start time" }),
+  );
+  await fill();
+  for (const [label, hours] of [
+    ["Start", "10"],
+    ["End", "11"],
+  ]) {
+    await userEvent.click(
+      screen.getByRole("button", { name: `${label} time` }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "10 January 2029" }),
+    ).toHaveAttribute("data-selected", "true");
+    expect(
+      screen.getByRole("spinbutton", { name: `${label} hours` }),
+    ).toHaveValue(hours);
+    expect(
+      screen.getByRole("spinbutton", { name: `${label} minutes` }),
+    ).toHaveValue("00");
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: `Confirm ${label.toLowerCase()} time`,
+      }),
+    );
+  }
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Reserve connector" }),
+    ).toBeEnabled(),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  );
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "Reservation created.",
+  );
+  expect(
+    await screen.findByRole("article", {
+      name: "Authoritative name reservation",
+    }),
+  ).toHaveAttribute("data-highlighted", "true");
+  expect(
+    screen.queryByRole("heading", { name: "No reservations yet" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Authoritative name" }),
+  ).toHaveAttribute("href", "/stations/station");
+  expect(post).toHaveBeenCalledWith(
+    "/api/reservations",
+    {
+      connectorId: "connector",
+      startsAt: new Date("2029-01-10T10:00").toISOString(),
+      endsAt: new Date("2029-01-10T11:00").toISOString(),
+    },
+    expect.objectContaining({ headers: { "X-CSRF-TOKEN": "csrf" } }),
+  );
+  get.mockResolvedValue({ data: { reservations: [saved], nextAfterId: null } });
+  const currentEntry = view.router.state.location;
+  view.unmount();
+  setup(currentEntry);
+  expect(
+    await screen.findByRole("article", {
+      name: "Authoritative name reservation",
+    }),
+  ).not.toHaveAttribute("data-highlighted", "true");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
+it("places server validation errors on fields", async () => {
+  post.mockRejectedValue(
+    failure(400, { errors: { EndsAt: ["The slot has ended."] } }),
+  );
+  setup();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Reserve connector" }),
+    ).toBeEnabled(),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  );
+  expect(screen.getByText("Choose a start time.")).toBeVisible();
+  expect(screen.getByText("Choose an end time.")).toBeVisible();
+  expect(post).not.toHaveBeenCalled();
+  await fill();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  );
+  expect(await screen.findByText("The slot has ended.")).toBeVisible();
+  expect(screen.getByLabelText("End time", { exact: false })).toHaveTextContent(
+    "10 Jan 2029, 11:00",
+  );
+});
+
+it("rejects an elapsed booking draft before submission", async () => {
+  setup();
+  await fill();
+  vi.setSystemTime(new Date("2029-01-11T00:00:00Z"));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  );
+  expect(screen.getByText("The start must be in the future.")).toBeVisible();
+  expect(post).not.toHaveBeenCalled();
+});

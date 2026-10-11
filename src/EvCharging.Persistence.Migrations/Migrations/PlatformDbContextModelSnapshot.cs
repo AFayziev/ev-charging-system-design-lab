@@ -24,119 +24,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Attempt", b =>
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTimeOffset>("AuthorizedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("authorized_at");
-
-                    b.Property<string>("FailureCode")
-                        .HasColumnType("text")
-                        .HasColumnName("failure_code");
-
-                    b.Property<DateTimeOffset?>("FinishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("finished_at");
-
-                    b.Property<int>("Number")
-                        .HasColumnType("integer")
-                        .HasColumnName("number");
-
-                    b.Property<long>("OperationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("operation_id");
-
-                    b.Property<int?>("Outcome")
-                        .HasColumnType("integer")
-                        .HasColumnName("outcome");
-
-                    b.HasKey("Id")
-                        .HasName("pk_attempts");
-
-                    b.HasIndex("OperationId", "Number")
-                        .IsUnique()
-                        .HasDatabaseName("ix_attempts_operation_id_number");
-
-                    b.ToTable("attempts", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.AuditEntry", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("action");
-
-                    b.Property<string>("ActorIssuer")
-                        .HasColumnType("text")
-                        .HasColumnName("actor_issuer");
-
-                    b.Property<string>("ActorSubject")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("actor_subject");
-
-                    b.Property<string>("ActorType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("actor_type");
-
-                    b.Property<JsonElement>("Details")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("details");
-
-                    b.Property<int>("DetailsVersion")
-                        .HasColumnType("integer")
-                        .HasColumnName("details_version");
-
-                    b.Property<DateTimeOffset>("OccurredAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("occurred_at");
-
-                    b.Property<long>("ResourceId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("resource_id");
-
-                    b.Property<string>("ResourceType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("resource_type");
-
-                    b.Property<string>("TraceId")
-                        .HasColumnType("text")
-                        .HasColumnName("trace_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_audit_entries");
-
-                    b.HasIndex("ResourceType", "ResourceId", "OccurredAt", "Id")
-                        .HasDatabaseName("ix_audit_entries_resource_type_resource_id_occurred_at_id");
-
-                    b.ToTable("audit_entries", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Charger", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -149,8 +42,8 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("public_id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<long>("StationId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid")
                         .HasColumnName("station_id");
 
                     b.HasKey("Id")
@@ -166,102 +59,20 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.ToTable("chargers", "charging");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingProvider", b =>
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Connector", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.HasKey("Id")
-                        .HasName("pk_charging_providers");
-
-                    b.ToTable("charging_providers", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingSession", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long?>("ChargingProviderId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("charging_provider_id");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<long>("ConnectorId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("connector_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<decimal?>("FinalEnergyKWh")
-                        .HasColumnType("numeric")
-                        .HasColumnName("final_energy_k_wh");
-
-                    b.Property<int>("Lifecycle")
-                        .HasColumnType("integer")
-                        .HasColumnName("lifecycle");
-
-                    b.Property<string>("ProviderSessionId")
-                        .HasColumnType("text")
-                        .HasColumnName("provider_session_id");
-
-                    b.Property<long>("ReservationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("reservation_id");
-
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_sessions");
-
-                    b.HasIndex("ConnectorId")
-                        .HasDatabaseName("ix_sessions_connector_id");
-
-                    b.HasIndex("ReservationId")
-                        .HasDatabaseName("ix_sessions_reservation_id");
-
-                    b.HasIndex("ChargingProviderId", "ProviderSessionId")
-                        .HasDatabaseName("ix_sessions_charging_provider_id_provider_session_id");
-
-                    b.ToTable("sessions", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Connector", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ConnectorType")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("connector_type");
 
-                    b.Property<long>("EvseId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("EvseId")
+                        .HasColumnType("uuid")
                         .HasColumnName("evse_id");
 
                     b.Property<int>("Number")
@@ -297,98 +108,15 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.ToTable("connectors", "charging");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Deadline", b =>
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Evse", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTimeOffset>("DueAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("due_at");
-
-                    b.Property<DateTimeOffset?>("HandledAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("handled_at");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer")
-                        .HasColumnName("kind");
-
-                    b.Property<long?>("OperationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("operation_id");
-
-                    b.Property<long?>("ReservationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("reservation_id");
-
-                    b.Property<long?>("SessionId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("session_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_deadlines");
-
-                    b.HasIndex("DueAt")
-                        .HasDatabaseName("ix_deadlines_due_at")
-                        .HasFilter("handled_at IS NULL");
-
-                    b.HasIndex("OperationId")
-                        .HasDatabaseName("ix_deadlines_operation_id");
-
-                    b.HasIndex("ReservationId")
-                        .HasDatabaseName("ix_deadlines_reservation_id");
-
-                    b.HasIndex("SessionId")
-                        .HasDatabaseName("ix_deadlines_session_id");
-
-                    b.ToTable("deadlines", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Driver", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("IdentityIssuer")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("identity_issuer");
-
-                    b.Property<string>("IdentitySubject")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("identity_subject");
-
-                    b.HasKey("Id")
-                        .HasName("pk_drivers");
-
-                    b.HasIndex("IdentityIssuer", "IdentitySubject")
-                        .IsUnique()
-                        .HasDatabaseName("ix_drivers_identity_issuer_identity_subject");
-
-                    b.ToTable("drivers", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Evse", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("ChargerId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ChargerId")
+                        .HasColumnType("uuid")
                         .HasColumnName("charger_id");
 
                     b.Property<int>("Number")
@@ -415,369 +143,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.ToTable("evses", "charging");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Station", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Bucket")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("bucket");
-
-                    b.Property<long?>("ByteLength")
-                        .HasColumnType("bigint")
-                        .HasColumnName("byte_length");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("content_type");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("ObjectKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("object_key");
-
-                    b.Property<long?>("SessionId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("session_id");
-
-                    b.Property<long?>("SourceFileId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("source_file_id");
-
-                    b.Property<int>("State")
-                        .HasColumnType("integer")
-                        .HasColumnName("state");
-
-                    b.Property<long?>("StationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("station_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_file_metadata");
-
-                    b.HasIndex("SessionId")
-                        .HasDatabaseName("ix_file_metadata_session_id");
-
-                    b.HasIndex("SourceFileId")
-                        .HasDatabaseName("ix_file_metadata_source_file_id");
-
-                    b.HasIndex("StationId")
-                        .HasDatabaseName("ix_file_metadata_station_id");
-
-                    b.HasIndex("Bucket", "ObjectKey")
-                        .IsUnique()
-                        .HasDatabaseName("ix_file_metadata_bucket_object_key");
-
-                    b.ToTable("file_metadata", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTimeOffset>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("accepted_at");
-
-                    b.Property<long>("DriverId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("driver_id");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("idempotency_key");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer")
-                        .HasColumnName("kind");
-
-                    b.Property<int>("Outcome")
-                        .HasColumnType("integer")
-                        .HasColumnName("outcome");
-
-                    b.Property<string>("RequestFingerprint")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("request_fingerprint");
-
-                    b.Property<long>("SessionId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("session_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_operations");
-
-                    b.HasIndex("SessionId")
-                        .HasDatabaseName("ix_operations_session_id");
-
-                    b.HasIndex("DriverId", "Kind", "IdempotencyKey")
-                        .HasDatabaseName("ix_operations_driver_id_kind_idempotency_key");
-
-                    b.ToTable("operations", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.OperatorAssignment", b =>
-                {
-                    b.Property<long>("OperatorUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("operator_user_id");
-
-                    b.Property<long>("StationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("station_id");
-
-                    b.HasKey("OperatorUserId", "StationId")
-                        .HasName("pk_operator_assignments");
-
-                    b.HasIndex("StationId")
-                        .HasDatabaseName("ix_operator_assignments_station_id");
-
-                    b.ToTable("operator_assignments", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.OperatorUser", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("IdentityIssuer")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("identity_issuer");
-
-                    b.Property<string>("IdentitySubject")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("identity_subject");
-
-                    b.HasKey("Id")
-                        .HasName("pk_operator_users");
-
-                    b.HasIndex("IdentityIssuer", "IdentitySubject")
-                        .IsUnique()
-                        .HasDatabaseName("ix_operator_users_identity_issuer_identity_subject");
-
-                    b.ToTable("operator_users", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderCharger", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("ChargerId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("charger_id");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<long>("ProviderStationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("provider_station_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_provider_chargers");
-
-                    b.HasIndex("ChargerId")
-                        .HasDatabaseName("ix_provider_chargers_charger_id");
-
-                    b.HasIndex("ProviderStationId", "ExternalId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_provider_chargers_provider_station_id_external_id");
-
-                    b.ToTable("provider_chargers", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderConnector", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("ConnectorId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("connector_id");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<long>("ProviderEvseId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("provider_evse_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_provider_connectors");
-
-                    b.HasIndex("ConnectorId")
-                        .HasDatabaseName("ix_provider_connectors_connector_id");
-
-                    b.HasIndex("ProviderEvseId", "ExternalId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_provider_connectors_provider_evse_id_external_id");
-
-                    b.ToTable("provider_connectors", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderEvse", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("EvseId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("evse_id");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<long>("ProviderChargerId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("provider_charger_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_provider_evses");
-
-                    b.HasIndex("EvseId")
-                        .HasDatabaseName("ix_provider_evses_evse_id");
-
-                    b.HasIndex("ProviderChargerId", "ExternalId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_provider_evses_provider_charger_id_external_id");
-
-                    b.ToTable("provider_evses", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderStation", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("ChargingProviderId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("charging_provider_id");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<long>("StationId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("station_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_provider_stations");
-
-                    b.HasIndex("StationId")
-                        .HasDatabaseName("ix_provider_stations_station_id");
-
-                    b.HasIndex("ChargingProviderId", "ExternalId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_provider_stations_charging_provider_id_external_id");
-
-                    b.ToTable("provider_stations", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Reservation", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("ConnectorId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("connector_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<long>("DriverId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("driver_id");
-
-                    b.Property<DateTimeOffset>("EndsAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ends_at");
-
-                    b.Property<DateTimeOffset>("StartsAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("starts_at");
-
-                    b.Property<int>("State")
-                        .HasColumnType("integer")
-                        .HasColumnName("state");
-
-                    b.HasKey("Id")
-                        .HasName("pk_reservations");
-
-                    b.HasIndex("DriverId")
-                        .HasDatabaseName("ix_reservations_driver_id");
-
-                    b.HasIndex("ConnectorId", "StartsAt")
-                        .HasDatabaseName("ix_reservations_connector_id_starts_at");
-
-                    b.ToTable("reservations", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Station", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("AccessInstructions")
                         .IsRequired()
@@ -834,6 +205,676 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.HasAnnotation("Audit:ResourceType", "Station");
                 });
 
+            modelBuilder.Entity("EvCharging.Domain.Identity.Driver", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("IdentityIssuer")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("identity_issuer");
+
+                    b.Property<string>("IdentitySubject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("identity_subject");
+
+                    b.HasKey("Id")
+                        .HasName("pk_drivers");
+
+                    b.HasIndex("IdentityIssuer", "IdentitySubject")
+                        .IsUnique()
+                        .HasDatabaseName("ix_drivers_identity_issuer_identity_subject");
+
+                    b.ToTable("drivers", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Reservations.Reservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connector_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("driver_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer")
+                        .HasColumnName("state")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.HasKey("Id")
+                        .HasName("pk_reservations");
+
+                    b.HasIndex("DriverId")
+                        .HasDatabaseName("ix_reservations_driver_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_reservations_public_id");
+
+                    b.HasIndex("ConnectorId", "StartsAt")
+                        .HasDatabaseName("ix_reservations_connector_id_starts_at");
+
+                    b.ToTable("reservations", "charging", t =>
+                        {
+                            t.HasCheckConstraint("ck_reservations_slot", "isfinite(starts_at) AND isfinite(ends_at) AND starts_at < ends_at");
+                        });
+
+                    b.HasAnnotation("Audit:ResourceType", "Reservation");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.Attempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AuthorizedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("authorized_at");
+
+                    b.Property<string>("FailureCode")
+                        .HasColumnType("text")
+                        .HasColumnName("failure_code");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<int?>("Outcome")
+                        .HasColumnType("integer")
+                        .HasColumnName("outcome");
+
+                    b.HasKey("Id")
+                        .HasName("pk_attempts");
+
+                    b.HasIndex("OperationId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attempts_operation_id_number");
+
+                    b.ToTable("attempts", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.AuditEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorIssuer")
+                        .HasColumnType("text")
+                        .HasColumnName("actor_issuer");
+
+                    b.Property<string>("ActorSubject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("actor_subject");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("actor_type");
+
+                    b.Property<JsonElement>("Details")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("details");
+
+                    b.Property<int>("DetailsVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("details_version");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resource_id");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("resource_type");
+
+                    b.Property<string>("TraceId")
+                        .HasColumnType("text")
+                        .HasColumnName("trace_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_entries");
+
+                    b.HasIndex("ResourceType", "ResourceId", "OccurredAt", "Id")
+                        .HasDatabaseName("ix_audit_entries_resource_type_resource_id_occurred_at_id");
+
+                    b.ToTable("audit_entries", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingProvider", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_charging_providers");
+
+                    b.ToTable("charging_providers", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ChargingProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("charging_provider_id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid>("ConnectorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connector_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal?>("FinalEnergyKWh")
+                        .HasColumnType("numeric")
+                        .HasColumnName("final_energy_k_wh");
+
+                    b.Property<int>("Lifecycle")
+                        .HasColumnType("integer")
+                        .HasColumnName("lifecycle");
+
+                    b.Property<string>("ProviderSessionId")
+                        .HasColumnType("text")
+                        .HasColumnName("provider_session_id");
+
+                    b.Property<Guid>("ReservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reservation_id");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sessions");
+
+                    b.HasIndex("ConnectorId")
+                        .HasDatabaseName("ix_sessions_connector_id");
+
+                    b.HasIndex("ReservationId")
+                        .HasDatabaseName("ix_sessions_reservation_id");
+
+                    b.HasIndex("ChargingProviderId", "ProviderSessionId")
+                        .HasDatabaseName("ix_sessions_charging_provider_id_provider_session_id");
+
+                    b.ToTable("sessions", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.Deadline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.Property<DateTimeOffset?>("HandledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handled_at");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid?>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<Guid?>("ReservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reservation_id");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deadlines");
+
+                    b.HasIndex("DueAt")
+                        .HasDatabaseName("ix_deadlines_due_at")
+                        .HasFilter("handled_at IS NULL");
+
+                    b.HasIndex("OperationId")
+                        .HasDatabaseName("ix_deadlines_operation_id");
+
+                    b.HasIndex("ReservationId")
+                        .HasDatabaseName("ix_deadlines_reservation_id");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_deadlines_session_id");
+
+                    b.ToTable("deadlines", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Bucket")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("bucket");
+
+                    b.Property<long?>("ByteLength")
+                        .HasColumnType("bigint")
+                        .HasColumnName("byte_length");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("object_key");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.Property<Guid?>("SourceFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_file_id");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer")
+                        .HasColumnName("state");
+
+                    b.Property<Guid?>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_file_metadata");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_file_metadata_session_id");
+
+                    b.HasIndex("SourceFileId")
+                        .HasDatabaseName("ix_file_metadata_source_file_id");
+
+                    b.HasIndex("StationId")
+                        .HasDatabaseName("ix_file_metadata_station_id");
+
+                    b.HasIndex("Bucket", "ObjectKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_file_metadata_bucket_object_key");
+
+                    b.ToTable("file_metadata", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("driver_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_fingerprint");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_operations");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_operations_session_id");
+
+                    b.HasIndex("DriverId", "Kind", "IdempotencyKey")
+                        .HasDatabaseName("ix_operations_driver_id_kind_idempotency_key");
+
+                    b.ToTable("operations", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.OperatorAssignment", b =>
+                {
+                    b.Property<Guid>("OperatorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operator_user_id");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id");
+
+                    b.HasKey("OperatorUserId", "StationId")
+                        .HasName("pk_operator_assignments");
+
+                    b.HasIndex("StationId")
+                        .HasDatabaseName("ix_operator_assignments_station_id");
+
+                    b.ToTable("operator_assignments", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.OperatorUser", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("IdentityIssuer")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("identity_issuer");
+
+                    b.Property<string>("IdentitySubject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("identity_subject");
+
+                    b.HasKey("Id")
+                        .HasName("pk_operator_users");
+
+                    b.HasIndex("IdentityIssuer", "IdentitySubject")
+                        .IsUnique()
+                        .HasDatabaseName("ix_operator_users_identity_issuer_identity_subject");
+
+                    b.ToTable("operator_users", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderCharger", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChargerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("charger_id");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid>("ProviderStationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("provider_station_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_chargers");
+
+                    b.HasIndex("ChargerId")
+                        .HasDatabaseName("ix_provider_chargers_charger_id");
+
+                    b.HasIndex("ProviderStationId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_chargers_provider_station_id_external_id");
+
+                    b.ToTable("provider_chargers", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderConnector", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ConnectorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connector_id");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid>("ProviderEvseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("provider_evse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_connectors");
+
+                    b.HasIndex("ConnectorId")
+                        .HasDatabaseName("ix_provider_connectors_connector_id");
+
+                    b.HasIndex("ProviderEvseId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_connectors_provider_evse_id_external_id");
+
+                    b.ToTable("provider_connectors", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderEvse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("EvseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("evse_id");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid>("ProviderChargerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("provider_charger_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_evses");
+
+                    b.HasIndex("EvseId")
+                        .HasDatabaseName("ix_provider_evses_evse_id");
+
+                    b.HasIndex("ProviderChargerId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_evses_provider_charger_id_external_id");
+
+                    b.ToTable("provider_evses", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderStation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChargingProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("charging_provider_id");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_stations");
+
+                    b.HasIndex("StationId")
+                        .HasDatabaseName("ix_provider_stations_station_id");
+
+                    b.HasIndex("ChargingProviderId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_stations_charging_provider_id_external_id");
+
+                    b.ToTable("provider_stations", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>
+                {
+                    b.HasOne("EvCharging.Domain.Equipment.Station", "Station")
+                        .WithMany("Chargers")
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_chargers_stations_station_id");
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Connector", b =>
+                {
+                    b.HasOne("EvCharging.Domain.Equipment.Evse", "Evse")
+                        .WithMany("Connectors")
+                        .HasForeignKey("EvseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_connectors_evses_evse_id");
+
+                    b.Navigation("Evse");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Evse", b =>
+                {
+                    b.HasOne("EvCharging.Domain.Equipment.Charger", "Charger")
+                        .WithMany("Evses")
+                        .HasForeignKey("ChargerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_evses_chargers_charger_id");
+
+                    b.Navigation("Charger");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Reservations.Reservation", b =>
+                {
+                    b.HasOne("EvCharging.Domain.Equipment.Connector", "Connector")
+                        .WithMany()
+                        .HasForeignKey("ConnectorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reservations_connectors_connector_id");
+
+                    b.HasOne("EvCharging.Domain.Identity.Driver", "Driver")
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reservations_drivers_driver_id");
+
+                    b.Navigation("Connector");
+
+                    b.Navigation("Driver");
+                });
+
             modelBuilder.Entity("EvCharging.Persistence.Entities.Attempt", b =>
                 {
                     b.HasOne("EvCharging.Persistence.Entities.Operation", null)
@@ -844,18 +885,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasConstraintName("fk_attempts_operations_operation_id");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Charger", b =>
-                {
-                    b.HasOne("EvCharging.Persistence.Entities.Station", "Station")
-                        .WithMany("Chargers")
-                        .HasForeignKey("StationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_chargers_stations_station_id");
-
-                    b.Navigation("Station");
-                });
-
             modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingSession", b =>
                 {
                     b.HasOne("EvCharging.Persistence.Entities.ChargingProvider", null)
@@ -864,31 +893,19 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_sessions_charging_providers_charging_provider_id");
 
-                    b.HasOne("EvCharging.Persistence.Entities.Connector", null)
+                    b.HasOne("EvCharging.Domain.Equipment.Connector", null)
                         .WithMany()
                         .HasForeignKey("ConnectorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_sessions_connectors_connector_id");
 
-                    b.HasOne("EvCharging.Persistence.Entities.Reservation", null)
+                    b.HasOne("EvCharging.Domain.Reservations.Reservation", null)
                         .WithMany()
                         .HasForeignKey("ReservationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_sessions_reservations_reservation_id");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Connector", b =>
-                {
-                    b.HasOne("EvCharging.Persistence.Entities.Evse", "Evse")
-                        .WithMany("Connectors")
-                        .HasForeignKey("EvseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_connectors_evses_evse_id");
-
-                    b.Navigation("Evse");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Deadline", b =>
@@ -899,7 +916,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_deadlines_operations_operation_id");
 
-                    b.HasOne("EvCharging.Persistence.Entities.Reservation", null)
+                    b.HasOne("EvCharging.Domain.Reservations.Reservation", null)
                         .WithMany()
                         .HasForeignKey("ReservationId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -910,18 +927,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_deadlines_sessions_session_id");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Evse", b =>
-                {
-                    b.HasOne("EvCharging.Persistence.Entities.Charger", "Charger")
-                        .WithMany("Evses")
-                        .HasForeignKey("ChargerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_evses_chargers_charger_id");
-
-                    b.Navigation("Charger");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
@@ -938,7 +943,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_file_metadata_file_metadata_source_file_id");
 
-                    b.HasOne("EvCharging.Persistence.Entities.Station", null)
+                    b.HasOne("EvCharging.Domain.Equipment.Station", null)
                         .WithMany()
                         .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -947,7 +952,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Driver", null)
+                    b.HasOne("EvCharging.Domain.Identity.Driver", null)
                         .WithMany()
                         .HasForeignKey("DriverId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -971,7 +976,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_operator_assignments_operator_users_operator_user_id");
 
-                    b.HasOne("EvCharging.Persistence.Entities.Station", null)
+                    b.HasOne("EvCharging.Domain.Equipment.Station", null)
                         .WithMany()
                         .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -981,7 +986,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderCharger", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Charger", null)
+                    b.HasOne("EvCharging.Domain.Equipment.Charger", null)
                         .WithMany()
                         .HasForeignKey("ChargerId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -998,7 +1003,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderConnector", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Connector", null)
+                    b.HasOne("EvCharging.Domain.Equipment.Connector", null)
                         .WithMany()
                         .HasForeignKey("ConnectorId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -1015,7 +1020,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderEvse", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Evse", null)
+                    b.HasOne("EvCharging.Domain.Equipment.Evse", null)
                         .WithMany()
                         .HasForeignKey("EvseId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -1039,7 +1044,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_provider_stations_charging_providers_charging_provider_id");
 
-                    b.HasOne("EvCharging.Persistence.Entities.Station", null)
+                    b.HasOne("EvCharging.Domain.Equipment.Station", null)
                         .WithMany()
                         .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -1047,34 +1052,17 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasConstraintName("fk_provider_stations_stations_station_id");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Reservation", b =>
-                {
-                    b.HasOne("EvCharging.Persistence.Entities.Connector", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_reservations_connectors_connector_id");
-
-                    b.HasOne("EvCharging.Persistence.Entities.Driver", null)
-                        .WithMany()
-                        .HasForeignKey("DriverId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_reservations_drivers_driver_id");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Charger", b =>
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>
                 {
                     b.Navigation("Evses");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Evse", b =>
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Evse", b =>
                 {
                     b.Navigation("Connectors");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Station", b =>
+            modelBuilder.Entity("EvCharging.Domain.Equipment.Station", b =>
                 {
                     b.Navigation("Chargers");
                 });

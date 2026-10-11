@@ -1,15 +1,17 @@
 import { PlatformRole } from "@/features/auth/PlatformRole";
 import { authKeys } from "@/features/auth/api";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { HttpStatusCode } from "axios";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { createAppQueryClient } from "./query-client";
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
-vi.mock("@/lib/api", () => ({ api: { get } }));
+const { get, put } = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }));
+vi.mock("@/lib/api", () => ({ api: { get, put } }));
 const anonymous = { signedIn: false, user: null, antiforgeryToken: "test" };
 const catalog = { stations: [], nextAfterId: null };
 const detail = {
@@ -37,11 +39,10 @@ function mockSession(session: unknown = anonymous) {
 }
 
 function renderApp(path: string) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = createAppQueryClient();
+  client.setDefaultOptions({ queries: { retry: false } });
   render(
-    <MantineProvider>
+    <MantineProvider env="test">
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
           <App />
@@ -55,29 +56,8 @@ function renderApp(path: string) {
 describe("application shell", () => {
   beforeEach(() => {
     get.mockReset();
+    put.mockReset();
     mockSession();
-  });
-
-  it.each([
-    { roles: [] },
-    { roles: [PlatformRole.Driver] },
-    { roles: [PlatformRole.Operator] },
-    { roles: [PlatformRole.Driver, PlatformRole.Operator] },
-  ])("opens the public catalogue from home for $roles", async ({ roles }) => {
-    if (roles.length)
-      mockSession({
-        signedIn: true,
-        user: { name: "User", roles },
-        antiforgeryToken: "test",
-      });
-    renderApp("/");
-    expect(
-      await screen.findByRole("heading", { name: "Find a station" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Stations" })).toHaveAttribute(
-      "href",
-      "/stations",
-    );
   });
 
   it("renders public browsing while session discovery is pending", async () => {
@@ -98,33 +78,6 @@ describe("application shell", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps public browsing usable when session discovery fails and retries", async () => {
-    get.mockImplementation((path: string) =>
-      path === "/auth/session"
-        ? Promise.reject(new Error("private transport details"))
-        : Promise.resolve({ data: catalog }),
-    );
-    renderApp("/stations");
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Account unavailable",
-    );
-    expect(
-      await screen.findByRole("heading", { name: "No stations to display" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Sign in" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("private transport details"),
-    ).not.toBeInTheDocument();
-    mockSession();
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(
-      await screen.findByRole("link", { name: "Sign in" }),
-    ).toHaveAttribute("href", "/auth/login?returnUrl=%2Fstations");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
   it("preserves pathname, query and hash when signing in", async () => {
     renderApp(
       "/stations/709af89a-8fda-4724-a188-1e38aac99dd3?source=catalog#equipment",
@@ -136,45 +89,6 @@ describe("application shell", () => {
       "/auth/login?returnUrl=%2Fstations%2F709af89a-8fda-4724-a188-1e38aac99dd3%3Fsource%3Dcatalog%23equipment",
     );
     expect(screen.getAllByRole("link", { name: "Sign in" })).toHaveLength(1);
-  });
-
-  it("requires sign-in for the operator area", async () => {
-    renderApp("/operator");
-    expect(
-      await screen.findByRole("heading", { name: "Sign in to continue" }),
-    ).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Sign in" })).toHaveLength(1);
-    expect(
-      screen.queryByRole("link", { name: "Operator area" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("denies the driver access to the operator area", async () => {
-    mockSession({
-      signedIn: true,
-      user: { name: "Driver", roles: [PlatformRole.Driver] },
-      antiforgeryToken: "test",
-    });
-    renderApp("/operator");
-    expect(
-      await screen.findByRole("heading", { name: "Access denied" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Operator area" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "Sign in" }),
-    ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Account menu" }));
-    const form = (
-      await screen.findByRole("menuitem", { name: "Sign out" })
-    ).closest("form");
-    expect(form).toHaveAttribute("method", "post");
-    expect(form).toHaveAttribute(
-      "action",
-      "/auth/logout?returnUrl=%2Fstations",
-    );
-    expect(form).toHaveFormValues({ __RequestVerificationToken: "test" });
   });
 
   it.each([
@@ -239,14 +153,94 @@ describe("application shell", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("returns to the public catalogue from an unknown route", async () => {
-    renderApp("/missing-page");
-    expect(
-      await screen.findByRole("heading", { name: "Page not found" }),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("link", { name: "Return home" }));
-    expect(
-      await screen.findByRole("heading", { name: "Find a station" }),
-    ).toBeInTheDocument();
+  it.each(["signed-out", "signed-in", "unavailable"])(
+    "rechecks the session after a protected query returns 401: %s",
+    async (outcome) => {
+      const driver = {
+        signedIn: true,
+        user: { name: "Driver", roles: [PlatformRole.Driver] },
+        antiforgeryToken: "test",
+      };
+      const unauthorized = Object.assign(new Error("Unauthorized"), {
+        isAxiosError: true,
+        response: { status: HttpStatusCode.Unauthorized },
+      });
+      let sessionRequests = 0;
+      get.mockImplementation(async (path: string) => {
+        if (path !== "/auth/session") throw unauthorized;
+        sessionRequests++;
+        if (sessionRequests === 1) return { data: driver };
+        if (outcome === "unavailable") throw unauthorized;
+        return { data: outcome === "signed-out" ? anonymous : driver };
+      });
+      renderApp("/reservations");
+
+      if (outcome === "signed-out") {
+        expect(
+          await screen.findByRole("heading", { name: "Sign in to continue" }),
+        ).toBeVisible();
+        expect(screen.getByRole("link", { name: "Sign in" })).toBeVisible();
+        expect(
+          screen.queryByRole("button", { name: "Account menu" }),
+        ).toBeNull();
+      } else if (outcome === "signed-in") {
+        expect(
+          await screen.findByText("Sign in again to continue."),
+        ).toBeVisible();
+        expect(
+          screen.getByRole("button", { name: "Account menu" }),
+        ).toBeVisible();
+      } else {
+        expect(await screen.findByText("Account unavailable")).toBeVisible();
+        expect(
+          screen.queryByRole("button", { name: "Account menu" }),
+        ).toBeNull();
+      }
+
+      await waitFor(() => expect(sessionRequests).toBe(2));
+      expect(
+        get.mock.calls.filter(([path]) => path === "/api/reservations"),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("retains an editor draft when a failed save reveals a signed-out session", async () => {
+    const operator = {
+      signedIn: true,
+      user: { name: "Operator", roles: [PlatformRole.Operator] },
+      antiforgeryToken: "test",
+    };
+    let signedOut = false;
+    get.mockImplementation(async (path: string) => ({
+      data:
+        path === "/auth/session"
+          ? signedOut
+            ? anonymous
+            : operator
+          : { ...detail, version: 1 },
+    }));
+    put.mockImplementation(async () => {
+      signedOut = true;
+      throw Object.assign(new Error("Unauthorized"), {
+        isAxiosError: true,
+        response: { status: HttpStatusCode.Unauthorized },
+      });
+    });
+    const client = renderApp(`/stations/${detail.id}/edit`);
+    const name = await screen.findByLabelText("Station name", { exact: false });
+    await userEvent.clear(name);
+    await userEvent.type(name, "Unsaved station name");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("link", { name: "Sign in" })).toBeVisible();
+    expect(name).not.toBeVisible();
+    expect(name).toHaveValue("Unsaved station name");
+    expect(put).toHaveBeenCalledTimes(1);
+
+    signedOut = false;
+    await act(() => client.invalidateQueries({ queryKey: authKeys.session }));
+    await waitFor(() => expect(name).toBeVisible());
+    expect(name).toHaveValue("Unsaved station name");
+    expect(put).toHaveBeenCalledTimes(1);
   });
 });

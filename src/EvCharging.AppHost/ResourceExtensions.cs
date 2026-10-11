@@ -4,7 +4,7 @@ namespace EvCharging.AppHost;
 
 internal static class ResourceExtensions
 {
-    internal const string PostgresImageTag = "17.11-bookworm";
+    internal const string PostgresImageTag = "18.6-bookworm";
 
     public static ReferenceExpression AddBrowserOrigin(
         this IDistributedApplicationBuilder builder,

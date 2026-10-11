@@ -2,9 +2,9 @@ import { Image } from "@mantine/core";
 import park from "../assets/charging-park.png";
 import classes from "./Stations.module.css";
 
-export function StationPhoto() {
+export function StationPhoto({ className = "" }: { className?: string }) {
   return (
-    <figure className={classes.photo}>
+    <figure className={`${classes.photo} ${className}`}>
       <Image
         src={park}
         alt="Illustrative charging station"

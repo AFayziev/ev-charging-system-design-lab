@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EvCharging.Domain.Auditing;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -66,27 +67,37 @@ public sealed class AuditSaveChangesInterceptor(AuditEntryWriter writer) : SaveC
             return;
         }
 
-        // Concurrency failures do not invoke EF's interceptor failure callback.
-        // A new save attempt must discard any automatic entries left by that attempt.
+        // Concurrency failures may bypass the failure callback; rebuild audits for each attempt.
         DiscardAutomaticEntries(database);
-
-        // Inspect a snapshot before appending entries to the same change tracker.
         var entries = database.ChangeTracker.Entries<IAuditableEntity>()
-            .Where(entry => entry.State == EntityState.Modified)
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             .ToArray();
         foreach (var entry in entries)
         {
             var properties = entry.Properties.Where(property => property.Metadata.IsAudited()).ToArray();
-            if (!properties.Any(property => property.IsModified))
+            if (properties.Length == 0
+                || (entry.State == EntityState.Modified && !properties.Any(property => property.IsModified)))
             {
                 continue;
             }
 
-            var resourceType = entry.Metadata.GetAuditResourceType();
-            var details = new AuditUpdateDetails(
-                Snapshot(properties, useOriginalValues: true), Snapshot(properties, useOriginalValues: false));
+            var action = entry.State switch
+            {
+                EntityState.Added => AuditAction.Added,
+                EntityState.Modified => AuditAction.Updated,
+                EntityState.Deleted => AuditAction.Deleted,
+                _ => throw new InvalidOperationException($"Unsupported audit state {entry.State}.")
+            };
+            object details = entry.State switch
+            {
+                EntityState.Added => new AuditCreationDetails(Snapshot(properties, useOriginalValues: false)),
+                EntityState.Modified => new AuditUpdateDetails(
+                    Snapshot(properties, useOriginalValues: true), Snapshot(properties, useOriginalValues: false)),
+                EntityState.Deleted => new AuditDeletionDetails(Snapshot(properties, useOriginalValues: true)),
+                _ => throw new InvalidOperationException($"Unsupported audit state {entry.State}.")
+            };
             _automaticEntries.Add(writer.Append(
-                database, AuditAction.Updated, resourceType, entry.Entity.Id, details, 1));
+                database, action, entry.Metadata.GetAuditResourceType(), entry.Entity.Id, details, 1));
         }
     }
 
@@ -104,7 +115,6 @@ public sealed class AuditSaveChangesInterceptor(AuditEntryWriter writer) : SaveC
     {
         if (context is not null)
         {
-            // EF retains Added entries after rollback; regenerate only automatic audits on a new save attempt.
             foreach (var audit in _automaticEntries)
             {
                 context.Entry(audit).State = EntityState.Detached;
@@ -114,7 +124,11 @@ public sealed class AuditSaveChangesInterceptor(AuditEntryWriter writer) : SaveC
         _automaticEntries.Clear();
     }
 
+    private sealed record AuditCreationDetails(IReadOnlyDictionary<string, JsonElement> After);
+
     private sealed record AuditUpdateDetails(
         IReadOnlyDictionary<string, JsonElement> Before,
         IReadOnlyDictionary<string, JsonElement> After);
+
+    private sealed record AuditDeletionDetails(IReadOnlyDictionary<string, JsonElement> Before);
 }

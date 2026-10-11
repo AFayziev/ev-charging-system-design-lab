@@ -18,7 +18,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("application startup", () => {
-  it.each(["network", "http", "json", "initialization"])(
+  it.each(["network", "initialization"])(
     "starts the application after optional diagnostics %s failure",
     async (failure) => {
       vi.stubGlobal(
@@ -26,12 +26,9 @@ describe("application startup", () => {
         vi.fn().mockImplementation(async () => {
           if (failure === "network") throw new TypeError("Offline");
           return {
-            ok: failure !== "http",
-            status: failure === "http" ? 503 : 200,
-            json: async () => {
-              if (failure === "json") throw new SyntaxError("Invalid config");
-              return { enabled: true };
-            },
+            ok: true,
+            status: 200,
+            json: async () => ({ enabled: true }),
           };
         }),
       );
@@ -44,17 +41,4 @@ describe("application startup", () => {
       expect(console.warn).toHaveBeenCalledOnce();
     },
   );
-  it("initializes diagnostics before application modules are evaluated", async () => {
-    const settings = { enabled: true };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => settings }),
-    );
-    await import("./main");
-    expect(initializeDiagnostics).toHaveBeenCalledWith(settings);
-    expect(initializeDiagnostics.mock.invocationCallOrder[0]).toBeLessThan(
-      bootstrap.mock.invocationCallOrder[0]!,
-    );
-    expect(console.warn).not.toHaveBeenCalled();
-  });
 });

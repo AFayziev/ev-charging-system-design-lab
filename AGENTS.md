@@ -15,10 +15,13 @@ including concurrency, dependency failures, and uncertain external effects.
 | [Integrations](docs/integrations.md) | Third-party provider contracts, simulators, delivery adapters, and command safety |
 | [Lab](docs/lab.md) | Technology selections, implementation constraints, profiles, timings, fault scenarios, and verification |
 | [Plan](docs/implementation-plan.md) | Task IDs, dependencies, status, and acceptance criteria |
-| [C# conventions](docs/csharp-conventions.md) | C# design and review guidelines, cleanup and validation commands |
+| [Backend guidelines](docs/backend-guidelines.md) | Backend design, coding, persistence, testing, and review guidance |
 
-Follow the C# conventions for application code and tests. Use the repository
+Follow the backend guidelines for backend code and tests. Use the repository
 EditorConfig and SDK analyzers; keep new and changed code free of warnings.
+Before changing business entities, persistence mappings, or command/query handlers,
+read [Domain models, persistence, and validation](docs/backend-guidelines.md#domain-models-persistence-and-validation).
+Apply its review criteria before considering the implementation complete.
 
 ## Projects
 
@@ -42,8 +45,8 @@ implementation progress is recorded in the plan.
 | `EvCharging.QueuedChargingProviderApi` | Simulator with queued acknowledgement and no effect deduplication |
 | `EvCharging.NotificationProviderApi` | Third-party notification service simulator; inspectable synthetic outcomes and controlled faults, no real delivery |
 | `EvCharging.Contracts` | Shared application API contracts and canonical role types; a library, not a resource |
-| `EvCharging.Domain` | Canonical domain facts, measurements, and pure business policies; a library, not a resource |
-| `EvCharging.Persistence` | Shared charging-schema entities and EF mappings for API/worker consumers; a library, not a resource |
+| `EvCharging.Domain` | Business entities, value objects, measurements, and pure business policies; a library, not a resource |
+| `EvCharging.Persistence` | Charging-schema EF mappings, database access, auditing, and persistence-owned records for API/worker consumers; a library, not a resource |
 | `EvCharging.Persistence.Migrations` | Charging-schema EF migrations, snapshot, design-time tooling, sample-data seeding/reset, and one-shot migrations using schema-owning credentials |
 | `EvCharging.ServiceDefaults` | Shared discovery, HTTP resilience, OpenTelemetry, and health checks; a library, not a resource |
 
@@ -93,21 +96,19 @@ copying literals or policies. Independent public-contract assertions may repeat
 expected values; tests must explicitly configure scenario settings rather than
 depend on application defaults.
 
-Choose identifier types per entity's requirements. GUIDs require a concrete
-justification; referencing a record across APIs, messages, or workers alone does
-not justify them. Prefer database-generated numeric keys for database-owned
-records when no requirement warrants another identifier type.
+Follow the [identifier conventions](docs/backend-guidelines.md#identifiers)
+for application-owned records.
 
-When an external contract must avoid exposing sequential database keys:
+For externally referenced resources:
 
-- Retain numeric primary/foreign keys internally and add a stable UUIDv4
-  `PublicId` with enforced uniqueness to the externally referenced entity.
+- Keep internal primary/foreign keys separate from `PublicId`; enforce public
+  identifier uniqueness.
 - Use public identifiers in browser routes, API requests/responses, errors, and
-  pagination cursors. Encoding a numeric key does not make it opaque.
+  pagination cursors; do not expose or encode internal keys in public contracts.
 - Keep equipment labels and locally scoped display numbers separate from both
   database keys and public identifiers. Treat frontend public IDs as strings.
-- Use standard UUID generation and provider/EF mapping. Add public identifiers
-  when a feature requires external references, not to every persisted record.
+- Add public identifiers when a feature requires external references, not to
+  every persisted record.
 - Preserve resource authorization independently of identifier predictability.
 
 ## Frontend

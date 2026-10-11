@@ -15,7 +15,10 @@ internal static class PlatformPersistenceExtensions
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<IAuditActorAccessor, HttpAuditActorAccessor>();
         builder.Services.AddScoped<AuditEntryWriter>();
-        builder.Services.AddScoped<AuditSaveChangesInterceptor>();
+        builder.Services.AddKeyedScoped<AuditSaveChangesInterceptor>(
+            WriteRoute,
+            (services, _) =>
+                new AuditSaveChangesInterceptor(services.GetRequiredService<AuditEntryWriter>()));
         foreach (string route in new[] { ReadRoute, WriteRoute })
         {
             string? connection = builder.Configuration.GetConnectionString(route);
@@ -33,11 +36,12 @@ internal static class PlatformPersistenceExtensions
         builder.Services.AddKeyedScoped<PlatformDbContext>(
             WriteRoute,
             (services, _) =>
-                new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>(
-                    services.GetRequiredService<DbContextOptions<PlatformDbContext>>())
-                    .UseNpgsql(services.GetRequiredKeyedService<NpgsqlDataSource>(WriteRoute))
-                    .AddInterceptors(services.GetRequiredService<AuditSaveChangesInterceptor>())
-                    .Options));
+                new PlatformDbContext(
+                    new DbContextOptionsBuilder<PlatformDbContext>(
+                        services.GetRequiredService<DbContextOptions<PlatformDbContext>>())
+                        .UseNpgsql(services.GetRequiredKeyedService<NpgsqlDataSource>(WriteRoute))
+                        .AddInterceptors(services.GetRequiredKeyedService<AuditSaveChangesInterceptor>(WriteRoute))
+                        .Options));
         return builder;
     }
 }

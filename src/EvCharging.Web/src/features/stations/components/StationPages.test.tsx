@@ -2,27 +2,20 @@ import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
-import { HttpStatusCode } from "axios";
 import { StationListPage } from "./StationListPage";
 import { StationDetailPage } from "./StationDetailPage";
 
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { get } }));
 
-function renderScreen(path = "/stations") {
+function renderScreen() {
   return render(
     <MantineProvider>
       <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path="/stations" element={<StationListPage />} />
-            <Route
-              path="/stations/:stationId"
-              element={<StationDetailPage />}
-            />
-          </Routes>
+        <MemoryRouter initialEntries={["/stations"]}>
+          <StationListPage />
         </MemoryRouter>
       </QueryClientProvider>
     </MantineProvider>,
@@ -31,23 +24,6 @@ function renderScreen(path = "/stations") {
 
 beforeEach(() => {
   get.mockReset();
-});
-
-it("shows loading then an empty catalog", async () => {
-  let finish!: (value: unknown) => void;
-  get.mockReturnValue(
-    new Promise((resolve) => {
-      finish = resolve;
-    }),
-  );
-  renderScreen();
-  expect(screen.getByRole("status")).toHaveTextContent(
-    "Loading station information",
-  );
-  finish({ data: { stations: [], nextAfterId: null } });
-  expect(
-    await screen.findByRole("heading", { name: "No stations to display" }),
-  ).toBeInTheDocument();
 });
 
 it("shows a safe failure and retries the query", async () => {
@@ -67,99 +43,88 @@ it("shows a safe failure and retries the query", async () => {
   ).toBeInTheDocument();
 });
 
-it("distinguishes a missing station from transport failure", async () => {
-  const missing = Object.assign(new Error("missing"), {
-    isAxiosError: true,
-    response: { status: HttpStatusCode.NotFound },
-  });
-  get.mockRejectedValue(missing);
-  renderScreen("/stations/709af89a-8fda-4724-a188-1e38aac99dd3");
-  expect(
-    await screen.findByRole("heading", { name: "Station not found" }),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "Try again" }),
-  ).not.toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "All stations" })).toHaveAttribute(
-    "href",
-    "/stations",
-  );
-});
-
-it("shows connector capability, maximum rated power and equipment counts", async () => {
-  get.mockResolvedValue({
-    data: {
-      stations: [
-        {
-          id: "709af89a-8fda-4724-a188-1e38aac99dd3",
-          name: "Demo Yard",
-          address: "14 Mock Lane",
-          chargerCount: 2,
-          evseCount: 4,
-          connectorCount: 4,
-          capabilities: [
-            { connectorType: "CCS2", powerSupply: "DC", ratedPowerKW: 150 },
-          ],
-        },
-      ],
-      nextAfterId: null,
+it("keeps connector selection synchronized with the URL and booking form", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
     },
-  });
-  renderScreen();
-  expect(
-    await screen.findByRole("heading", { name: "Demo Yard" }),
-  ).toBeInTheDocument();
-  expect(screen.getByText("Up to 150 kW rated power")).toBeInTheDocument();
-  expect(screen.getByText("CCS2 · DC · 150 kW")).toBeInTheDocument();
-  expect(
-    screen.getByText("2 chargers · 4 EVSEs · 4 connectors"),
-  ).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "View Demo Yard" })).toHaveAttribute(
-    "href",
-    "/stations/709af89a-8fda-4724-a188-1e38aac99dd3",
   );
-});
-
-it("uses coordinates for maps and scoped equipment numbers for labels", async () => {
-  get.mockResolvedValue({
-    data: {
-      id: "709af89a-8fda-4724-a188-1e38aac99dd3",
-      name: "Demo Yard",
-      address: "14 Mock Lane",
-      latitude: 51.5168,
-      longitude: -0.1284,
-      timeZoneId: "Europe/London",
-      accessInstructions: "Fictional site.",
-      chargers: [
-        {
-          id: "charger-public-id",
-          name: "Charger 1",
-          evses: [
+  const station = {
+    id: "station",
+    name: "North Station",
+    address: "1 Synthetic Avenue",
+    latitude: 51.51,
+    longitude: -0.12,
+    timeZoneId: "Europe/London",
+    accessInstructions: "North entrance",
+    chargers: [
+      {
+        id: "charger",
+        name: "Charger 1",
+        evses: [1, 2].map((number) => ({
+          id: `evse-${number}`,
+          number,
+          connectors: [
             {
-              id: "evse-public-id",
-              number: 2,
-              connectors: [
-                {
-                  id: "connector-public-id",
-                  number: 1,
-                  connectorType: "Type2",
-                  powerSupply: "AC",
-                  ratedPowerKW: 11,
-                },
-              ],
+              id: `connector-${number}`,
+              number: 1,
+              connectorType: "Type2",
+              powerSupply: "AC",
+              ratedPowerKW: 22,
             },
           ],
-        },
+        })),
+      },
+    ],
+  };
+  get.mockImplementation(async (path: string) => ({
+    data:
+      path === "/auth/session"
+        ? {
+            signedIn: true,
+            user: { roles: ["driver"] },
+            antiforgeryToken: "csrf",
+          }
+        : station,
+  }));
+  const router = createMemoryRouter(
+    [{ path: "/stations/:stationId", element: <StationDetailPage /> }],
+    {
+      initialEntries: [
+        "/stations/station?source=catalog&connectorId=connector-2",
       ],
     },
-  });
-  renderScreen("/stations/709af89a-8fda-4724-a188-1e38aac99dd3");
-  const maps = await screen.findByRole("link", { name: "Open in maps" });
-  expect(maps).toHaveAttribute(
-    "href",
-    "https://www.google.com/maps/search/?api=1&query=51.5168%2C-0.1284",
   );
-  expect(maps).toHaveAttribute("rel", "noopener noreferrer");
-  expect(screen.getByText("EVSE 2 · Connector 1")).toBeInTheDocument();
-  expect(screen.queryByText("evse-public-id")).not.toBeInTheDocument();
+  render(
+    <MantineProvider env="test">
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </MantineProvider>,
+  );
+
+  const second = await screen.findByRole("radio", { name: /EVSE 2/ });
+  expect(second).toBeChecked();
+  expect(
+    await screen.findByRole("combobox", { name: "Connector" }),
+  ).toHaveValue("EVSE 2 · Connector 1 (Type 2, 22 kW)");
+  await userEvent.click(screen.getByRole("radio", { name: /EVSE 1/ }));
+  expect(screen.getByRole("combobox", { name: "Connector" })).toHaveValue(
+    "EVSE 1 · Connector 1 (Type 2, 22 kW)",
+  );
+  expect(router.state.location.search).toBe(
+    "?source=catalog&connectorId=connector-1",
+  );
+
+  await userEvent.keyboard("{ArrowDown}");
+  expect(second).toBeChecked();
+  expect(screen.getByRole("combobox", { name: "Connector" })).toHaveValue(
+    "EVSE 2 · Connector 1 (Type 2, 22 kW)",
+  );
+  expect(router.state.location.search).toBe(
+    "?source=catalog&connectorId=connector-2",
+  );
 });

@@ -1,7 +1,8 @@
-# C# coding conventions
+# Backend development guidelines
 
-Applies to handwritten C# in application hosts, shared libraries, and tests.
-Based on [Microsoft's C# conventions](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions),
+Design, implementation, and review guidance for backend hosts, shared libraries,
+and tests. C# coding style follows
+[Microsoft's conventions](https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/coding-style/coding-conventions)
 with repository-specific choices below. Framework contracts and generated code
 retain their prescribed names and signatures.
 
@@ -9,8 +10,8 @@ retain their prescribed names and signatures.
 
 - Use [domain terminology](domain.md) consistently; name by responsibility.
 - Default to one principal type per file, named after that type;
-  small related private types may remain together. Request/response records and
-  their child property types may share a file named after the parent contract.
+  small related private types may remain together. Feature slices follow the
+  grouping rules below.
 - Comments explain intent, constraints, or surprising behavior. Document public
   contracts when their units, invariants, or failure semantics need explanation.
 - Separate distinct logical steps with one blank line; keep closely related
@@ -35,9 +36,13 @@ retain their prescribed names and signatures.
   Shared infrastructure stays outside `Features`. Keep HTTP binding and response
   handling at the endpoint boundary.
 - Keep small feature slices in a file named after the use case, grouping its
-  request/response types, exclusive errors, and command/query handler. Shared
-  contracts and errors stay in their owning shared area. Split a slice when its
-  complexity warrants it; group code that changes together.
+  request/response types, child contract types, exclusive errors, and command/query
+  handler. Mapping extensions may live in separate files. Request/response models
+  used by one handler stay with that handler; models reused by multiple handlers
+  in the same feature may live in a dedicated feature-local file. Keep models out
+  of mapping files and avoid copying shared definitions. Shared errors stay in
+  their owning shared area. Split a slice when its complexity warrants it; group
+  code that changes together.
 - Place contracts in a shared project only when they have actual cross-project
   consumers; keep contracts owned by a single host with its feature.
 - Keep Minimal API route mappings and their HTTP handlers together in the
@@ -48,8 +53,11 @@ retain their prescribed names and signatures.
   boundary through shared mapping extensions. Keep exceptions for unexpected
   failures and preserve cancellation.
 - Use method syntax for LINQ.
-- Map between persistence, domain, and API models explicitly through extension
-  methods such as `ToResponse`, `ToEntity`, and `ToDomain`.
+- Follow [Domain models, persistence, and validation](#domain-models-persistence-and-validation)
+  when creating or changing business entities and their handlers.
+- Keep API contracts and derived read models separate from business entities.
+  Map between distinct models explicitly through extension methods such as
+  `ToResponse`, `ToEntity`, and `ToDomain` where those representations are needed.
 - Default implementation types to `internal`; expose only required contracts.
 - Use records for immutable data/messages and classes for identity or mutable
   lifecycle. Prefer immutable collections where practical.
@@ -75,6 +83,110 @@ retain their prescribed names and signatures.
   Keep persistence and transport concerns out of domain behavior.
 - Avoid generic repositories or abstraction layers that only forward calls.
 
+## Domain models, persistence, and validation
+
+### Model ownership
+
+- Default to one business entity in `EvCharging.Domain`, persisted directly by
+  EF Core. Keep mappings, indexes, conversions, constraints, and database access
+  in `EvCharging.Persistence`; Domain has no EF Core dependency.
+- Introduce separate domain and storage classes only for a concrete representation
+  mismatch, such as reconstructing one business object from a different storage
+  structure. A project boundary alone is insufficient. Do not maintain duplicate
+  property bags with `ToDomain`/`ToEntity` round trips.
+- Keep infrastructure records in their owning persistence area when they have no
+  business behavior. Audit storage and provider identifier mappings do not need
+  artificial domain counterparts.
+- Model lifecycle entities as classes with business operations. Simple catalog
+  CRUD may retain ordinary setters; it does not require an aggregate hierarchy,
+  factories, or domain events merely to satisfy a pattern.
+- Introduce value objects for meaningful identity-free concepts with equality or
+  invariants. Cross-field validation alone does not require a value object or
+  policy class. Separate policy types are useful for rules involving multiple
+  objects; handlers must use applicable policies rather than leave them test-only.
+
+### Construction and state changes
+
+- Use private setters for state governed by business rules, including lifecycle
+  status, ownership, and mutually dependent values. Expose named operations such
+  as `Book`, `Cancel`, or `Complete`, rather than general-purpose state setters.
+- Creation validates invariants and returns a valid entity or typed errors.
+  Transitions check the current state and required facts before mutation; rejected
+  operations leave state unchanged. Commands use these operations rather than
+  duplicate their rules or assign properties directly.
+- Use an EF-compatible constructor, normally a private parameterless constructor
+  alongside the business creation operation. Materialization restores stored
+  state; it must not rerun current-time creation rules or trigger side effects.
+  Private setters permit normal EF materialization and generated keys.
+  See [EF constructor support](https://learn.microsoft.com/en-us/ef/core/modeling/constructors).
+- Prefer supported EF mapping to weakening encapsulation. Use
+  [backing fields](https://learn.microsoft.com/en-us/ef/core/modeling/backing-field)
+  when needed; do not add public constructors, mutable state, reflection helpers,
+  or attachment methods solely for persistence or tests.
+- Business operations receive required facts and an explicit current instant.
+  They do not query a database, read ambient HTTP identity, obtain the system
+  clock, call providers, or publish messages. Handlers supply these inputs.
+- Keep foreign keys and navigations consistent when an operation assigns a
+  relationship. Entity getters must not fetch related data implicitly.
+- Do not add lifecycle operations before their feature needs them. When that
+  feature arrives, connect its runtime handler to the domain operation and remove
+  competing implementations of the same rule.
+
+### Validation boundaries
+
+| Boundary | Responsibility | Examples |
+|---|---|---|
+| Request binding and validation | Transport shape and field-level contract requirements | Parse identifiers/timestamps; required text; field length |
+| Command/query handler | Authorization, resource lookup, and orchestration using loaded facts | Resolve the current driver; enforce station assignment; load a connector |
+| Entity, value object, or policy | Invariants and business eligibility shared by all callers | Valid booking interval; allowed lifecycle transition; expiry eligibility |
+| Database | Integrity under concurrent writers and non-application writes | Foreign keys; uniqueness; valid stored ranges; overlapping reservation exclusion |
+
+- Assign each rule one application owner. A timestamp ordering check may belong
+  to a request contract; when a booking interval must always be valid across
+  callers, its invariant belongs to that domain concept. Do not classify every
+  comparison as domain behavior or repeat the same rule at every layer.
+- Frontend validation gives immediate feedback; backend validation remains
+  authoritative. Database enforcement of the same integrity invariant is
+  intentional protection against races, not a replacement for useful application
+  errors.
+- Translate domain errors to request fields and HTTP outcomes in the application
+  layer. Domain errors have no dependency on transport property names or status
+  codes. Unexpected infrastructure failures remain exceptions.
+
+### Persistence and verification
+
+- Handlers load entities, invoke business operations, and persist accepted changes.
+  The shared persistence pipeline captures ordinary change audits and commits them
+  atomically. Handlers coordinate durable effects and own explicit transactions
+  when a use case spans several saves. Query handlers may project directly to
+  response/read models without constructing aggregates.
+- Application checks cannot establish cross-request exclusivity. Use appropriate
+  database constraints or concurrency control and translate only recognized
+  conflicts to expected results. See [EF concurrency handling](https://learn.microsoft.com/en-us/ef/core/saving/concurrency).
+- Check the installed EF/provider capabilities before choosing a value-object
+  mapping. Prefer supported mappings that preserve required indexes and constraints;
+  mapped private-set scalars with a derived domain value are acceptable when
+  nested mapping cannot express those requirements. Do not store two mutable
+  representations of the same value.
+- Unit tests cover creation, transitions, rejected-operation state, and business
+  boundaries. Integration tests cover meaningful constraints, competing writers,
+  authorization, and atomic persistence of related effects. Do not expose mutation
+  hooks for tests or add tests solely to prove EF can use private setters.
+- Review changes for direct state assignments, duplicated rules, unused policies,
+  unnecessary model copies, and race-prone application-only checks. New lifecycle
+  features are incomplete when their runtime path bypasses the governing model.
+
+### Identifiers
+
+| Identifier role | Convention |
+|---|---|
+| Application-owned primary/foreign keys | UUIDv7 |
+| Public resource identifiers | Separate, stable UUIDv4 |
+| Framework/provider-owned records | Prescribed key types |
+
+- Map GUID-valued properties as `Guid` in EF Core entities, not `string`.
+- Use EF Core/provider generation for primary keys when it meets the requirements.
+
 ## Async, resources, and data
 
 - Use asynchronous I/O throughout a call path. Avoid `.Result`, `.Wait()`,
@@ -96,9 +208,6 @@ retain their prescribed names and signatures.
 - Never use lazy loading. Load related data explicitly with projections,
   eager loading, or explicit loading; do not enable lazy-loading proxies or inject
   lazy loaders into entities.
-- Map GUID-valued properties as `Guid` in EF Core entities, not `string`.
-  For generated primary keys, use EF Core/provider generation when it meets
-  the requirements.
 - Keep EF migrations, snapshots, design-time factories, and design-time packages
   in the corresponding `.Migrations` project. Generate migrations and snapshots
   with `dotnet ef`. Add migration-specific SQL only for requirements the generated
@@ -143,11 +252,3 @@ retain their prescribed names and signatures.
   build-visible style warnings. Design guidelines require code review.
 - Keep builds free of compiler/analyzer warnings. Suppress diagnostics narrowly
   with a concrete reason; avoid blanket project-wide suppression.
-
-```sh
-dotnet format style EvChargingSystemDesign.slnx --no-restore --diagnostics IDE0005 --severity info
-dotnet format EvChargingSystemDesign.slnx --no-restore
-dotnet format style EvChargingSystemDesign.slnx --no-restore --diagnostics IDE0005 --severity info --verify-no-changes
-dotnet format EvChargingSystemDesign.slnx --no-restore --verify-no-changes
-dotnet build EvChargingSystemDesign.slnx --no-restore
-```

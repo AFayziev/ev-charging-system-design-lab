@@ -55,7 +55,7 @@
 
 .detailGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   align-items: start;
   gap: 32px;
 }
@@ -73,6 +73,14 @@
 
 .stationHeading .photo img {
   min-height: 0;
+}
+
+.stationLinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-top: 16px;
 }
 
 .equipmentCard {
@@ -100,7 +108,20 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 0;
+  padding: 12px 10px;
+  margin: 4px -6px;
+  border-radius: var(--mantine-radius-sm);
+  flex-wrap: wrap;
+  width: calc(100% + 12px);
+  text-align: left;
+}
+
+.connector:hover {
+  background: var(--mantine-color-teal-0);
+}
+
+.connector[data-checked] {
+  background: var(--mantine-color-teal-0);
 }
 
 .connector + .connector {
@@ -112,14 +133,20 @@
   min-width: 0;
 }
 
-.accessCard {
-  border-color: #dfe5ea;
+.bookingSidebar {
+  min-width: 0;
+  position: sticky;
+  top: calc(var(--app-shell-header-height) + 24px);
 }
 
 @media (max-width: 61.99em) {
   .detailGrid {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
+  }
+
+  .bookingSidebar {
+    position: static;
   }
 
   .catalogCard {

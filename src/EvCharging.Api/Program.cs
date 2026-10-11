@@ -1,4 +1,5 @@
 using EvCharging.Api.Authentication;
+using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
 
@@ -8,6 +9,7 @@ builder.AddApiAuthentication();
 builder.AddHttpApiDefaults("/api");
 builder.AddPlatformPersistence();
 builder.AddStations();
+builder.AddReservations();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddValidation();
 
@@ -19,5 +21,6 @@ app.UseAuthorization();
 
 app.MapHttpApiDiagnostics("api");
 app.MapStations();
+app.MapReservations();
 
 app.Run();

@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
+using EvCharging.Api.Pagination;
 using EvCharging.Api.Persistence;
 using EvCharging.Persistence;
 using FluentResults;
@@ -16,27 +18,29 @@ internal sealed class ListAssignedStationsQueryHandler(
     public async Task<Result<AssignedStationListResponse>> HandleAsync(
         ListStationsRequest request, ClaimsPrincipal user, CancellationToken cancellationToken)
     {
-        if (request.Limit is < 1 or > ListStationsRequest.MaximumPageSize)
+        if (CursorPagination.ValidateLimit(request.Limit, nameof(request.Limit)) is { } error)
         {
-            return Result.Fail<AssignedStationListResponse>(
-                new ValidationError(
-                    nameof(request.Limit),
-                    $"The limit must be between 1 and {ListStationsRequest.MaximumPageSize}."));
+            return Result.Fail<AssignedStationListResponse>(error);
         }
 
-        string? issuer = user.FindFirst("iss")?.Value;
-        string? subject = user.FindFirst("sub")?.Value;
+        var identity = user.GetUserIdentity();
+        if (identity is null)
+        {
+            return Result.Fail<AssignedStationListResponse>(new ForbiddenError());
+        }
+
         var stations = database.Stations
             .AsNoTracking()
             .Where(station => database.OperatorAssignments.Any(assignment => assignment.StationId == station.Id
                 && database.OperatorUsers.Any(operatorUser => operatorUser.Id == assignment.OperatorUserId
-                    && operatorUser.IdentityIssuer == issuer && operatorUser.IdentitySubject == subject)));
-        long afterId = 0;
+                    && operatorUser.IdentityIssuer == identity.Issuer
+                    && operatorUser.IdentitySubject == identity.Subject)));
+        Guid afterId = Guid.Empty;
         if (request.AfterId is { } cursor)
         {
             var anchorId = await stations
                 .Where(station => station.PublicId == cursor)
-                .Select(station => (long?)station.Id)
+                .Select(station => (Guid?)station.Id)
                 .SingleOrDefaultAsync(cancellationToken);
             if (anchorId is null)
             {
@@ -48,17 +52,13 @@ internal sealed class ListAssignedStationsQueryHandler(
         }
 
         var page = await stations
-            .Where(station => station.Id > afterId)
+            .Where(station => station.Id.CompareTo(afterId) > 0)
             .OrderBy(station => station.Id)
             .Take(request.Limit + 1)
             .Select(station => new AssignedStationResponse(station.PublicId, station.Name, station.Address))
             .ToListAsync(cancellationToken);
-        bool hasMore = page.Count > request.Limit;
-        if (hasMore)
-        {
-            page.RemoveAt(request.Limit);
-        }
+        var nextAfterId = CursorPagination.TrimPage(page, request.Limit, station => station.Id);
 
-        return Result.Ok(new AssignedStationListResponse(page, hasMore ? page[^1].Id : null));
+        return Result.Ok(new AssignedStationListResponse(page, nextAfterId));
     }
 }

@@ -1,8 +1,12 @@
 import { Alert, Button, Stack, Text } from "@mantine/core";
 import type { ConnectorCapability } from "../api";
 
+export function connectorTypeLabel(connectorType: string) {
+  return connectorType === "Type2" ? "Type 2" : connectorType;
+}
+
 export function capabilityLabel(capability: ConnectorCapability) {
-  return `${capability.connectorType === "Type2" ? "Type 2" : capability.connectorType} · ${capability.powerSupply} · ${capability.ratedPowerKW} kW`;
+  return `${connectorTypeLabel(capability.connectorType)} · ${capability.powerSupply} · ${capability.ratedPowerKW} kW`;
 }
 
 export function StationLoading() {
