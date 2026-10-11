@@ -17,6 +17,7 @@ public sealed class Reservation : IAuditableEntity
     public Guid DriverId { get; private set; }
     public DateTimeOffset StartsAt { get; private set; }
     public DateTimeOffset EndsAt { get; private set; }
+    public DateTimeOffset ArrivalDeadline { get; private set; }
     public ReservationState State { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public Connector? Connector { get; private set; }
@@ -28,7 +29,8 @@ public sealed class Reservation : IAuditableEntity
         Driver driver,
         DateTimeOffset start,
         DateTimeOffset end,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        ReservationBookingLimits limits)
     {
         var slot = BookingInterval.Create(start, end);
         if (slot.IsFailed)
@@ -36,13 +38,7 @@ public sealed class Reservation : IAuditableEntity
             return Result.Fail<Reservation>(slot.Errors);
         }
 
-        if (slot.Value.End <= now)
-        {
-            return Result.Fail<Reservation>(new BookingValidationError(
-                BookingBoundary.End, "The end must follow the current time."));
-        }
-
-        return Result.Ok(new Reservation
+        var reservation = new Reservation
         {
             Connector = connector,
             ConnectorId = connector.Id,
@@ -50,8 +46,44 @@ public sealed class Reservation : IAuditableEntity
             DriverId = driver.Id,
             StartsAt = slot.Value.Start,
             EndsAt = slot.Value.End,
+            ArrivalDeadline = slot.Value.Start + (limits.ArrivalAllowance < slot.Value.Duration
+                ? limits.ArrivalAllowance : slot.Value.Duration),
             State = ReservationState.Active,
             CreatedAt = now.ToUniversalTime()
-        });
+        };
+        var startValidation = reservation.ValidateStartTime(now);
+        if (startValidation.IsFailed)
+        {
+            return Result.Fail<Reservation>(startValidation.Errors);
+        }
+
+        if (slot.Value.Start - now > limits.MaximumAdvanceBookingHorizon)
+        {
+            return Result.Fail<Reservation>(new BookingValidationError(
+                BookingBoundary.Start, "The start exceeds the advance-booking limit."));
+        }
+
+        if (slot.Value.Duration > limits.MaximumBookingDuration)
+        {
+            return Result.Fail<Reservation>(new BookingValidationError(
+                BookingBoundary.End, "The slot exceeds the maximum booking duration."));
+        }
+
+        return Result.Ok(reservation);
+    }
+
+    public Result ValidateStartTime(DateTimeOffset now) => StartsAt < now
+        ? Result.Fail(new BookingValidationError(BookingBoundary.Start, "The start must not be in the past."))
+        : Result.Ok();
+
+    public bool TryExpireAtSlotEnd(DateTimeOffset now, bool hasUnresolvedStart)
+    {
+        if (State != ReservationState.Active || now < EndsAt || hasUnresolvedStart)
+        {
+            return false;
+        }
+
+        State = ReservationState.Expired;
+        return true;
     }
 }

@@ -13,7 +13,7 @@ export function ReservationFailure({
 }) {
   const failure = getReservationFailure(error, booking);
   return (
-    <Alert color="red" role="alert">
+    <Alert color="red" role="alert" title={failure.title}>
       <Stack gap="xs">
         <Text size="sm">{failure.message}</Text>
         {failure.recovery === "retry" && retry && (

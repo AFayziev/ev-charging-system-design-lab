@@ -94,23 +94,13 @@ it("waits for the writer fetch when revisiting a cached editor", async () => {
 
 it.each([
   {
-    status: HttpStatusCode.Unauthorized,
-    title: "Authentication failed",
-    blocksSave: true,
-  },
-  {
     status: HttpStatusCode.Forbidden,
     title: "Access denied",
     blocksSave: true,
   },
   {
-    status: HttpStatusCode.NotFound,
-    title: "Station not found",
-    blocksSave: true,
-  },
-  {
     status: HttpStatusCode.InternalServerError,
-    title: "Station information unavailable",
+    title: "Information unavailable",
     blocksSave: false,
   },
 ])(
@@ -122,9 +112,7 @@ it.each([
     await userEvent.clear(name);
     await userEvent.type(name, "My draft");
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Station changed",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Conflict");
     get.mockRejectedValue(failure(status));
     await userEvent.click(
       screen.getByRole("button", { name: "Reload current station" }),
@@ -136,7 +124,7 @@ it.each([
     expect(screen.getByLabelText("Station name", { exact: false })).toHaveValue(
       "My draft",
     );
-    expect(screen.queryByText("Station changed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Conflict")).not.toBeInTheDocument();
     expect(screen.queryByText("Changes saved.")).not.toBeInTheDocument();
     await waitFor(() => {
       const save = screen.getByRole("button", { name: "Save changes" });
@@ -156,12 +144,10 @@ it.each([
 );
 
 it.each([
-  { status: HttpStatusCode.Unauthorized, title: "Authentication failed" },
-  { status: HttpStatusCode.Forbidden, title: "Access denied" },
-  { status: HttpStatusCode.NotFound, title: "Station not found" },
+  { status: HttpStatusCode.NotFound, title: "Resource not found" },
   {
     status: HttpStatusCode.InternalServerError,
-    title: "Station information unavailable",
+    title: "Information unavailable",
   },
 ])(
   "shows a $status initial load failure without a form",
@@ -200,7 +186,7 @@ it("restores saving with the writer version after access recovers", async () => 
   await userEvent.clear(name);
   await userEvent.type(name, "Retained draft");
   await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-  await screen.findByText("Station changed");
+  await screen.findByText("Conflict");
   get.mockRejectedValue(failure(HttpStatusCode.Forbidden));
   await userEvent.click(
     screen.getByRole("button", { name: "Reload current station" }),
@@ -272,11 +258,6 @@ it("uses the confirmed writer response and disables inputs while saving", async 
 
 it.each([
   {
-    error: failure(HttpStatusCode.Unauthorized),
-    title: "Authentication failed",
-    recovery: "Reload current station",
-  },
-  {
     error: failure(HttpStatusCode.Forbidden),
     title: "Access denied",
     recovery: undefined,
@@ -287,14 +268,17 @@ it.each([
     recovery: undefined,
   },
   {
-    error: failure(HttpStatusCode.NotFound),
-    title: "Station not found",
-    recovery: undefined,
-  },
-  {
     error: Object.assign(new Error("private network details"), {
       isAxiosError: true,
       code: "ERR_NETWORK",
+    }),
+    title: "Changes not confirmed",
+    recovery: "Reload current station",
+  },
+  {
+    error: failure(HttpStatusCode.InternalServerError, {
+      title: "private framework details",
+      detail: "private database details",
     }),
     title: "Changes not confirmed",
     recovery: "Reload current station",
@@ -360,4 +344,45 @@ it("keeps a canceled save quiet and retains the draft", async () => {
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.queryByText("Changes saved.")).not.toBeInTheDocument();
   expect(put).toHaveBeenCalledTimes(1);
+});
+
+it("shows the public concurrency problem and keeps the reload action", async () => {
+  put.mockRejectedValue(
+    failure(HttpStatusCode.Conflict, {
+      title: "Resource changed",
+      detail:
+        "The resource changed after it was loaded. Reload it before applying your changes.",
+    }),
+  );
+  renderEditor();
+  const name = await screen.findByLabelText("Station name", { exact: false });
+  await userEvent.clear(name);
+  await userEvent.type(name, "Retained draft");
+  await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The resource changed after it was loaded. Reload it before applying your changes.",
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent("Resource changed");
+  expect(name).toHaveValue("Retained draft");
+  expect(
+    screen.getByRole("button", { name: "Reload current station" }),
+  ).toBeVisible();
+});
+
+it("shows client validation errors beside their fields before attempting a save", async () => {
+  renderEditor();
+  await userEvent.clear(
+    await screen.findByLabelText("Station name", { exact: false }),
+  );
+  await userEvent.clear(screen.getByLabelText("Address", { exact: false }));
+  await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(screen.getByText("Enter a station name.")).toBeVisible();
+  expect(screen.getByText("Enter an address.")).toBeVisible();
+  expect(
+    screen.getByLabelText("Station name", { exact: false }),
+  ).toHaveAccessibleDescription("Enter a station name.");
+  expect(
+    screen.getByLabelText("Address", { exact: false }),
+  ).toHaveAccessibleDescription("Enter an address.");
+  expect(put).not.toHaveBeenCalled();
 });

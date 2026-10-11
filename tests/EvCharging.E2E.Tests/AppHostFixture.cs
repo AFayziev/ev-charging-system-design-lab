@@ -1,16 +1,28 @@
+using System.Globalization;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
+using EvCharging.Domain.Reservations;
+using EvCharging.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace EvCharging.E2E.Tests;
 
 public sealed class AppHostFixture : IAsyncLifetime
 {
+    public static ReservationBookingLimits BookingLimits { get; } = new(
+        4, TimeSpan.FromHours(3), TimeSpan.FromDays(20), TimeSpan.FromMinutes(10));
+
     private DistributedApplication? _app;
 
     public DistributedApplication App =>
         _app ?? throw new InvalidOperationException("The application has not started.");
+
+    public async Task<PlatformDbContext> CreatePlatformDbContextAsync() => new(
+        new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(await App.GetConnectionStringAsync("platform-direct"))
+            .Options);
 
     public async Task InitializeAsync()
     {
@@ -19,6 +31,20 @@ public sealed class AppHostFixture : IAsyncLifetime
             ["--environment=Development", "--Parameters:api-instances=2",
                 "--Parameters:gateway-instances=2"],
             timeout.Token);
+        var api = builder.Resources.OfType<ProjectResource>().Single(resource => resource.Name == "api");
+        builder.CreateResourceBuilder(api)
+            .WithEnvironment(
+                "ReservationPolicy__MaximumOutstandingReservationsPerDriver",
+                BookingLimits.MaximumOutstandingReservationsPerDriver.ToString(CultureInfo.InvariantCulture))
+            .WithEnvironment(
+                "ReservationPolicy__MaximumBookingDuration",
+                BookingLimits.MaximumBookingDuration.ToString("c", CultureInfo.InvariantCulture))
+            .WithEnvironment(
+                "ReservationPolicy__MaximumAdvanceBookingHorizon",
+                BookingLimits.MaximumAdvanceBookingHorizon.ToString("c", CultureInfo.InvariantCulture))
+            .WithEnvironment(
+                "ReservationPolicy__ArrivalAllowance",
+                BookingLimits.ArrivalAllowance.ToString("c", CultureInfo.InvariantCulture));
         foreach (var resource in builder.Resources.OfType<ContainerResource>())
         {
             var volumeMounts = resource.Annotations.OfType<ContainerMountAnnotation>()

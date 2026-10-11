@@ -16,9 +16,7 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         var writer = new AuditEntryWriter(
             new TestActorAccessor(AuditActor.Service("station-importer")), new FakeTimeProvider());
         await using var connection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection).AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(connection, writer);
         var station = new Station
         {
             Name = "Created station",
@@ -58,9 +56,7 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         var writer = new AuditEntryWriter(
             new TestActorAccessor(AuditActor.Service("station-importer")), new FakeTimeProvider());
         await using var connection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection).AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(connection, writer);
         var station = new Station
         {
             Name = $"Retried creation {Guid.NewGuid()}",
@@ -71,24 +67,16 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         context.Stations.Add(station);
         await using var owner = database.CreateConnection("platform_migrator");
         await owner.OpenAsync();
-        await using var revoke = new NpgsqlCommand(
-            "REVOKE INSERT ON charging.audit_entries FROM platform_writer", owner);
-        await revoke.ExecuteNonQueryAsync();
-        try
-        {
-            await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
-            Assert.Equal(EntityState.Added, context.Entry(station).State);
-            Assert.False(await context.Stations.AnyAsync(candidate => candidate.Name == station.Name));
-            Guid attemptedId = context.Entry(station).Property(candidate => candidate.Id).CurrentValue;
-            Assert.False(await context.AuditEntries.AnyAsync(audit => audit.ResourceId == attemptedId));
-        }
-        finally
-        {
-            await using var grant = new NpgsqlCommand(
-                "GRANT INSERT ON charging.audit_entries TO platform_writer",
-                owner);
-            await grant.ExecuteNonQueryAsync();
-        }
+        await WithAuditInsertDeniedAsync(
+            owner,
+            async () =>
+            {
+                await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+                Assert.Equal(EntityState.Added, context.Entry(station).State);
+                Assert.False(await context.Stations.AnyAsync(candidate => candidate.Name == station.Name));
+                Guid attemptedId = context.Entry(station).Property(candidate => candidate.Id).CurrentValue;
+                Assert.False(await context.AuditEntries.AnyAsync(audit => audit.ResourceId == attemptedId));
+            });
 
         await context.SaveChangesAsync();
         Assert.NotEqual(Guid.Empty, station.Id);
@@ -105,9 +93,7 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         var writer = new AuditEntryWriter(
             new TestActorAccessor(AuditActor.Service("station-importer")), new FakeTimeProvider());
         await using var connection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection).AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(connection, writer);
         var station = await context.Stations.SingleAsync(station => station.Id == stationId);
         await using var transaction = await context.Database.BeginTransactionAsync();
         station.Name = "Earlier save";
@@ -116,20 +102,12 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         station.Name = "Rejected save";
         await using var owner = database.CreateConnection("platform_migrator");
         await owner.OpenAsync();
-        await using var revoke = new NpgsqlCommand(
-            "REVOKE INSERT ON charging.audit_entries FROM platform_writer", owner);
-        await revoke.ExecuteNonQueryAsync();
-        try
-        {
-            await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
-        }
-        finally
-        {
-            await using var grant = new NpgsqlCommand(
-                "GRANT INSERT ON charging.audit_entries TO platform_writer",
-                owner);
-            await grant.ExecuteNonQueryAsync();
-        }
+        await WithAuditInsertDeniedAsync(
+            owner,
+            async () =>
+            {
+                await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+            });
 
         Assert.Same(transaction, context.Database.CurrentTransaction);
         await transaction.CommitAsync();
@@ -152,30 +130,20 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         var writer = new AuditEntryWriter(
             new TestActorAccessor(AuditActor.Service("station-importer")), new FakeTimeProvider());
         await using var connection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection)
-                .AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(connection, writer);
         var station = await context.Stations.SingleAsync(station => station.Id == stationId);
         context.Stations.Remove(station);
         await using var owner = database.CreateConnection("platform_migrator");
         await owner.OpenAsync();
-        await using var revoke = new NpgsqlCommand(
-            "REVOKE INSERT ON charging.audit_entries FROM platform_writer", owner);
-        await revoke.ExecuteNonQueryAsync();
-        try
-        {
-            await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
-            Assert.Equal(EntityState.Deleted, context.Entry(station).State);
-            Assert.True(await context.Stations.AnyAsync(candidate => candidate.Id == stationId));
-            Assert.False(await context.AuditEntries.AnyAsync(audit => audit.ResourceId == stationId));
-        }
-        finally
-        {
-            await using var grant = new NpgsqlCommand(
-                "GRANT INSERT ON charging.audit_entries TO platform_writer", owner);
-            await grant.ExecuteNonQueryAsync();
-        }
+        await WithAuditInsertDeniedAsync(
+            owner,
+            async () =>
+            {
+                await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+                Assert.Equal(EntityState.Deleted, context.Entry(station).State);
+                Assert.True(await context.Stations.AnyAsync(candidate => candidate.Id == stationId));
+                Assert.False(await context.AuditEntries.AnyAsync(audit => audit.ResourceId == stationId));
+            });
 
         await context.SaveChangesAsync();
         Assert.False(await context.Stations.AnyAsync(candidate => candidate.Id == stationId));
@@ -193,40 +161,29 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
             new TestActorAccessor(AuditActor.User("https://identity.example", "operator")),
             clock);
         await using var writerConnection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(writerConnection).AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(writerConnection, writer);
         var station = await context.Stations.SingleAsync(station => station.Id == stationId);
         station.Name = "Edited station";
 
         await using var ownerConnection = database.CreateConnection("platform_migrator");
         await ownerConnection.OpenAsync();
-        await using var revoke = new NpgsqlCommand(
-            "REVOKE INSERT ON charging.audit_entries FROM platform_writer",
-            ownerConnection);
-        await revoke.ExecuteNonQueryAsync();
-        try
-        {
-            var error = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
-            var postgres = Assert.IsType<PostgresException>(error.InnerException);
-            Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, postgres.SqlState);
-            await using var readerConnection = database.CreateConnection("platform_reader");
-            await using var reader = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(readerConnection).Options);
-            Assert.Equal(
-                "Original station",
-                await reader.Stations.Where(station => station.Id == stationId)
-                    .Select(station => station.Name)
-                    .SingleAsync());
-            Assert.Equal(0, await reader.AuditEntries.CountAsync(audit => audit.ResourceId == stationId));
-        }
-        finally
-        {
-            await using var grant = new NpgsqlCommand(
-                "GRANT INSERT ON charging.audit_entries TO platform_writer",
-                ownerConnection);
-            await grant.ExecuteNonQueryAsync();
-        }
+        await WithAuditInsertDeniedAsync(
+            ownerConnection,
+            async () =>
+            {
+                var error = await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+                var postgres = Assert.IsType<PostgresException>(error.InnerException);
+                Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, postgres.SqlState);
+                await using var readerConnection = database.CreateConnection("platform_reader");
+                await using var reader = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
+                    .UseNpgsql(readerConnection).Options);
+                Assert.Equal(
+                    "Original station",
+                    await reader.Stations.Where(station => station.Id == stationId)
+                        .Select(station => station.Name)
+                        .SingleAsync());
+                Assert.Equal(0, await reader.AuditEntries.CountAsync(audit => audit.ResourceId == stationId));
+            });
 
         using var trace = new Activity("station-edit").SetIdFormat(ActivityIdFormat.W3C).Start();
         await context.SaveChangesAsync();
@@ -260,9 +217,7 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         var writer = new AuditEntryWriter(
             new TestActorAccessor(AuditActor.User("https://identity.example", "operator")), new FakeTimeProvider());
         await using var connection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection).AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(connection, writer);
         var station = await context.Stations.SingleAsync(station => station.Id == stationId);
         station.Name = "Retried station";
         await using var owner = database.CreateConnection("platform_migrator");
@@ -288,9 +243,7 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         Guid stationId = await SeedStationAsync();
         var writer = new AuditEntryWriter(new TestActorAccessor(null), new FakeTimeProvider());
         await using var connection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection).AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(connection, writer);
         var station = await context.Stations.SingleAsync(station => station.Id == stationId);
         station.Latitude = 42;
         await context.SaveChangesAsync();
@@ -303,9 +256,7 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
         Guid stationId = await SeedStationAsync();
         var writer = new AuditEntryWriter(new TestActorAccessor(null), new FakeTimeProvider());
         await using var connection = database.CreateConnection("platform_writer");
-        await using var context = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection).AddInterceptors(new AuditSaveChangesInterceptor(writer)).Options);
+        await using var context = CreateAuditedContext(connection, writer);
         var station = await context.Stations.SingleAsync(station => station.Id == stationId);
         station.Name = "Missing actor";
         await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
@@ -319,6 +270,29 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
                 .SingleAsync());
         Assert.Equal(0, await reader.AuditEntries.CountAsync(audit => audit.ResourceId == stationId));
     }
+
+    private static async Task WithAuditInsertDeniedAsync(NpgsqlConnection owner, Func<Task> action)
+    {
+        await using var revoke = new NpgsqlCommand(
+            "REVOKE INSERT ON charging.audit_entries FROM platform_writer", owner);
+        await revoke.ExecuteNonQueryAsync();
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            await using var grant = new NpgsqlCommand(
+                "GRANT INSERT ON charging.audit_entries TO platform_writer", owner);
+            await grant.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static PlatformDbContext CreateAuditedContext(NpgsqlConnection connection, AuditEntryWriter writer) => new(
+        new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(connection)
+            .AddInterceptors(new AuditSaveChangesInterceptor(writer))
+            .Options);
 
     private async Task<Guid> SeedStationAsync()
     {

@@ -1,4 +1,5 @@
 import { Alert, Button, Stack, Text } from "@mantine/core";
+import { getHttpFailure } from "@/lib/http-errors";
 import type { ConnectorCapability } from "../api";
 
 export function connectorTypeLabel(connectorType: string) {
@@ -17,13 +18,18 @@ export function StationLoading() {
   );
 }
 
-export function StationFailure({ retry }: { retry: () => void }) {
+export function StationFailure({
+  error,
+  retry,
+}: {
+  error: unknown;
+  retry: () => void;
+}) {
+  const failure = getHttpFailure(error);
   return (
-    <Alert color="red" title="Station information unavailable" role="alert">
+    <Alert color="red" title={failure.title} role="alert">
       <Stack gap="sm">
-        <Text size="sm">
-          We could not load station information. Please try again.
-        </Text>
+        <Text size="sm">{failure.message}</Text>
         <Button
           variant="light"
           color="red"

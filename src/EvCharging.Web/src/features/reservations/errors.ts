@@ -1,9 +1,11 @@
 import { HttpStatusCode } from "axios";
-import { getHttpStatus } from "@/lib/http-errors";
-import { requestAuthenticationFailedMessage } from "@/features/auth/errors";
+import {
+  getHttpFailure,
+  getHttpStatus,
+  type HttpFailure,
+} from "@/lib/http-errors";
 
-export interface ReservationFailure {
-  readonly message: string;
+export interface ReservationFailure extends HttpFailure {
   readonly recovery?: "retry" | "reservations" | "first-page";
 }
 
@@ -11,47 +13,18 @@ export function getReservationFailure(
   error: unknown,
   booking = false,
 ): ReservationFailure {
+  const failure = getHttpFailure(error, booking ? "write" : "read");
   switch (getHttpStatus(error)) {
     case HttpStatusCode.Unauthorized:
-      return {
-        message: requestAuthenticationFailedMessage,
-        recovery: "retry",
-      };
-    case HttpStatusCode.Forbidden:
-      return {
-        message: booking
-          ? "Your account cannot book this connector."
-          : "Access denied. Your account cannot view reservations.",
-      };
-    case HttpStatusCode.NotFound:
-      return {
-        message: booking
-          ? "This connector is no longer available."
-          : "Reservations unavailable.",
-      };
+      return { ...failure, recovery: "retry" };
     case HttpStatusCode.BadRequest:
-      return booking
-        ? { message: "Check the booking details." }
-        : {
-            message:
-              "This reservation page is no longer available. Return to the first page.",
-            recovery: "first-page",
-          };
+      return booking ? failure : { ...failure, recovery: "first-page" };
+    case HttpStatusCode.UnprocessableEntity:
+    case HttpStatusCode.Forbidden:
+    case HttpStatusCode.NotFound:
     case HttpStatusCode.Conflict:
-      return {
-        message:
-          "This connector is already reserved during that slot. Choose another time or connector.",
-      };
+      return failure;
     default:
-      return booking
-        ? {
-            message:
-              "Booking not confirmed. Your draft has been retained. Check My reservations before submitting again.",
-            recovery: "reservations",
-          }
-        : {
-            message: "Reservations unavailable. Try again.",
-            recovery: "retry",
-          };
+      return { ...failure, recovery: booking ? "reservations" : "retry" };
   }
 }

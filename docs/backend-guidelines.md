@@ -16,6 +16,12 @@ retain their prescribed names and signatures.
   contracts when their units, invariants, or failure semantics need explanation.
 - Separate distinct logical steps with one blank line; keep closely related
   statements together.
+- When a method contains several substantial steps that are hard to scan, extract
+  cohesive steps into private methods named for their purpose. Keep the main flow
+  readable in execution order and keep transaction and lock boundaries explicit.
+  Apply this throughout backend code. Avoid one-line wrappers and excessive
+  fragmentation; preserve evaluation order, cancellation, and failure semantics
+  when extracting asynchronous work.
 - Extract long loop expressions into descriptive local variables before the loop.
   Preserve evaluation order and deferred enumeration.
 - Start a wrapped call chain with its receiver or its first call; avoid grouping
@@ -51,6 +57,9 @@ retain their prescribed names and signatures.
   consumers; keep contracts owned by a single host with its feature.
 - Keep Minimal API route mappings and their HTTP handlers together in the
   feature's endpoint file. Keep command/query handlers separate.
+- Register command/query handlers and application services in application
+  composition, outside feature endpoint files. Bind and validate application
+  options there as well; endpoint mapping does not own service configuration.
 - Commands and queries return typed results for expected failures. Reuse common
   application errors for missing resources and invalid input; reserve feature-specific
   errors for business rules. Translate errors to HTTP responses at the endpoint
@@ -106,8 +115,9 @@ retain their prescribed names and signatures.
   factories, or domain events merely to satisfy a pattern.
 - Introduce value objects for meaningful identity-free concepts with equality or
   invariants. Cross-field validation alone does not require a value object or
-  policy class. Separate policy types are useful for rules involving multiple
-  objects; handlers must use applicable policies rather than leave them test-only.
+  policy class. Introduce shared rule helpers only when implemented operations
+  need them; do not add test-only policies or wrappers that merely translate
+  decisions already made by their callers.
 
 ### Construction and state changes
 
@@ -262,6 +272,23 @@ retain their prescribed names and signatures.
   test clocks instead of custom `TimeProvider` implementations.
 - Use unit tests for logic and integration tests for real dependency contracts;
   do not mock away the behavior an integration test is intended to verify.
+- Choose the narrowest test layer that proves a behavior. Add E2E failure cases
+  only for an additional cross-component guarantee; do not repeat infrastructure
+  faults to recheck UI behavior already covered by component tests.
+- Test implemented behavior and distinct outcomes. Remove coverage for retired
+  decisions and unused helpers; preserve tests for current security, concurrency,
+  atomicity, and business boundaries. Retaining accepted terms after a policy
+  change is a business guarantee, not legacy-data compatibility.
+- Give each integration or E2E test one coherent scenario with independent setup
+  and cleanup. Do not chain unrelated scenarios through records left by earlier
+  assertions or tests. Use the owning domain operations and EF for ordinary test
+  data; reserve SQL for database-specific constraints, privileges, and faults.
+- Share repeated setup and fault injection, including guaranteed restoration.
+  Keep scenario assertions in the tests. Avoid a generic test framework or layers
+  that merely forward framework calls.
+- Put utilities consumed by multiple test projects in a shared testing library
+  with project references. Keep utilities with one consumer in that test project;
+  avoid linked source files for cross-project sharing.
 - Do not add tests or custom probes solely to confirm framework configuration,
   dependency-injection registrations, built-in telemetry, or basic framework
   behavior such as ORM CRUD and rerunning unchanged migrations. Test application

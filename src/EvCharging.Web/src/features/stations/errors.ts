@@ -1,10 +1,11 @@
 import axios, { HttpStatusCode } from "axios";
-import { getHttpStatus, getValidationErrors } from "@/lib/http-errors";
-import { requestAuthenticationFailedMessage } from "@/features/auth/errors";
+import {
+  getHttpFailure,
+  getHttpStatus,
+  type HttpFailure,
+} from "@/lib/http-errors";
 
-export interface StationEditFailure {
-  readonly title: string;
-  readonly message: string;
+export interface StationEditFailure extends HttpFailure {
   readonly recovery?: "reload";
 }
 
@@ -15,85 +16,29 @@ export interface StationEditorLoadFailure extends StationEditFailure {
 export function getStationEditorLoadFailure(
   error: unknown,
 ): StationEditorLoadFailure {
-  switch (getHttpStatus(error)) {
-    case HttpStatusCode.Unauthorized:
-      return {
-        title: "Authentication failed",
-        message: requestAuthenticationFailedMessage,
-        recovery: "reload",
-        blocksSave: true,
-      };
-    case HttpStatusCode.Forbidden:
-      return {
-        title: "Access denied",
-        message: "This station is not assigned to your operator account.",
-        recovery: "reload",
-        blocksSave: true,
-      };
-    case HttpStatusCode.NotFound:
-      return {
-        title: "Station not found",
-        message: "This station is unavailable or no longer exists.",
-        recovery: "reload",
-        blocksSave: true,
-      };
-    default:
-      return {
-        title: "Station information unavailable",
-        message: "We could not load station information. Please try again.",
-        recovery: "reload",
-        blocksSave: false,
-      };
-  }
+  const status = getHttpStatus(error);
+  return {
+    ...getHttpFailure(error),
+    recovery: "reload",
+    blocksSave:
+      status === HttpStatusCode.Unauthorized ||
+      status === HttpStatusCode.Forbidden ||
+      status === HttpStatusCode.NotFound,
+  };
 }
 
 export function getStationEditFailure(
   error: unknown,
 ): StationEditFailure | null {
   if (axios.isCancel(error)) return null;
-
+  const failure = getHttpFailure(error, "write");
   switch (getHttpStatus(error)) {
     case HttpStatusCode.BadRequest:
-      if (getValidationErrors(error))
-        return {
-          title: "Review the fields",
-          message: "Review the fields and try again.",
-        };
-      return {
-        title: "Request rejected",
-        message:
-          "The station update request was rejected. Your draft is still in the form.",
-      };
-    case HttpStatusCode.Unauthorized:
-      return {
-        title: "Authentication failed",
-        message: requestAuthenticationFailedMessage,
-        recovery: "reload",
-      };
+    case HttpStatusCode.UnprocessableEntity:
     case HttpStatusCode.Forbidden:
-      return {
-        title: "Access denied",
-        message: "You no longer have permission to edit this station.",
-      };
     case HttpStatusCode.NotFound:
-      return {
-        title: "Station not found",
-        message:
-          "This station is unavailable or no longer exists. Your draft is still in the form.",
-      };
-    case HttpStatusCode.Conflict:
-      return {
-        title: "Station changed",
-        message:
-          "Another edit was saved after you loaded this station. Your draft is still in the form. Reload the current station before editing again.",
-        recovery: "reload",
-      };
+      return failure;
     default:
-      return {
-        title: "Changes not confirmed",
-        message:
-          "The save could not be confirmed. Your draft is still in the form; check the current station before trying again.",
-        recovery: "reload",
-      };
+      return { ...failure, recovery: "reload" };
   }
 }

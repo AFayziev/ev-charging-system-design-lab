@@ -38,7 +38,12 @@ export function StationListPage() {
         description="Browse fictional lab stations and check equipment and access details."
       />
       {query.isPending && <StationLoading />}
-      {query.isError && <StationFailure retry={() => void query.refetch()} />}
+      {query.isError && (
+        <StationFailure
+          error={query.error}
+          retry={() => void query.refetch()}
+        />
+      )}
       {query.isSuccess && (
         <>
           {query.data.stations.length === 0 ? (

@@ -42,7 +42,9 @@ afterEach(() => vi.useRealTimers());
 it("offers the first page for an invalid owner cursor", async () => {
   get.mockRejectedValue(failure(HttpStatusCode.BadRequest));
   setup();
-  expect(await screen.findByRole("alert")).toHaveTextContent("first page");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Request rejected",
+  );
   expect(screen.getByRole("link", { name: "First page" })).toHaveAttribute(
     "href",
     "/reservations",

@@ -9,7 +9,7 @@ import {
 } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BookingForm } from "./BookingForm";
-import type { Reservation } from "../api";
+import { reservationKeys, type BookingPolicy, type Reservation } from "../api";
 import { ReservationsPage } from "./ReservationsPage";
 
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -50,6 +50,23 @@ const failure = (status: number, data?: unknown) =>
     response: { status, data },
   });
 
+const policy: BookingPolicy = {
+  maximumOutstandingReservationsPerDriver: 3,
+  maximumBookingDurationSeconds: 2 * 60 * 60,
+  maximumAdvanceBookingHorizonSeconds: 14 * 24 * 60 * 60,
+};
+const session = {
+  signedIn: true,
+  antiforgeryToken: "csrf",
+  user: { roles: ["driver"] },
+};
+
+function respond(path: string) {
+  if (path === "/auth/session") return { data: session };
+  if (path === "/api/reservations/booking-policy") return { data: policy };
+  return { data: { reservations: [], nextAfterId: null } };
+}
+
 function setup(initialEntry: string | Partial<Location> = "/") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -71,7 +88,7 @@ function setup(initialEntry: string | Partial<Location> = "/") {
       </QueryClientProvider>
     </MantineProvider>,
   );
-  return { router, ...view };
+  return { router, client, ...view };
 }
 
 async function fill() {
@@ -80,7 +97,7 @@ async function fill() {
     ["End", "11"],
   ]) {
     await userEvent.click(
-      screen.getByLabelText(`${label} time`, { exact: false }),
+      await screen.findByRole("button", { name: `${label} time` }),
     );
     await userEvent.click(
       await screen.findByRole("button", { name: "10 January 2029" }),
@@ -118,7 +135,7 @@ beforeEach(() => {
   );
   get.mockReset();
   post.mockReset();
-  get.mockResolvedValue({ data: { signedIn: true, antiforgeryToken: "csrf" } });
+  get.mockImplementation(async (path: string) => respond(path));
 });
 
 afterEach(() => vi.useRealTimers());
@@ -144,13 +161,15 @@ it("shows the created booking once and clears feedback on reload", async () => {
   };
   get.mockImplementation(async (path: string) => ({
     data:
-      path === "/auth/session"
-        ? { signedIn: true, antiforgeryToken: "csrf" }
-        : { reservations: [], nextAfterId: "older-booking" },
+      path === "/api/reservations"
+        ? { reservations: [], nextAfterId: "older-booking" }
+        : respond(path).data,
   }));
   post.mockResolvedValue({ data: saved });
   const view = setup();
-  await userEvent.click(screen.getByRole("button", { name: "Start time" }));
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Start time" }),
+  );
   expect(
     await screen.findByRole("button", { name: "1 January 2029" }),
   ).toBeDisabled();
@@ -260,13 +279,139 @@ it("places server validation errors on fields", async () => {
   );
 });
 
-it("rejects an elapsed booking draft before submission", async () => {
+it("displays backend validation for an elapsed booking draft", async () => {
+  post.mockRejectedValue(
+    failure(400, {
+      errors: { StartsAt: ["The start must not be in the past."] },
+    }),
+  );
   setup();
   await fill();
   vi.setSystemTime(new Date("2029-01-11T00:00:00Z"));
   await userEvent.click(
     screen.getByRole("button", { name: "Reserve connector" }),
   );
-  expect(screen.getByText("The start must be in the future.")).toBeVisible();
+  expect(
+    await screen.findByText("The start must not be in the past."),
+  ).toBeVisible();
+  expect(post).toHaveBeenCalledWith(
+    "/api/reservations",
+    {
+      connectorId: "connector",
+      startsAt: new Date("2029-01-10T10:00").toISOString(),
+      endsAt: new Date("2029-01-10T11:00").toISOString(),
+    },
+    expect.objectContaining({ headers: { "X-CSRF-TOKEN": "csrf" } }),
+  );
+  expect(screen.getByRole("button", { name: "Start time" })).toHaveTextContent(
+    "10 Jan 2029, 10:00",
+  );
+});
+
+it("applies refreshed policy limits without losing the booking draft", async () => {
+  const { client } = setup();
+  await fill();
+  expect(
+    screen.getByText(/Up to 3 outstanding reservations/),
+  ).toHaveTextContent("Slots up to 2 hours");
+  get.mockImplementation(async (path: string) =>
+    path === "/api/reservations/booking-policy"
+      ? { data: { ...policy, maximumBookingDurationSeconds: 30 * 60 } }
+      : respond(path),
+  );
+  await client.invalidateQueries({ queryKey: reservationKeys.bookingPolicy });
+  await screen.findByText(/Slots up to 30 minutes/);
+  expect(screen.getByRole("button", { name: "End time" })).toHaveTextContent(
+    "10 Jan 2029, 11:00",
+  );
   expect(post).not.toHaveBeenCalled();
+
+  get.mockImplementation(async (path: string) =>
+    path === "/api/reservations/booking-policy"
+      ? {
+          data: {
+            ...policy,
+            maximumAdvanceBookingHorizonSeconds: 24 * 60 * 60,
+          },
+        }
+      : respond(path),
+  );
+  await client.invalidateQueries({ queryKey: reservationKeys.bookingPolicy });
+  await screen.findByText(/book up to 1 day ahead/);
+  await userEvent.click(screen.getByRole("button", { name: "Start time" }));
+  expect(
+    await screen.findByRole("button", { name: "10 January 2029" }),
+  ).toBeDisabled();
+  expect(post).not.toHaveBeenCalled();
+});
+
+it("retains the draft while policy loading fails and recovers on retry", async () => {
+  const { client } = setup();
+  await fill();
+  get.mockImplementation(async (path: string) => {
+    if (path === "/api/reservations/booking-policy") throw failure(503);
+    return respond(path);
+  });
+  await client.invalidateQueries({ queryKey: reservationKeys.bookingPolicy });
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Information unavailable",
+  );
+  expect(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "End time" })).toHaveTextContent(
+    "10 Jan 2029, 11:00",
+  );
+  get.mockImplementation(async (path: string) => respond(path));
+  await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+  );
+  expect(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  ).toBeEnabled();
+  expect(screen.getByRole("button", { name: "End time" })).toHaveTextContent(
+    "10 Jan 2029, 11:00",
+  );
+});
+
+it("shows the admission conflict reason returned by the backend", async () => {
+  post.mockRejectedValue(
+    failure(409, {
+      title: "Booking limit reached",
+      detail: "You can have at most 3 outstanding reservations.",
+    }),
+  );
+  setup();
+  await fill();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "You can have at most 3 outstanding reservations.",
+  );
+});
+
+it("keeps an unconfirmed booking draft and does not display diagnostic response details", async () => {
+  post.mockRejectedValue(
+    failure(500, {
+      title: "private framework details",
+      detail: "private database details",
+      errors: { StartsAt: ["private validation details"] },
+    }),
+  );
+  setup();
+  await fill();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reserve connector" }),
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Changes not confirmed",
+  );
+  expect(screen.getByRole("link", { name: "My reservations" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Start time" })).toHaveTextContent(
+    "10 Jan 2029, 10:00",
+  );
+  expect(screen.queryByText(/private .* details/)).not.toBeInTheDocument();
+  expect(post).toHaveBeenCalledTimes(1);
 });

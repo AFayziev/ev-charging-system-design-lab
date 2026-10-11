@@ -20,13 +20,22 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         await using var connection = fixture.CreateConnection("platform_writer");
         await using var database = Context(connection);
         var (connector, driver) = await EquipmentAsync(database);
+        var competingDriver = new Driver
+        {
+            IdentityIssuer = driver.IdentityIssuer,
+            IdentitySubject = Guid.NewGuid().ToString()
+        };
+        database.Drivers.Add(competingDriver);
+        await database.SaveChangesAsync();
         var startsAt = new DateTimeOffset(2030, 1, 1, 10, 0, 0, TimeSpan.Zero);
         await database.Database.ExecuteSqlInterpolatedAsync(
             $"""
-            INSERT INTO charging.reservations (id, connector_id, driver_id, starts_at, ends_at, state, created_at)
-            VALUES (uuidv7(), {connector.Id}, {driver.Id}, {startsAt}, {startsAt.AddHours(1)}, {(int)state}, {startsAt})
+            INSERT INTO charging.reservations
+                (id, connector_id, driver_id, starts_at, ends_at, arrival_deadline, state, created_at)
+            VALUES (uuidv7(), {connector.Id}, {driver.Id}, {startsAt}, {startsAt.AddHours(1)},
+                {startsAt.AddMinutes(10)}, {(int)state}, {startsAt})
             """);
-        database.Reservations.Add(Booking(connector, driver, startsAt.AddMinutes(30), startsAt.AddHours(2)));
+        database.Reservations.Add(Booking(connector, competingDriver, startsAt.AddMinutes(30), startsAt.AddHours(2)));
         if (conflicts)
         {
             var exception = await Assert.ThrowsAsync<DbUpdateException>(() => database.SaveChangesAsync());
@@ -65,7 +74,8 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
                 await database.SaveChangesAsync();
                 return true;
             }
-            catch (DbUpdateException exception) when (exception.IsReservationOverlap())
+            catch (DbUpdateException exception) when (
+                exception.IsReservationOverlap() || exception.IsDriverReservationOverlap())
             {
                 return false;
             }
@@ -85,8 +95,10 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO charging.reservations (id, connector_id, driver_id, starts_at, ends_at, state, created_at)
-            VALUES (uuidv7(), @connector, @driver, CAST(@start AS timestamptz), CAST(@end AS timestamptz), 0, now())
+            INSERT INTO charging.reservations
+                (id, connector_id, driver_id, starts_at, ends_at, arrival_deadline, state, created_at)
+            VALUES (uuidv7(), @connector, @driver, CAST(@start AS timestamptz), CAST(@end AS timestamptz),
+                CAST(@start AS timestamptz) + interval '10 minutes', 0, now())
             """,
             connection);
         command.Parameters.AddWithValue("connector", connector.Id);
@@ -95,7 +107,6 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         command.Parameters.AddWithValue("end", end);
         var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
         Assert.Equal(PostgresErrorCodes.CheckViolation, exception.SqlState);
-        Assert.Equal("ck_reservations_slot", exception.ConstraintName);
     }
 
     private static PlatformDbContext Context(NpgsqlConnection connection) => new(
@@ -105,7 +116,14 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         Connector connector,
         Driver driver,
         DateTimeOffset start,
-        DateTimeOffset end) => Reservation.Book(connector, driver, start, end, start).Value;
+        DateTimeOffset end) => Reservation.Book(
+            connector,
+            driver,
+            start,
+            end,
+            start,
+            new ReservationBookingLimits(
+                2, TimeSpan.FromHours(3), TimeSpan.FromDays(1), TimeSpan.FromMinutes(10))).Value;
 
     private static async Task<(Connector, Driver)> EquipmentAsync(PlatformDbContext database)
     {

@@ -124,6 +124,23 @@ tests with the code they cover; add directories as their contents are needed.
 Use `@/` imports across application areas and relative imports for nearby files
 within an area or feature.
 
+### Validation and errors
+
+- Use Mantine form validation for required input, basic format, and structural
+  constraints such as text length. Display client-side field validation errors
+  beside their corresponding inputs. Backend validation errors may be grouped
+  in a summary or associated with fields when appropriate. Use `noValidate` on
+  forms to suppress browser validation bubbles. Retain input bounds; derive
+  configurable bounds from API-provided limits. Keep authoritative business
+  decisions on the backend and display its returned validation errors.
+- Choose error behavior by HTTP status and, when needed, stable machine-readable
+  identifiers. Do not identify failures by matching human-readable `title`,
+  `detail`, or message text. Display public details for expected business failures;
+  use generic messages for unexpected failures.
+- Centralize HTTP error presentation and fallback messages in shared frontend
+  infrastructure. Prefer public API problem details for expected failures;
+  features own recovery actions and operation-specific context.
+
 ### API access
 
 - Keep shared Axios transport configuration in `lib`. Group named, typed backend
@@ -137,6 +154,17 @@ within an area or feature.
 - Use native TanStack `queryOptions` to share keys, request functions, and query
   policies. Colocate these definitions with feature API methods; split modules
   when their contents warrant it.
+
+### Tests
+
+- Cover user-visible behavior and meaningful regressions. Parameterize tests for
+  distinct behavior, rather than repeat full UI flows for statuses sharing the
+  same presentation and recovery. Keep shared error-message coverage focused.
+- Run API contract checks once, independently of viewport size. Use a small set
+  of browser journeys for responsive interactions such as mobile navigation or
+  modal pickers; do not multiply all E2E scenarios across screen sizes.
+- Saved screenshots without comparison are review artifacts, not automated
+  visual regression coverage.
 
 ## Aspire workflow
 
@@ -196,7 +224,8 @@ belong in the lab only when they define the experiment, rather than copy a code 
 Prefer concise tables and lists. Use numbered lists for ordered procedures and
 bullets for unordered reference information.
 
-Update task checkboxes and milestone status with the implementation. Do not add
+Update task checkboxes and milestone status with the implementation, following
+the plan's [completion criteria](docs/implementation-plan.md#1-scope-and-tracking). Do not add
 evidence paragraphs, duplicate progress summaries, or follow-up commits just to
 record a commit hash. Verification belongs in the chat report or PR description.
 

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Pagination;
+using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
@@ -30,32 +31,50 @@ internal sealed class ListReservationsQueryHandler(PlatformDbContext database)
             return Result.Fail<ReservationListResponse>(error);
         }
 
-        if (request.AfterId is { } cursor)
+        var pageQuery = await ApplyCursorAsync(owned, request.AfterId, cancellationToken);
+        if (pageQuery.IsFailed)
         {
-            var anchor = await owned
-                .Where(reservation => reservation.PublicId == cursor)
-                .Select(reservation => new { reservation.Id, reservation.CreatedAt })
-                .SingleOrDefaultAsync(cancellationToken);
-            if (anchor is null)
-            {
-                return Result.Fail<ReservationListResponse>(
-                    new ValidationError(nameof(request.AfterId), "Invalid reservation cursor."));
-            }
-
-            owned = owned.Where(reservation => reservation.CreatedAt < anchor.CreatedAt ||
-                (reservation.CreatedAt == anchor.CreatedAt && reservation.Id.CompareTo(anchor.Id) < 0));
+            return Result.Fail<ReservationListResponse>(pageQuery.Errors);
         }
 
-        var reservations = await owned
+        return Result.Ok(await GetPageAsync(pageQuery.Value, request.Limit, cancellationToken));
+    }
+
+    private static async Task<Result<IQueryable<Reservation>>> ApplyCursorAsync(
+        IQueryable<Reservation> reservations, Guid? afterId, CancellationToken cancellationToken)
+    {
+        if (afterId is null)
+        {
+            return Result.Ok(reservations);
+        }
+
+        var anchor = await reservations
+            .Where(reservation => reservation.PublicId == afterId)
+            .Select(reservation => new { reservation.Id, reservation.CreatedAt })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (anchor is null)
+        {
+            return Result.Fail<IQueryable<Reservation>>(
+                new ValidationError(nameof(ListReservationsRequest.AfterId), "Invalid reservation cursor."));
+        }
+
+        return Result.Ok(reservations.Where(reservation => reservation.CreatedAt < anchor.CreatedAt ||
+            (reservation.CreatedAt == anchor.CreatedAt && reservation.Id.CompareTo(anchor.Id) < 0)));
+    }
+
+    private static async Task<ReservationListResponse> GetPageAsync(
+        IQueryable<Reservation> pageQuery, int limit, CancellationToken cancellationToken)
+    {
+        var reservations = await pageQuery
             .OrderByDescending(reservation => reservation.CreatedAt)
             .ThenByDescending(reservation => reservation.Id)
-            .Take(request.Limit + 1)
+            .Take(limit + 1)
             .WithEquipment()
             .ToListAsync(cancellationToken);
-        var nextAfterId = CursorPagination.TrimPage(reservations, request.Limit, reservation => reservation.PublicId);
+        var nextAfterId = CursorPagination.TrimPage(reservations, limit, reservation => reservation.PublicId);
 
-        return Result.Ok(new ReservationListResponse(
+        return new ReservationListResponse(
             reservations.Select(reservation => reservation.ToResponse()).ToArray(),
-            nextAfterId));
+            nextAfterId);
     }
 }

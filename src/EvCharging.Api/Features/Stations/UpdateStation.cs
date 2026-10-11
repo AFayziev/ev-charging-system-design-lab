@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Persistence;
+using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
@@ -35,6 +36,12 @@ internal sealed class UpdateStationCommandHandler(
             return Result.Fail<StationEditorResponse>(new ForbiddenError());
         }
 
+        ApplyEdit(station, request);
+        return await SaveStationAsync(station, cancellationToken);
+    }
+
+    private void ApplyEdit(Station station, UpdateStationRequest request)
+    {
         string name = request.Name.Trim();
         string address = request.Address.Trim();
         string accessInstructions = request.AccessInstructions.Trim();
@@ -47,7 +54,11 @@ internal sealed class UpdateStationCommandHandler(
         entry.Property(station => station.Name).IsModified = true;
         entry.Property(station => station.Address).IsModified = true;
         entry.Property(station => station.AccessInstructions).IsModified = true;
+    }
 
+    private async Task<Result<StationEditorResponse>> SaveStationAsync(
+        Station station, CancellationToken cancellationToken)
+    {
         try
         {
             await database.SaveChangesAsync(cancellationToken);

@@ -1,4 +1,5 @@
 using EvCharging.Api.Authentication;
+using EvCharging.Api.Configuration;
 using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
@@ -19,8 +20,7 @@ builder.AddMessaging(
         options.UseEntityFrameworkCoreTransactions();
         options.PublishMessage<ReservationCreated>().ToRabbitQueue(ReservationCreated.Queue);
     });
-builder.AddStations();
-builder.AddReservations();
+builder.Services.AddApplicationServices();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddValidation();
 

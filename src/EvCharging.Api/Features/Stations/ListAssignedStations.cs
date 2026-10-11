@@ -3,6 +3,7 @@ using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Pagination;
 using EvCharging.Api.Persistence;
+using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
@@ -35,30 +36,45 @@ internal sealed class ListAssignedStationsQueryHandler(
                 && database.OperatorUsers.Any(operatorUser => operatorUser.Id == assignment.OperatorUserId
                     && operatorUser.IdentityIssuer == identity.Issuer
                     && operatorUser.IdentitySubject == identity.Subject)));
-        Guid afterId = Guid.Empty;
-        if (request.AfterId is { } cursor)
+        var cursor = await ResolveCursorAsync(stations, request.AfterId, cancellationToken);
+        if (cursor.IsFailed)
         {
-            var anchorId = await stations
-                .Where(station => station.PublicId == cursor)
-                .Select(station => (Guid?)station.Id)
-                .SingleOrDefaultAsync(cancellationToken);
-            if (anchorId is null)
-            {
-                return Result.Fail<AssignedStationListResponse>(new ValidationError(
-                    nameof(request.AfterId), "The cursor does not identify an assigned station."));
-            }
-
-            afterId = anchorId.Value;
+            return Result.Fail<AssignedStationListResponse>(cursor.Errors);
         }
 
+        return Result.Ok(await GetPageAsync(stations, cursor.Value, request.Limit, cancellationToken));
+    }
+
+    private static async Task<Result<Guid>> ResolveCursorAsync(
+        IQueryable<Station> stations, Guid? afterId, CancellationToken cancellationToken)
+    {
+        if (afterId is null)
+        {
+            return Result.Ok(Guid.Empty);
+        }
+
+        var anchorId = await stations
+            .Where(station => station.PublicId == afterId)
+            .Select(station => (Guid?)station.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return anchorId is { } id
+            ? Result.Ok(id)
+            : Result.Fail<Guid>(new ValidationError(
+                nameof(ListStationsRequest.AfterId), "The cursor does not identify an assigned station."));
+    }
+
+    private static async Task<AssignedStationListResponse> GetPageAsync(
+        IQueryable<Station> stations, Guid afterId, int limit, CancellationToken cancellationToken)
+    {
         var page = await stations
             .Where(station => station.Id.CompareTo(afterId) > 0)
             .OrderBy(station => station.Id)
-            .Take(request.Limit + 1)
+            .Take(limit + 1)
             .Select(station => new AssignedStationResponse(station.PublicId, station.Name, station.Address))
             .ToListAsync(cancellationToken);
-        var nextAfterId = CursorPagination.TrimPage(page, request.Limit, station => station.Id);
+        var nextAfterId = CursorPagination.TrimPage(page, limit, station => station.Id);
 
-        return Result.Ok(new AssignedStationListResponse(page, nextAfterId));
+        return new AssignedStationListResponse(page, nextAfterId);
     }
 }

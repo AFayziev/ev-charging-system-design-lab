@@ -1,30 +1,104 @@
-import { Button, Card, Group, Select, Stack, Text, Title } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Card,
+  Group,
+  Select,
+  Skeleton,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
 import { DateTimePicker, getTimeRange } from "@mantine/dates";
 import { useMediaQuery } from "@mantine/hooks";
 import dayjs from "dayjs";
 import { IconCalendar, IconInfoCircle } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
-import { useForm } from "@mantine/form";
+import { useEffect, useState, type ReactNode } from "react";
+import { isNotEmpty, useForm } from "@mantine/form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { sessionQuery } from "@/features/auth/api";
+import { PlatformRole } from "@/features/auth/PlatformRole";
 import type { StationDetail } from "@/features/stations/api";
 import { connectorTypeLabel } from "@/features/stations/components/StationPresentation";
-import { getFormValidationErrors } from "@/lib/http-errors";
-import { createReservation, reservationKeys, type Booking } from "../api";
+import { getFormValidationErrors, getHttpFailure } from "@/lib/http-errors";
+import {
+  bookingPolicyQuery,
+  createReservation,
+  reservationKeys,
+  type Booking,
+  type BookingPolicy,
+} from "../api";
 import type { ReservationNavigationState } from "../navigation";
 import { ReservationFailure } from "./ReservationFailure";
 import { formatTime, ReservationTimes } from "./ReservationTimes";
 import classes from "./Booking.module.css";
 
-export function BookingForm({
-  station,
-  connectorId,
-  onConnectorChange,
-}: {
+interface BookingFormProps {
   station: StationDetail;
   connectorId: string;
   onConnectorChange?: (connectorId: string) => void;
+}
+
+export function BookingForm(props: BookingFormProps) {
+  const session = useQuery(sessionQuery);
+  const policy = useQuery({
+    ...bookingPolicyQuery,
+    enabled:
+      session.isSuccess &&
+      session.data.user?.roles.includes(PlatformRole.Driver) === true,
+  });
+  const policyError = policy.isError ? getHttpFailure(policy.error) : null;
+  const policyFailure = policyError && (
+    <Alert color="red" title={policyError.title} role="alert">
+      <Stack gap="xs">
+        <Text size="sm">{policyError.message}</Text>
+        <Button
+          variant="white"
+          onClick={() => void policy.refetch()}
+          loading={policy.isFetching}
+        >
+          Try again
+        </Button>
+      </Stack>
+    </Alert>
+  );
+  if (!policy.data) {
+    return (
+      <Card withBorder padding="lg" className={classes.bookingCard}>
+        <Stack gap="md">
+          <Title order={2} size="h4">
+            Book a connector
+          </Title>
+          {policyFailure || (
+            <Stack gap="md" role="status" aria-label="Loading booking limits">
+              <Skeleton height={36} />
+              <Skeleton height={72} />
+              <Skeleton height={36} />
+            </Stack>
+          )}
+        </Stack>
+      </Card>
+    );
+  }
+  return (
+    <ConfiguredBookingForm
+      {...props}
+      policy={policy.data}
+      policyFailure={policyFailure}
+    />
+  );
+}
+
+function ConfiguredBookingForm({
+  station,
+  connectorId,
+  onConnectorChange,
+  policy,
+  policyFailure,
+}: BookingFormProps & {
+  policy: BookingPolicy;
+  policyFailure: ReactNode;
 }) {
   const session = useQuery(sessionQuery);
   const client = useQueryClient();
@@ -61,24 +135,11 @@ export function BookingForm({
         onConnectorChange?.(values.connectorId);
     },
     validate: {
-      connectorId: (value) =>
-        connectors.some((connector) => connector.value === value)
-          ? null
-          : "Choose a connector.",
-      startsAt: (value) => {
-        if (!dayjs(value).isValid()) return "Choose a start time.";
-        return dayjs(value).valueOf() <= Date.now()
-          ? "The start must be in the future."
-          : null;
-      },
-      endsAt: (value, values) => {
-        if (!dayjs(value).isValid()) return "Choose an end time.";
-        const end = dayjs(value).valueOf();
-        if (end <= dayjs(values.startsAt).valueOf())
-          return "The end must follow the start.";
-        if (end <= Date.now()) return "The end must be in the future.";
-        return null;
-      },
+      connectorId: isNotEmpty("Choose a connector."),
+      startsAt: (value) =>
+        dayjs(value).isValid() ? null : "Choose a start time.",
+      endsAt: (value) =>
+        dayjs(value).isValid() ? null : "Choose an end time.",
     },
   });
   const { getValues, setFieldValue } = form;
@@ -93,6 +154,13 @@ export function BookingForm({
   const earliestEnd = afterStart.isAfter(earliestStart)
     ? afterStart
     : earliestStart;
+  const latestStart = dayjs(now).add(
+    policy.maximumAdvanceBookingHorizonSeconds,
+    "second",
+  );
+  const latestEnd = dayjs(start).isValid()
+    ? dayjs(start).add(policy.maximumBookingDurationSeconds, "second")
+    : latestStart.add(policy.maximumBookingDurationSeconds, "second");
   const startMinimum = dayjs(start ?? earliestStart).isSame(
     earliestStart,
     "day",
@@ -101,6 +169,12 @@ export function BookingForm({
     : undefined;
   const endMinimum = dayjs(end ?? earliestEnd).isSame(earliestEnd, "day")
     ? earliestEnd.format("HH:mm")
+    : undefined;
+  const startMaximum = dayjs(start ?? earliestStart).isSame(latestStart, "day")
+    ? latestStart.format("HH:mm")
+    : undefined;
+  const endMaximum = dayjs(end ?? earliestEnd).isSame(latestEnd, "day")
+    ? latestEnd.format("HH:mm")
     : undefined;
   const initializePicker = (field: "startsAt" | "endsAt") => {
     const current = Date.now();
@@ -128,6 +202,9 @@ export function BookingForm({
       });
     },
     onError: (error) => {
+      void client.invalidateQueries({
+        queryKey: reservationKeys.bookingPolicy,
+      });
       const errors = getFormValidationErrors(error);
       if (errors) form.setErrors(errors);
     },
@@ -138,7 +215,11 @@ export function BookingForm({
         noValidate
         onSubmit={form.onSubmit(
           (values) => {
-            if (!mutation.isPending && session.data?.antiforgeryToken)
+            if (
+              !mutation.isPending &&
+              !policyFailure &&
+              session.data?.antiforgeryToken
+            )
               mutation.mutate({
                 connectorId: values.connectorId,
                 startsAt: dayjs(values.startsAt).toISOString(),
@@ -155,6 +236,7 @@ export function BookingForm({
           <Title order={2} size="h4">
             Book a connector
           </Title>
+          {policyFailure}
           <Select
             label="Connector"
             data={connectors}
@@ -174,18 +256,20 @@ export function BookingForm({
               modalProps={{ title: "Choose start date and time" }}
               placeholder={form.errors.startsAt ? undefined : "Date and time"}
               minDate={earliestStart.format("YYYY-MM-DD HH:mm:ss")}
+              maxDate={latestStart.format("YYYY-MM-DD HH:mm:ss")}
               onClick={() => initializePicker("startsAt")}
               valueFormat="D MMM YYYY, HH:mm"
               nextLabel="Next"
               previousLabel="Previous"
               timePickerProps={{
                 withDropdown: true,
-                presets: getTimeSuggestions(startMinimum),
+                presets: getTimeSuggestions(startMinimum, startMaximum),
                 closeDropdownOnPresetSelect: true,
                 popoverProps: { withinPortal: false },
                 hoursInputLabel: "Start hours",
                 minutesInputLabel: "Start minutes",
                 min: startMinimum,
+                max: startMaximum,
               }}
               submitButtonProps={{ "aria-label": "Confirm start time" }}
               leftSection={<IconCalendar size={17} aria-hidden="true" />}
@@ -202,18 +286,20 @@ export function BookingForm({
               modalProps={{ title: "Choose end date and time" }}
               placeholder={form.errors.endsAt ? undefined : "Date and time"}
               minDate={earliestEnd.format("YYYY-MM-DD HH:mm:ss")}
+              maxDate={latestEnd.format("YYYY-MM-DD HH:mm:ss")}
               onClick={() => initializePicker("endsAt")}
               valueFormat="D MMM YYYY, HH:mm"
               nextLabel="Next"
               previousLabel="Previous"
               timePickerProps={{
                 withDropdown: true,
-                presets: getTimeSuggestions(endMinimum),
+                presets: getTimeSuggestions(endMinimum, endMaximum),
                 closeDropdownOnPresetSelect: true,
                 popoverProps: { withinPortal: false },
                 hoursInputLabel: "End hours",
                 minutesInputLabel: "End minutes",
                 min: endMinimum,
+                max: endMaximum,
               }}
               submitButtonProps={{ "aria-label": "Confirm end time" }}
               leftSection={<IconCalendar size={17} aria-hidden="true" />}
@@ -225,6 +311,15 @@ export function BookingForm({
               aria-required="true"
             />
           </Stack>
+          <Text size="xs" c="dimmed">
+            Up to {policy.maximumOutstandingReservationsPerDriver} outstanding{" "}
+            {policy.maximumOutstandingReservationsPerDriver === 1
+              ? "reservation"
+              : "reservations"}
+            . Slots up to {formatDuration(policy.maximumBookingDurationSeconds)}
+            ; book up to{" "}
+            {formatDuration(policy.maximumAdvanceBookingHorizonSeconds)} ahead.
+          </Text>
           <Text size="xs" c="dimmed">
             Station time · {station.timeZoneId}
           </Text>
@@ -256,7 +351,7 @@ export function BookingForm({
           <Button
             type="submit"
             loading={mutation.isPending}
-            disabled={!session.data?.antiforgeryToken}
+            disabled={!session.data?.antiforgeryToken || !!policyFailure}
             fullWidth
           >
             Reserve connector
@@ -278,14 +373,39 @@ export function BookingForm({
   );
 }
 
-function getTimeSuggestions(minimum?: string) {
+function getTimeSuggestions(minimum?: string, maximum?: string) {
   const suggestions = getTimeRange({
     startTime: "00:00:00",
     endTime: "23:45:00",
     interval: "00:15:00",
   });
-  if (!minimum) return suggestions;
-  const earliest = `${minimum}:00`;
-  const available = suggestions.filter((time) => time >= earliest);
-  return available[0] === earliest ? available : [earliest, ...available];
+  const earliest = minimum ? `${minimum}:00` : "00:00:00";
+  const latest = maximum ? `${maximum}:00` : "23:59:00";
+  const available = suggestions.filter(
+    (time) => time >= earliest && time <= latest,
+  );
+  return earliest <= latest && available[0] !== earliest
+    ? [earliest, ...available]
+    : available;
+}
+
+function formatDuration(seconds: number) {
+  let unit = "second";
+  let divisor = 1;
+  if (seconds >= 86400) {
+    unit = "day";
+    divisor = 86400;
+  } else if (seconds >= 3600) {
+    unit = "hour";
+    divisor = 3600;
+  } else if (seconds >= 60) {
+    unit = "minute";
+    divisor = 60;
+  }
+  return new Intl.NumberFormat(undefined, {
+    style: "unit",
+    unit,
+    unitDisplay: "long",
+    maximumFractionDigits: 2,
+  }).format(seconds / divisor);
 }

@@ -7,22 +7,18 @@ namespace EvCharging.Api.Features.Reservations;
 
 internal static class ReservationEndpoints
 {
-    public static IHostApplicationBuilder AddReservations(this IHostApplicationBuilder builder)
-    {
-        builder.Services.AddScoped<CreateReservationCommandHandler>();
-        builder.Services.AddScoped<ListReservationsQueryHandler>();
-        builder.Services.AddScoped<GetReservationQueryHandler>();
-        return builder;
-    }
-
     public static WebApplication MapReservations(this WebApplication app)
     {
         var reservations = app.MapGroup("/reservations").RequireAuthorization(PlatformRole.Driver.ToClaimValue());
         reservations.MapPost("/", Create);
         reservations.MapGet("/", List);
+        reservations.MapGet("/booking-policy", BookingPolicy);
         reservations.MapGet("/{id:guid}", Detail);
         return app;
     }
+
+    private static Ok<BookingPolicyResponse> BookingPolicy(GetBookingPolicyQueryHandler handler) =>
+        TypedResults.Ok(handler.Handle().Value);
 
     private static async Task<Results<
         Created<ReservationResponse>,
@@ -41,7 +37,7 @@ internal static class ReservationEndpoints
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
-            _ when result.HasError<ReservationOverlapError>(out var conflicts) => TypedResults.Problem(
+            _ when result.HasError<ReservationAdmissionError>(out var conflicts) => TypedResults.Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "Reservation conflict",
                 detail: conflicts.First().Message),

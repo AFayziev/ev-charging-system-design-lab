@@ -80,7 +80,10 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
         />
       )}
       {query.isError && !missing && (
-        <StationFailure retry={() => void query.refetch()} />
+        <StationFailure
+          error={query.error}
+          retry={() => void query.refetch()}
+        />
       )}
       {query.isSuccess && (
         <div className={classes.detailGrid}>

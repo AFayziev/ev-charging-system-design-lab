@@ -158,6 +158,7 @@ function StationEditForm({
         />
         <Card withBorder padding="lg" maw={760} w="100%">
           <form
+            noValidate
             onSubmit={form.onSubmit((values) => {
               if (!saveDisabled && !mutation.isPending) mutation.mutate(values);
             }, focusFirstError)}

@@ -239,6 +239,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset>("ArrivalDeadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("arrival_deadline")
+                        .HasAnnotation("Audit:Included", true);
+
                     b.Property<Guid>("ConnectorId")
                         .HasColumnType("uuid")
                         .HasColumnName("connector_id")
@@ -277,9 +282,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.HasKey("Id")
                         .HasName("pk_reservations");
 
-                    b.HasIndex("DriverId")
-                        .HasDatabaseName("ix_reservations_driver_id");
-
                     b.HasIndex("PublicId")
                         .IsUnique()
                         .HasDatabaseName("ix_reservations_public_id");
@@ -287,8 +289,13 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.HasIndex("ConnectorId", "StartsAt")
                         .HasDatabaseName("ix_reservations_connector_id_starts_at");
 
+                    b.HasIndex("DriverId", "State", "EndsAt")
+                        .HasDatabaseName("ix_reservations_driver_id_state_ends_at");
+
                     b.ToTable("reservations", "charging", t =>
                         {
+                            t.HasCheckConstraint("ck_reservations_arrival_deadline", "isfinite(arrival_deadline) AND starts_at < arrival_deadline AND arrival_deadline <= ends_at");
+
                             t.HasCheckConstraint("ck_reservations_slot", "isfinite(starts_at) AND isfinite(ends_at) AND starts_at < ends_at");
                         });
 

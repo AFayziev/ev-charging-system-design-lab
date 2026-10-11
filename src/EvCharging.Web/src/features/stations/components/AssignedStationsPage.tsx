@@ -30,7 +30,12 @@ export function AssignedStationsPage() {
         description="Maintain content for your assigned stations."
       />
       {query.isPending && <StationLoading />}
-      {query.isError && <StationFailure retry={() => void query.refetch()} />}
+      {query.isError && (
+        <StationFailure
+          error={query.error}
+          retry={() => void query.refetch()}
+        />
+      )}
       {query.isSuccess && (
         <>
           {query.data.stations.length === 0 && (

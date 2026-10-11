@@ -10,8 +10,10 @@ Milestones deliver complete application flows within the selected topology;
 component responsibilities and domain policies remain consistent throughout implementation.
 
 Task IDs are tracking references. Completed task IDs remain stable. Unchecked
-tasks are incomplete; checked tasks satisfy their implementation and verification
-requirements. Milestone status is one of `Planned`, `In progress`, `Blocked`, or
+tasks are incomplete. Tasks and subtasks are checked only when their full scope
+has been reviewed, required verification has passed, and the changes are ready
+to commit. Initial implementation or a successful build alone does not establish
+completion. Milestone status is one of `Planned`, `In progress`, `Blocked`, or
 `Done`. A blocked item records the specific dependency. `Done` requires every
 required task and the milestone's
 acceptance criteria.
@@ -202,7 +204,7 @@ access.
 ### M03 — Domain and seeded persistence baseline
 
 - [x] M03.01 Implement canonical identifiers, UTC/time-zone handling, state
-  dimensions, measurement types, and domain policy tests from the domain reference.
+  dimensions, measurement types, and tests of invariants used by delivered features.
 - [x] M03.02 Add PostgreSQL migrations for equipment, assignments, reservations,
   sessions, operations/attempts, deadlines, and file metadata; define boundaries
   between domain persistence and host-specific Wolverine message-storage schemas.
@@ -212,7 +214,7 @@ access.
 - [x] M03.04 Extend database roles with least-privilege domain access, read-only
   query credentials, and dedicated migration credentials.
 
-Acceptance: charging entities, policies, migrations, synthetic data, and scoped
+Acceptance: charging entities, migrations, synthetic data, and scoped
 database roles are available. Charging and authentication schemas have independent
 owners and migration histories. Reset preserves authentication data.
 
@@ -254,16 +256,22 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   adjacent/competing bookings across API instances, cross-driver denial, and
   visible validation, conflict, and dependency failures through the application.
   Depends on M04.01.
-- [ ] M05.08 Add configurable reservation admission following the
+- [x] M05.08 Add configurable reservation admission following the
   [domain policy](domain.md#5-reservations) and
   [lab experiment settings](lab.md#221-reservation-policy-experiments).
   Bind and validate typed options, enforce quotas and driver overlap atomically,
   and expose relevant limits to the booking form through typed API contracts.
   Verify boundaries, concurrent admission with quotas greater than one, and
-  policy changes without altering accepted slots or deadlines. Use a fresh local
-  database/model without compatibility fallbacks or legacy-data conversion.
+  policy changes without altering accepted slots or deadlines.
   Arrival-deadline enforcement is delivered with M06.01; slot-end expiry remains
   in effect until charging start is available. Depends on M05.01.
+  - [x] Bind configurable reservation limits to typed options and validate them at startup.
+  - [x] Enforce past-start, duration, and advance-horizon rules through domain creation.
+  - [x] Enforce per-driver quota and overlap atomically across replicas, including
+    eligible overdue quota release.
+  - [x] Capture policy values per operation and persist accepted arrival deadlines.
+  - [x] Expose limits to the booking form and verify that policy changes affect
+    new admissions without altering accepted slots or deadlines.
 - [ ] M05.02 Add durable messaging and automatic reservation expiry. Introduce
   RabbitMQ/Wolverine delivery and PostgreSQL inbox/outbox persistence for expiry
   work, scoped host-family storage/roles,

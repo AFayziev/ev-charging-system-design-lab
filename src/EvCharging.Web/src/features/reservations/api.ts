@@ -31,10 +31,33 @@ export interface Booking {
   readonly endsAt: string;
 }
 
+export interface BookingPolicy {
+  readonly maximumOutstandingReservationsPerDriver: number;
+  readonly maximumBookingDurationSeconds: number;
+  readonly maximumAdvanceBookingHorizonSeconds: number;
+}
+
 export const reservationKeys = {
+  bookingPolicy: ["reservations", "booking-policy"] as const,
   lists: ["reservations", "list"] as const,
   list: (afterId: string | null) => ["reservations", "list", afterId] as const,
 };
+
+export async function getBookingPolicy(
+  signal?: AbortSignal,
+): Promise<BookingPolicy> {
+  const response = await api.get<BookingPolicy>(
+    "/api/reservations/booking-policy",
+    { signal },
+  );
+  return response.data;
+}
+
+export const bookingPolicyQuery = queryOptions({
+  queryKey: reservationKeys.bookingPolicy,
+  queryFn: ({ signal }) => getBookingPolicy(signal),
+  retry: false,
+});
 
 export async function createReservation(
   booking: Booking,

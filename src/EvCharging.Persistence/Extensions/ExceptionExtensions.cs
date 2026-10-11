@@ -11,4 +11,11 @@ public static class ExceptionExtensions
             SqlState: PostgresErrorCodes.ExclusionViolation,
             ConstraintName: "ex_reservations_connector_slot"
         };
+
+    public static bool IsDriverReservationOverlap(this DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.ExclusionViolation,
+            ConstraintName: "ex_reservations_driver_slot"
+        };
 }

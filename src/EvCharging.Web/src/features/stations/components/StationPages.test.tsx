@@ -32,7 +32,7 @@ it("shows a safe failure and retries the query", async () => {
     .mockResolvedValue({ data: { stations: [], nextAfterId: null } });
   renderScreen();
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Station information unavailable",
+    "Information unavailable",
   );
   expect(
     screen.queryByText("private database details"),
@@ -80,16 +80,25 @@ it("keeps connector selection synchronized with the URL and booking form", async
       },
     ],
   };
-  get.mockImplementation(async (path: string) => ({
-    data:
-      path === "/auth/session"
-        ? {
-            signedIn: true,
-            user: { roles: ["driver"] },
-            antiforgeryToken: "csrf",
-          }
-        : station,
-  }));
+  get.mockImplementation(async (path: string) => {
+    if (path === "/auth/session")
+      return {
+        data: {
+          signedIn: true,
+          user: { roles: ["driver"] },
+          antiforgeryToken: "csrf",
+        },
+      };
+    if (path === "/api/reservations/booking-policy")
+      return {
+        data: {
+          maximumOutstandingReservationsPerDriver: 2,
+          maximumBookingDurationSeconds: 3600,
+          maximumAdvanceBookingHorizonSeconds: 86400,
+        },
+      };
+    return { data: station };
+  });
   const router = createMemoryRouter(
     [{ path: "/stations/:stationId", element: <StationDetailPage /> }],
     {

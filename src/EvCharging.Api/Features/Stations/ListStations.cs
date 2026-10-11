@@ -27,6 +27,18 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
         ListStationsRequest request,
         CancellationToken cancellationToken)
     {
+        var cursor = await ValidatePageAsync(request, cancellationToken);
+        if (cursor.IsFailed)
+        {
+            return Result.Fail<StationListResponse>(cursor.Errors);
+        }
+
+        return Result.Ok(await GetPageAsync(cursor.Value, request.Limit, cancellationToken));
+    }
+
+    private async Task<Result<Guid>> ValidatePageAsync(
+        ListStationsRequest request, CancellationToken cancellationToken)
+    {
         var errors = new List<ValidationError>();
         Guid afterId = Guid.Empty;
         if (request.AfterId is { } cursor)
@@ -53,14 +65,20 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
 
         if (errors.Count > 0)
         {
-            return Result.Fail<StationListResponse>(errors);
+            return Result.Fail<Guid>(errors);
         }
 
+        return Result.Ok(afterId);
+    }
+
+    private async Task<StationListResponse> GetPageAsync(
+        Guid afterId, int limit, CancellationToken cancellationToken)
+    {
         var stations = await database.Stations
             .AsNoTracking()
             .Where(station => station.Id.CompareTo(afterId) > 0)
             .OrderBy(station => station.Id)
-            .Take(request.Limit + 1)
+            .Take(limit + 1)
             .Select(
                 station => new
                 {
@@ -73,11 +91,11 @@ internal sealed class ListStationsQueryHandler(PlatformDbContext database)
                         .ToList()
                 })
             .ToListAsync(cancellationToken);
-        var nextAfterId = CursorPagination.TrimPage(stations, request.Limit, item => item.Station.PublicId);
+        var nextAfterId = CursorPagination.TrimPage(stations, limit, item => item.Station.PublicId);
 
         var summaries = stations
             .Select(item => item.Station.ToResponse(item.ChargerCount, item.EvseCount, item.Connectors))
             .ToArray();
-        return Result.Ok(new StationListResponse(summaries, nextAfterId));
+        return new StationListResponse(summaries, nextAfterId);
     }
 }

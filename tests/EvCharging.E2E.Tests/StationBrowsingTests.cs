@@ -1,7 +1,7 @@
+using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
-using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 using Npgsql;
 using Xunit;
@@ -40,51 +40,12 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         Directory.CreateDirectory(screenshots);
         await page.ScreenshotAsync(new() { Path = Path.Combine(screenshots, $"catalog-{width}.png"), FullPage = true });
 
-        var first = await page.EvaluateAsync<JsonElement>(
-            "async () => (await fetch('/api/stations?limit=1')).json()");
-        var station = first.GetProperty("stations")[0];
-        Assert.Equal("North Station", station.GetProperty("name").GetString());
-        Assert.Equal(2, station.GetProperty("connectorCount").GetInt32());
-        Assert.Equal(1, station.GetProperty("chargerCount").GetInt32());
-        Assert.Equal(2, station.GetProperty("evseCount").GetInt32());
-        var stationId = station.GetProperty("id").GetGuid();
-        string cursor = first.GetProperty("nextAfterId").GetString()!;
-        Assert.Equal(stationId.ToString(), cursor);
-        var second = await page.EvaluateAsync<JsonElement>(
-            "async cursor => (await fetch('/api/stations?limit=1&afterId=' + cursor)).json()", cursor);
-        Assert.Equal("South Station", second.GetProperty("stations")[0].GetProperty("name").GetString());
-        Assert.Equal(JsonValueKind.String, second.GetProperty("nextAfterId").ValueKind);
-        var remaining = await page.EvaluateAsync<JsonElement>(
-            "async cursor => (await fetch('/api/stations?afterId=' + cursor)).json()",
-            second.GetProperty("nextAfterId").GetString());
-        var remainingStations = remaining.GetProperty("stations").EnumerateArray().ToArray();
-        Assert.NotEmpty(remainingStations);
-        Assert.Equal(JsonValueKind.Null, remaining.GetProperty("nextAfterId").ValueKind);
-        var empty = await page.EvaluateAsync<JsonElement>(
-            "async cursor => (await fetch('/api/stations?afterId=' + cursor)).json()",
-            remainingStations[^1].GetProperty("id").GetString());
-        Assert.Empty(empty.GetProperty("stations").EnumerateArray());
-        var invalidPage = await page.EvaluateAsync<JsonElement>(
-            """
-            async cursor => {
-                const response = await fetch('/api/stations?afterId=' + cursor + '&limit=51');
-                return {
-                    status: response.status,
-                    contentType: response.headers.get('content-type'),
-                    body: await response.json()
-                };
-            }
-            """,
-            Guid.NewGuid().ToString());
-        Assert.Equal(400, invalidPage.GetProperty("status").GetInt32());
-        Assert.Equal("application/problem+json", invalidPage.GetProperty("contentType").GetString());
-        var errors = invalidPage.GetProperty("body").GetProperty("errors");
-        Assert.Equal("The cursor does not identify an existing station.", errors.GetProperty("AfterId")[0].GetString());
-        Assert.Equal("The limit must be between 1 and 50.", errors.GetProperty("Limit")[0].GetString());
-
-        await page.GetByRole(AriaRole.Link, new() { Name = "View North Station", Exact = true }).ClickAsync();
+        var stationLink = page.GetByRole(AriaRole.Link, new() { Name = "View North Station", Exact = true });
+        string stationPath = await stationLink.GetAttributeAsync("href")
+            ?? throw new InvalidOperationException("The station link is required.");
+        await stationLink.ClickAsync();
         await Expect(page).ToHaveURLAsync(
-            new Uri(fixture.App.GetEndpoint("frontend", "http"), $"/stations/{stationId}").AbsoluteUri);
+            new Uri(fixture.App.GetEndpoint("frontend", "http"), stationPath).AbsoluteUri);
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "North Station", Exact = true }))
             .ToBeVisibleAsync();
         await Expect(page.GetByText("Fictional lab site. Enter the synthetic public car park from Synthetic Avenue; "
@@ -93,17 +54,6 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         await Expect(page.GetByText("Type 2 · AC · 22 kW")).ToHaveCountAsync(2);
         await Expect(page.GetByText("EVSE 1 · Connector 1", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(page.GetByText("EVSE 2 · Connector 1", new() { Exact = true })).ToBeVisibleAsync();
-        var detail = await page.EvaluateAsync<JsonElement>(
-            "async id => (await fetch('/api/stations/' + id)).json()", stationId.ToString());
-        var charger = detail.GetProperty("chargers")[0];
-        Assert.NotEqual(Guid.Empty, charger.GetProperty("id").GetGuid());
-        foreach (var evse in charger.GetProperty("evses").EnumerateArray())
-        {
-            Assert.NotEqual(Guid.Empty, evse.GetProperty("id").GetGuid());
-            Assert.Single(evse.GetProperty("connectors").EnumerateArray());
-            Assert.NotEqual(Guid.Empty, evse.GetProperty("connectors")[0].GetProperty("id").GetGuid());
-        }
-
         await Expect(page.GetByText("Time zone: Europe/London")).ToBeVisibleAsync();
         await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Open in maps" })).ToHaveAttributeAsync(
             "href", "https://www.google.com/maps/search/?api=1&query=51.51%2C-0.12");
@@ -120,6 +70,51 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
     }
 
     [Fact]
+    [Trait("Category", "Api")]
+    public async Task Browse_PublicCatalogue_PagesAndValidatesRequests()
+    {
+        using var client = fixture.App.CreateHttpClient("gateway", "http");
+        var first = await client.GetFromJsonAsync<JsonElement>("/api/stations?limit=1");
+        var station = first.GetProperty("stations")[0];
+        Assert.Equal("North Station", station.GetProperty("name").GetString());
+        Assert.Equal(2, station.GetProperty("connectorCount").GetInt32());
+        Assert.Equal(1, station.GetProperty("chargerCount").GetInt32());
+        Assert.Equal(2, station.GetProperty("evseCount").GetInt32());
+        var stationId = station.GetProperty("id").GetGuid();
+        string cursor = first.GetProperty("nextAfterId").GetString()!;
+        Assert.Equal(stationId.ToString(), cursor);
+        var second = await client.GetFromJsonAsync<JsonElement>($"/api/stations?limit=1&afterId={cursor}");
+        Assert.Equal("South Station", second.GetProperty("stations")[0].GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.String, second.GetProperty("nextAfterId").ValueKind);
+        string nextCursor = second.GetProperty("nextAfterId").GetString()!;
+        var remaining = await client.GetFromJsonAsync<JsonElement>($"/api/stations?afterId={nextCursor}");
+        var remainingStations = remaining.GetProperty("stations").EnumerateArray().ToArray();
+        Assert.NotEmpty(remainingStations);
+        Assert.Equal(JsonValueKind.Null, remaining.GetProperty("nextAfterId").ValueKind);
+        Guid lastId = remainingStations[^1].GetProperty("id").GetGuid();
+        var empty = await client.GetFromJsonAsync<JsonElement>($"/api/stations?afterId={lastId}");
+        Assert.Empty(empty.GetProperty("stations").EnumerateArray());
+        using var invalidPage = await client.GetAsync($"/api/stations?afterId={Guid.NewGuid()}&limit=51");
+        Assert.Equal(HttpStatusCode.BadRequest, invalidPage.StatusCode);
+        Assert.Equal("application/problem+json", invalidPage.Content.Headers.ContentType?.MediaType);
+        var invalidBody = await invalidPage.Content.ReadFromJsonAsync<JsonElement>();
+        var errors = invalidBody.GetProperty("errors");
+        Assert.Equal("The cursor does not identify an existing station.", errors.GetProperty("AfterId")[0].GetString());
+        Assert.Equal("The limit must be between 1 and 50.", errors.GetProperty("Limit")[0].GetString());
+
+        var detail = await client.GetFromJsonAsync<JsonElement>($"/api/stations/{stationId}");
+        var charger = detail.GetProperty("chargers")[0];
+        Assert.NotEqual(Guid.Empty, charger.GetProperty("id").GetGuid());
+        foreach (var evse in charger.GetProperty("evses").EnumerateArray())
+        {
+            Assert.NotEqual(Guid.Empty, evse.GetProperty("id").GetGuid());
+            Assert.Single(evse.GetProperty("connectors").EnumerateArray());
+            Assert.NotEqual(Guid.Empty, evse.GetProperty("connectors")[0].GetProperty("id").GetGuid());
+        }
+
+    }
+
+    [Fact]
     [Trait("Category", "Browser")]
     public async Task Browse_Operator_PublicCatalogueAndProtectedBoundaries()
     {
@@ -133,7 +128,7 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
-        await LoginAsync(page, "operator");
+        await fixture.LoginAsync(page, "operator");
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Find a station" })).ToBeVisibleAsync();
         Assert.Equal(200, await page.EvaluateAsync<int>("async () => (await fetch('/api/stations')).status"));
         await page.GetByRole(AriaRole.Link, new() { Name = "Operator area", Exact = true }).ClickAsync();
@@ -153,7 +148,7 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
-        await LoginAsync(page, "operator");
+        await fixture.LoginAsync(page, "operator");
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Account menu" })).ToBeVisibleAsync();
         await using var database = new NpgsqlConnection(
             await fixture.App.GetConnectionStringAsync("gateway-auth-migration-db"));
@@ -195,18 +190,4 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Operator area" })).ToBeVisibleAsync();
     }
 
-    private async Task LoginAsync(IPage page, string username)
-    {
-        var model = fixture.App.Services.GetRequiredService<DistributedApplicationModel>();
-        string password = await model.Resources.OfType<ParameterResource>()
-            .Single(resource => resource.Name == $"synthetic-{username}-password")
-            .GetValueAsync(CancellationToken.None)
-            ?? throw new InvalidOperationException("The synthetic user's password is required.");
-        page.SetDefaultTimeout(30_000);
-        await page.GotoAsync(
-            new Uri(fixture.App.GetEndpoint("frontend", "http"), "/auth/login?returnUrl=/stations").AbsoluteUri);
-        await page.GetByLabel("Username or email").FillAsync(username);
-        await page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
-        await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
-    }
 }
