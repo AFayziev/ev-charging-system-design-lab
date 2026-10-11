@@ -185,11 +185,15 @@ describe("application shell", () => {
         ).toBeNull();
       } else if (outcome === "signed-in") {
         expect(
-          await screen.findByText("Sign in again to continue."),
+          await screen.findByText(
+            "This request could not be authenticated. Try again.",
+          ),
         ).toBeVisible();
         expect(
           screen.getByRole("button", { name: "Account menu" }),
         ).toBeVisible();
+        expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
       } else {
         expect(await screen.findByText("Account unavailable")).toBeVisible();
         expect(

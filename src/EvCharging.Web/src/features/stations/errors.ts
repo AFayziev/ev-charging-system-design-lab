@@ -1,11 +1,11 @@
 import axios, { HttpStatusCode } from "axios";
 import { getHttpStatus, getValidationErrors } from "@/lib/http-errors";
-import { signInRequiredMessage } from "@/features/auth/errors";
+import { requestAuthenticationFailedMessage } from "@/features/auth/errors";
 
 export interface StationEditFailure {
   readonly title: string;
   readonly message: string;
-  readonly recovery?: "reload" | "sign-in";
+  readonly recovery?: "reload";
 }
 
 export interface StationEditorLoadFailure extends StationEditFailure {
@@ -18,9 +18,9 @@ export function getStationEditorLoadFailure(
   switch (getHttpStatus(error)) {
     case HttpStatusCode.Unauthorized:
       return {
-        title: "Sign in required",
-        message: signInRequiredMessage,
-        recovery: "sign-in",
+        title: "Authentication failed",
+        message: requestAuthenticationFailedMessage,
+        recovery: "reload",
         blocksSave: true,
       };
     case HttpStatusCode.Forbidden:
@@ -66,9 +66,9 @@ export function getStationEditFailure(
       };
     case HttpStatusCode.Unauthorized:
       return {
-        title: "Sign in required",
-        message: signInRequiredMessage,
-        recovery: "sign-in",
+        title: "Authentication failed",
+        message: requestAuthenticationFailedMessage,
+        recovery: "reload",
       };
     case HttpStatusCode.Forbidden:
       return {

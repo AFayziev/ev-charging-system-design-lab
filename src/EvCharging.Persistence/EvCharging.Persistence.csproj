@@ -2,6 +2,8 @@
   <ItemGroup>
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="WolverineFx.Postgresql" />
+    <PackageReference Include="WolverineFx.RuntimeCompilation" />
     <ProjectReference Include="../EvCharging.Domain/EvCharging.Domain.csproj" />
   </ItemGroup>
 </Project>

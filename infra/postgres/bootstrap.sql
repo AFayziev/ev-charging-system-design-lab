@@ -6,3 +6,4 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 \ir bootstrap-gateway-auth.sql
 \ir bootstrap-charging.sql
+\ir bootstrap-messaging.sql

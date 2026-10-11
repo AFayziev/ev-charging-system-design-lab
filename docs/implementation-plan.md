@@ -262,6 +262,12 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   and due-work recovery after restart. Schedule existing active reservations as
   well as new bookings. Verify expiry in the driver reservation list and
   restart recovery without duplicate state changes. Depends on M05.01.
+  - [x] Wire RabbitMQ/Wolverine and host-family PostgreSQL inbox/outbox storage,
+    including storage provisioning with migration credentials.
+  - [x] Integrate booking transactions and deliver reservation-created messages to
+    ChargingWorker; verify atomic acceptance and delivery recovery.
+  - [ ] Add expiry scheduling, processing, and recovery;
+    verify expiry and restart behavior through the reservation feature.
 - [ ] M05.03 Deliver reservation cancellation in the driver's reservation list
   with permitted transitions, atomic state/deadline/outbox changes, audit records,
   and immediate authoritative results. Verify repeated cancellation and expiry

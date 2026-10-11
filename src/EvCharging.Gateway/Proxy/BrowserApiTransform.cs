@@ -1,7 +1,9 @@
 using System.Net.Http.Headers;
 using Duende.AccessTokenManagement;
 using Duende.AccessTokenManagement.OpenIdConnect;
+using Duende.IdentityModel;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Yarp.ReverseProxy.Transforms;
 
@@ -40,7 +42,16 @@ internal sealed class BrowserApiTransform(IAntiforgery antiforgery) : RequestTra
             ct: http.RequestAborted);
         if (!result.Succeeded)
         {
-            http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            if (result.FailedResult.Error == OidcConstants.TokenErrors.InvalidGrant)
+            {
+                await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            }
+            else
+            {
+                http.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            }
+
             return;
         }
 

@@ -43,7 +43,7 @@ public sealed class SessionStoreTests(AuthenticationDatabaseFixture database)
         var builder = Host.CreateApplicationBuilder();
         builder.Configuration["ConnectionStrings:gateway-auth"] = database.ConnectionString;
         builder.Configuration["AuthenticationDatabase:MaximumPoolSize"] = "1";
-        builder.Services.AddSingleton<TimeProvider>(clock);
+        builder.Services.AddSingleton(clock);
         builder.AddAuthenticationPersistence();
         builder.AddAuthenticationSessions();
         return builder.Build();

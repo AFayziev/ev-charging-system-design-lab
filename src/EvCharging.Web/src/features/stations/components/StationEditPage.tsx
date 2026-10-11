@@ -13,10 +13,10 @@ import {
 import { isNotEmpty, useForm, type FormErrors } from "@mantine/form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HttpStatusCode } from "axios";
-import { createPath, Link, useLocation, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { BackLink } from "@/components/BackLink";
 import { PageHeading } from "@/components/PageHeading";
-import { getSignInUrl, sessionQuery } from "@/features/auth/api";
+import { sessionQuery } from "@/features/auth/api";
 import { getHttpStatus, getFormValidationErrors } from "@/lib/http-errors";
 import {
   getStationEditFailure,
@@ -237,23 +237,11 @@ function StationEditFailureNotice({
   reload: () => void;
   children?: ReactNode;
 }) {
-  const location = useLocation();
   return (
     <Alert color="red" role="alert" title={failure.title}>
       <Stack gap="xs">
         <Text size="sm">{failure.message}</Text>
         {children}
-        {failure.recovery === "sign-in" && (
-          <Button
-            component="a"
-            variant="white"
-            size="sm"
-            w="fit-content"
-            href={getSignInUrl(createPath(location))}
-          >
-            Sign in
-          </Button>
-        )}
         {failure.recovery === "reload" && (
           <Button
             variant="white"

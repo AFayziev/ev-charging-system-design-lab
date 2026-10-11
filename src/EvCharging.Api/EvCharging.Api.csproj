@@ -2,6 +2,7 @@
   <ItemGroup>
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="FluentResults" />
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" />
     <ProjectReference Include="../EvCharging.Persistence/EvCharging.Persistence.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />

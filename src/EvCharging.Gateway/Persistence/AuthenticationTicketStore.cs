@@ -1,12 +1,11 @@
-using EvCharging.Gateway.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
-namespace EvCharging.Gateway.Authentication;
+namespace EvCharging.Gateway.Persistence;
 
-internal sealed class PostgresTicketStore(
+internal sealed class AuthenticationTicketStore(
     IDbContextFactory<AuthenticationDbContext> contexts,
     IDataProtectionProvider protectionProvider,
     TimeProvider timeProvider) : ITicketStore

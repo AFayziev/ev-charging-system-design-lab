@@ -1,1 +1,2 @@
-export const signInRequiredMessage = "Sign in again to continue.";
+export const requestAuthenticationFailedMessage =
+  "This request could not be authenticated. Try again.";

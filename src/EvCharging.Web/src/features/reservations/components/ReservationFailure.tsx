@@ -1,6 +1,5 @@
 import { Alert, Button, Stack, Text } from "@mantine/core";
-import { createPath, Link, useLocation } from "react-router";
-import { getSignInUrl } from "@/features/auth/api";
+import { Link } from "react-router";
 import { getReservationFailure } from "../errors";
 
 export function ReservationFailure({
@@ -12,21 +11,11 @@ export function ReservationFailure({
   retry?: () => void;
   booking?: boolean;
 }) {
-  const location = useLocation();
   const failure = getReservationFailure(error, booking);
   return (
     <Alert color="red" role="alert">
       <Stack gap="xs">
         <Text size="sm">{failure.message}</Text>
-        {failure.recovery === "sign-in" && (
-          <Button
-            component="a"
-            variant="white"
-            href={getSignInUrl(createPath(location))}
-          >
-            Sign in
-          </Button>
-        )}
         {failure.recovery === "retry" && retry && (
           <Button variant="white" onClick={retry}>
             Try again

@@ -1,3 +1,4 @@
+using EvCharging.Gateway.Persistence;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -11,8 +12,8 @@ public static class AuthenticationSessionExtensions
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddDataProtection()
             .SetApplicationName("EvCharging.Gateway")
-            .PersistKeysToDbContext<Persistence.AuthenticationDbContext>();
-        builder.Services.AddSingleton<ITicketStore, PostgresTicketStore>();
+            .PersistKeysToDbContext<AuthenticationDbContext>();
+        builder.Services.AddSingleton<ITicketStore, AuthenticationTicketStore>();
         return builder;
     }
 }

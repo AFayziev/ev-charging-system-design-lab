@@ -1,6 +1,7 @@
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
+using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
@@ -64,8 +65,7 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
                 await database.SaveChangesAsync();
                 return true;
             }
-            catch (DbUpdateException exception) when (exception.InnerException is PostgresException
-            { SqlState: PostgresErrorCodes.ExclusionViolation, ConstraintName: "ex_reservations_connector_slot" })
+            catch (DbUpdateException exception) when (exception.IsReservationOverlap())
             {
                 return false;
             }

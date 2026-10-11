@@ -2,20 +2,15 @@ namespace EvCharging.AppHost;
 
 internal static class DatabaseResourceExtensions
 {
-    public static (
-        IResourceBuilder<ConnectionStringResource> Write,
-        IResourceBuilder<ConnectionStringResource> Read,
-        IResourceBuilder<ConnectionStringResource> Migration,
-        IResourceBuilder<ConnectionStringResource> Authentication,
-        IResourceBuilder<ConnectionStringResource> AuthenticationMigration,
-        IResourceBuilder<ContainerResource> Bootstrap) AddDatabaseAccess(
-            this IDistributedApplicationBuilder builder, IResourceBuilder<PostgresDatabaseResource> database)
+    public static DatabaseConnectionResources AddDatabaseAccess(
+        this IDistributedApplicationBuilder builder, IResourceBuilder<PostgresDatabaseResource> database)
     {
         var writerPassword = builder.AddPersistentSecret("platform-write-password");
         var readerPassword = builder.AddPersistentSecret("platform-read-password");
         var migratorPassword = builder.AddPersistentSecret("platform-migration-password");
         var authenticationPassword = builder.AddPersistentSecret("gateway-auth-password");
         var authenticationMigratorPassword = builder.AddPersistentSecret("gateway-auth-migration-password");
+        var chargingMessagingPassword = builder.AddPersistentSecret("charging-messaging-password");
 
         var write = AddConnection("platform-write", "platform_writer", writerPassword);
         var read = AddConnection("platform-read", "platform_reader", readerPassword);
@@ -23,9 +18,10 @@ internal static class DatabaseResourceExtensions
         var authentication = AddConnection("gateway-auth", "gateway_auth_runtime", authenticationPassword);
         var authenticationMigration = AddConnection(
             "gateway-auth-migration-db", "gateway_auth_migrator", authenticationMigratorPassword);
+        var chargingMessaging = AddConnection("charging-messaging", "charging_messaging", chargingMessagingPassword);
 
         var endpoint = database.Resource.Parent.GetEndpoint("tcp");
-        var bootstrap = builder.AddDockerfile("database-provisioning", "../../infra/postgres")
+        var provisioning = builder.AddDockerfile("database-provisioning", "../../infra/postgres")
             .WithBuildArg("POSTGRES_IMAGE", $"docker.io/library/postgres:{ResourceExtensions.PostgresImageTag}")
             .WithEnvironment("PGHOST", endpoint.Property(EndpointProperty.Host))
             .WithEnvironment("PGPORT", endpoint.Property(EndpointProperty.Port))
@@ -39,14 +35,24 @@ internal static class DatabaseResourceExtensions
             .WithEnvironment("PLATFORM_WRITE_PASSWORD", writerPassword)
             .WithEnvironment("PLATFORM_READ_PASSWORD", readerPassword)
             .WithEnvironment("PLATFORM_MIGRATION_PASSWORD", migratorPassword)
+            .WithEnvironment("CHARGING_MESSAGING_PASSWORD", chargingMessagingPassword)
             .WaitFor(database);
 
         if (builder.ExecutionContext.IsRunMode)
         {
-            bootstrap.WithImageTag("local");
+            provisioning.WithImageTag("local");
         }
 
-        return (write, read, migration, authentication, authenticationMigration, bootstrap);
+        return new DatabaseConnectionResources
+        {
+            Write = write,
+            Read = read,
+            Migration = migration,
+            Authentication = authentication,
+            AuthenticationMigration = authenticationMigration,
+            ChargingMessaging = chargingMessaging,
+            Provisioning = provisioning
+        };
 
         IResourceBuilder<ConnectionStringResource> AddConnection(
             string name, string username, IResourceBuilder<ParameterResource> password)
@@ -61,4 +67,18 @@ internal static class DatabaseResourceExtensions
                     $"Password={password};Timeout=5;Command Timeout=30"));
         }
     }
+
+    public static IResourceBuilder<ProjectResource> AddMessageStorageMigration(
+        this IDistributedApplicationBuilder builder,
+        string serviceName,
+        IResourceBuilder<ConnectionStringResource> migration,
+        IResourceBuilder<ContainerResource> provisioning) =>
+        builder.AddProject<Projects.EvCharging_Persistence_Migrations>(
+            $"{serviceName}-message-migrations",
+            launchProfileName: null)
+            .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+            .WithEnvironment("Messaging__ServiceName", serviceName)
+            .WithReference(migration, "messaging")
+            .WithArgs("resources", "setup")
+            .WaitForCompletion(provisioning);
 }

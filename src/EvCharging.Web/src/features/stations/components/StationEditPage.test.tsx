@@ -95,7 +95,7 @@ it("waits for the writer fetch when revisiting a cached editor", async () => {
 it.each([
   {
     status: HttpStatusCode.Unauthorized,
-    title: "Sign in required",
+    title: "Authentication failed",
     blocksSave: true,
   },
   {
@@ -149,16 +149,14 @@ it.each([
       );
       expect(put).toHaveBeenCalledTimes(1);
     }
-    if (status === HttpStatusCode.Unauthorized)
-      expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
-        "href",
-        `/auth/login?returnUrl=${encodeURIComponent(`/stations/${station.id}/edit`)}`,
-      );
+    expect(
+      screen.queryByRole("link", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
   },
 );
 
 it.each([
-  { status: HttpStatusCode.Unauthorized, title: "Sign in required" },
+  { status: HttpStatusCode.Unauthorized, title: "Authentication failed" },
   { status: HttpStatusCode.Forbidden, title: "Access denied" },
   { status: HttpStatusCode.NotFound, title: "Station not found" },
   {
@@ -181,18 +179,17 @@ it.each([
       screen.getByRole("link", { name: "Assigned stations" }),
     ).toHaveAttribute("href", "/operator");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
-    if (status === HttpStatusCode.Unauthorized) {
-      expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
-    } else {
-      get.mockResolvedValue({ data: station });
-      await userEvent.click(
-        screen.getByRole("button", { name: "Reload current station" }),
-      );
-      expect(
-        await screen.findByLabelText("Station name", { exact: false }),
-      ).toHaveValue(station.name);
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    }
+    expect(
+      screen.queryByRole("link", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
+    get.mockResolvedValue({ data: station });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Reload current station" }),
+    );
+    expect(
+      await screen.findByLabelText("Station name", { exact: false }),
+    ).toHaveValue(station.name);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   },
 );
 
@@ -276,8 +273,8 @@ it("uses the confirmed writer response and disables inputs while saving", async 
 it.each([
   {
     error: failure(HttpStatusCode.Unauthorized),
-    title: "Sign in required",
-    recovery: "Sign in",
+    title: "Authentication failed",
+    recovery: "Reload current station",
   },
   {
     error: failure(HttpStatusCode.Forbidden),
@@ -315,12 +312,7 @@ it.each([
   expect(screen.queryByText(/private .* details/)).not.toBeInTheDocument();
   expect(screen.queryByText("Changes saved.")).not.toBeInTheDocument();
   expect(put).toHaveBeenCalledTimes(1);
-  if (recovery === "Sign in") {
-    expect(screen.getByRole("link", { name: recovery })).toHaveAttribute(
-      "href",
-      `/auth/login?returnUrl=${encodeURIComponent(`/stations/${station.id}/edit`)}`,
-    );
-  } else if (recovery) {
+  if (recovery) {
     expect(screen.getByRole("button", { name: recovery })).toBeInTheDocument();
   } else {
     expect(

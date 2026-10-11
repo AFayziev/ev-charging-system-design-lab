@@ -28,27 +28,27 @@ Apply its review criteria before considering the implementation complete.
 Projects live under `src/`. Responsibilities describe the intended host boundaries;
 implementation progress is recorded in the plan.
 
-| Project | Responsibility |
-|---|---|
-| `EvCharging.AppHost` | Aspire resource graph, endpoints, references, environment, and startup dependencies |
-| `EvCharging.Gateway` | YARP/BFF, browser sessions, authentication, and browser/service/callback routing to runtime-balanced API services |
-| `EvCharging.Gateway.Migrations` | EF migrations, model snapshot, design-time tooling, and one-shot authentication-schema migrations using schema-owning credentials |
-| `EvCharging.Web` | Shared React/TypeScript browser application for drivers and backoffice operators |
-| `EvCharging.Api` | Commands/queries, transactional acceptance, file authorization, callbacks, and live delivery |
-| `EvCharging.ChargingWorker` | Charging effects, reservation expiry, reconciliation, and recovery polling |
-| `EvCharging.ObservationWorker` | Observation history/latest views, lifecycle and final-usage evidence, and stalled-session detection |
-| `EvCharging.SearchIndexWorker` | Search indexing, replacement-index rebuilds, validation, and switchover |
-| `EvCharging.CacheWorker` | Cached query-view updates, invalidation, warming, and recovery |
-| `EvCharging.MediaWorker` | Media processing/publication, session summaries, diagnostic bundles, and upload/orphan cleanup |
-| `EvCharging.NotificationWorker` | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
-| `EvCharging.SynchronousChargingProviderApi` | Simulator with authoritative synchronous results and command deduplication |
-| `EvCharging.QueuedChargingProviderApi` | Simulator with queued acknowledgement and no effect deduplication |
-| `EvCharging.NotificationProviderApi` | Third-party notification service simulator; inspectable synthetic outcomes and controlled faults, no real delivery |
-| `EvCharging.Contracts` | Shared application API contracts and canonical role types; a library, not a resource |
-| `EvCharging.Domain` | Business entities, value objects, measurements, and pure business policies; a library, not a resource |
-| `EvCharging.Persistence` | Charging-schema EF mappings, database access, auditing, and persistence-owned records for API/worker consumers; a library, not a resource |
-| `EvCharging.Persistence.Migrations` | Charging-schema EF migrations, snapshot, design-time tooling, sample-data seeding/reset, and one-shot migrations using schema-owning credentials |
-| `EvCharging.ServiceDefaults` | Shared discovery, HTTP resilience, OpenTelemetry, and health checks; a library, not a resource |
+| Project | Type | Responsibility |
+|---|---|---|
+| `EvCharging.AppHost` | Orchestrator | Aspire resource graph, endpoints, references, environment, and startup dependencies |
+| `EvCharging.Gateway` | Resource | YARP/BFF, browser sessions, authentication, and browser/service/callback routing to runtime-balanced API services |
+| `EvCharging.Gateway.Migrations` | Resource | EF migrations, model snapshot, design-time tooling, and one-shot authentication-schema migrations using schema-owning credentials |
+| `EvCharging.Web` | Resource | Shared React/TypeScript browser application for drivers and backoffice operators |
+| `EvCharging.Api` | Resource | Commands/queries, transactional acceptance, file authorization, callbacks, and live delivery |
+| `EvCharging.ChargingWorker` | Resource | Charging effects, reservation expiry, reconciliation, and recovery polling |
+| `EvCharging.ObservationWorker` | Resource | Observation history/latest views, lifecycle and final-usage evidence, and stalled-session detection |
+| `EvCharging.SearchIndexWorker` | Resource | Search indexing, replacement-index rebuilds, validation, and switchover |
+| `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, warming, and recovery |
+| `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, diagnostic bundles, and upload/orphan cleanup |
+| `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
+| `EvCharging.SynchronousChargingProviderApi` | Resource | Simulator with authoritative synchronous results and command deduplication |
+| `EvCharging.QueuedChargingProviderApi` | Resource | Simulator with queued acknowledgement and no effect deduplication |
+| `EvCharging.NotificationProviderApi` | Resource | Third-party notification service simulator; inspectable synthetic outcomes and controlled faults, no real delivery |
+| `EvCharging.Contracts` | Library | Shared API and messaging contracts and canonical role types |
+| `EvCharging.Domain` | Library | Business entities, value objects, measurements, and pure business policies |
+| `EvCharging.Persistence` | Library | Charging-schema EF mappings, database access, auditing, and persistence-owned records for API/worker consumers |
+| `EvCharging.Persistence.Migrations` | Resource | Charging-schema EF migrations, message-store provisioning, design-time tooling, sample-data seeding/reset, and one-shot migrations using schema-owning credentials |
+| `EvCharging.ServiceDefaults` | Library | Shared discovery, HTTP resilience, OpenTelemetry, and health checks |
 
 Projects dedicated to handling incoming HTTP/gRPC requests use the `Api` suffix.
 Queue, stream, and scheduled-job processors use `Worker`. The proxy/BFF host uses

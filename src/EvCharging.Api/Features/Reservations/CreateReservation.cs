@@ -2,11 +2,13 @@ using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Persistence;
+using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
+using EvCharging.Persistence.Extensions;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
+using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Reservations;
 
@@ -16,6 +18,7 @@ internal sealed class ReservationOverlapError() : Error("This connector is alrea
 
 internal sealed class CreateReservationCommandHandler(
     [FromKeyedServices(PlatformPersistenceExtensions.WriteRoute)] PlatformDbContext database,
+    IDbContextOutbox outbox,
     TimeProvider clock)
 {
     public async Task<Result<ReservationResponse>> HandleAsync(
@@ -57,12 +60,14 @@ internal sealed class CreateReservationCommandHandler(
         var reservation = booking.Value;
 
         database.Reservations.Add(reservation);
+        outbox.Enroll(database);
+        await outbox.PublishAsync(new ReservationCreated(reservation.Id, reservation.EndsAt));
+
         try
         {
-            await database.SaveChangesAsync(cancellationToken);
+            await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception) when (exception.InnerException is PostgresException
-        { SqlState: PostgresErrorCodes.ExclusionViolation, ConstraintName: "ex_reservations_connector_slot" })
+        catch (DbUpdateException exception) when (exception.IsReservationOverlap())
         {
             return Result.Fail<ReservationResponse>(new ReservationOverlapError());
         }

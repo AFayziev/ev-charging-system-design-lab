@@ -15,7 +15,7 @@ internal static class PlatformPersistenceExtensions
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<IAuditActorAccessor, HttpAuditActorAccessor>();
         builder.Services.AddScoped<AuditEntryWriter>();
-        builder.Services.AddKeyedScoped<AuditSaveChangesInterceptor>(
+        builder.Services.AddKeyedScoped(
             WriteRoute,
             (services, _) =>
                 new AuditSaveChangesInterceptor(services.GetRequiredService<AuditEntryWriter>()));
@@ -27,13 +27,13 @@ internal static class PlatformPersistenceExtensions
                 throw new InvalidOperationException($"The {route} connection is required.");
             }
 
-            builder.Services.AddKeyedSingleton<NpgsqlDataSource>(route, (_, _) => NpgsqlDataSource.Create(connection));
+            builder.Services.AddKeyedSingleton(route, (_, _) => NpgsqlDataSource.Create(connection));
         }
 
         builder.Services.AddDbContext<PlatformDbContext>((services, options) =>
             options.UseNpgsql(services.GetRequiredKeyedService<NpgsqlDataSource>(ReadRoute)));
         builder.EnrichNpgsqlDbContext<PlatformDbContext>(settings => settings.DisableRetry = true);
-        builder.Services.AddKeyedScoped<PlatformDbContext>(
+        builder.Services.AddKeyedScoped(
             WriteRoute,
             (services, _) =>
                 new PlatformDbContext(

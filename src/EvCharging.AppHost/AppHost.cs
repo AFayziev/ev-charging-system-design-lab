@@ -10,13 +10,17 @@ var authenticationMigrations = builder.AddProject<Projects.EvCharging_Gateway_Mi
     launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithReference(databaseAccess.AuthenticationMigration)
-    .WaitForCompletion(databaseAccess.Bootstrap);
+    .WaitForCompletion(databaseAccess.Provisioning);
 var platformMigrations = builder.AddProject<Projects.EvCharging_Persistence_Migrations>(
     "platform-migrations",
     launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithReference(databaseAccess.Migration)
-    .WaitForCompletion(databaseAccess.Bootstrap);
+    .WaitForCompletion(databaseAccess.Provisioning);
+var apiMessageMigrations = builder.AddMessageStorageMigration(
+    "api", databaseAccess.Migration, databaseAccess.Provisioning);
+var chargingMessageMigrations = builder.AddMessageStorageMigration(
+    "charging", databaseAccess.Migration, databaseAccess.Provisioning);
 
 var gatewayOidcSecret = builder.AddPersistentSecret("gateway-oidc-secret");
 var identity = builder.AddIdentityProvider(gatewayOidcSecret);
@@ -41,7 +45,9 @@ api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
     .WaitFor(searchIndex)
     .WithReference(databaseAccess.Write)
     .WithReference(databaseAccess.Read)
+    .WithReference(databaseAccess.Write, "messaging")
     .WaitForCompletion(platformMigrations)
+    .WaitForCompletion(apiMessageMigrations)
     .WithReference(documents)
     .WaitFor(documents)
     .WithReference(cacheStore)
@@ -140,6 +146,8 @@ var notificationProviderApi = builder.AddProject<Projects.EvCharging_Notificatio
 
 var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithReference(databaseAccess.ChargingMessaging, "messaging")
+    .WaitForCompletion(chargingMessageMigrations)
     .WithReference(gateway)
     .WithReference(synchronousChargingProviderApi)
     .WithReference(queuedChargingProviderApi)

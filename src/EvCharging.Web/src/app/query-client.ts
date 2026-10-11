@@ -11,10 +11,10 @@ import { getHttpStatus } from "@/lib/http-errors";
 export function createAppQueryClient() {
   const recheckSession = (error: unknown) => {
     if (getHttpStatus(error) === HttpStatusCode.Unauthorized) {
-      void client.invalidateQueries(
-        { queryKey: authKeys.session, exact: true },
-        { cancelRefetch: false },
-      );
+      void client.invalidateQueries({
+        queryKey: authKeys.session,
+        exact: true,
+      });
     }
   };
   const client = new QueryClient({

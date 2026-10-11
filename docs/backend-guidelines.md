@@ -31,10 +31,14 @@ retain their prescribed names and signatures.
 ## Types and dependencies
 
 - Keep types and methods focused; prefer composition to inheritance.
-- Organize application use cases under `Features/<Area>`, with query handlers for
+- Organize API use cases under `Features/<Area>`, with query handlers for
   reads and command handlers for writes. Namespaces follow the directory layout.
   Shared infrastructure stays outside `Features`. Keep HTTP binding and response
   handling at the endpoint boundary.
+- Organize workers by responsibility: message handlers under `Handlers`, with
+  related handlers grouped by area as their number grows. Keep hosted services
+  and provider adapters in their own responsibility-based directories. Add
+  directories when needed; do not impose the API feature-slice layout on workers.
 - Keep small feature slices in a file named after the use case, grouping its
   request/response types, child contract types, exclusive errors, and command/query
   handler. Mapping extensions may live in separate files. Request/response models
@@ -157,9 +161,14 @@ retain their prescribed names and signatures.
 
 - Handlers load entities, invoke business operations, and persist accepted changes.
   The shared persistence pipeline captures ordinary change audits and commits them
-  atomically. Handlers coordinate durable effects and own explicit transactions
-  when a use case spans several saves. Query handlers may project directly to
-  response/read models without constructing aggregates.
+  atomically. Handlers coordinate durable effects. Query handlers may project
+  directly to response/read models without constructing aggregates.
+- Prefer EF Core's transaction for a single `SaveChanges` and framework-managed
+  transactions for integrated persistence such as Wolverine's outbox. Verify that
+  entity, audit, and outbox writes share one database transaction; one transaction
+  may contain multiple database writes. Add an explicit transaction only when the
+  operation needs a boundary the integration does not already provide, such as
+  several saves or additional SQL commands that must commit together.
 - Application checks cannot establish cross-request exclusivity. Use appropriate
   database constraints or concurrency control and translate only recognized
   conflicts to expected results. See [EF concurrency handling](https://learn.microsoft.com/en-us/ef/core/saving/concurrency).

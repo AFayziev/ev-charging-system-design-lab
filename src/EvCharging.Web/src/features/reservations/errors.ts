@@ -1,10 +1,10 @@
 import { HttpStatusCode } from "axios";
 import { getHttpStatus } from "@/lib/http-errors";
-import { signInRequiredMessage } from "@/features/auth/errors";
+import { requestAuthenticationFailedMessage } from "@/features/auth/errors";
 
 export interface ReservationFailure {
   readonly message: string;
-  readonly recovery?: "sign-in" | "retry" | "reservations" | "first-page";
+  readonly recovery?: "retry" | "reservations" | "first-page";
 }
 
 export function getReservationFailure(
@@ -14,8 +14,8 @@ export function getReservationFailure(
   switch (getHttpStatus(error)) {
     case HttpStatusCode.Unauthorized:
       return {
-        message: signInRequiredMessage,
-        recovery: "sign-in",
+        message: requestAuthenticationFailedMessage,
+        recovery: "retry",
       };
     case HttpStatusCode.Forbidden:
       return {
