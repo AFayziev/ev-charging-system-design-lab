@@ -130,6 +130,16 @@ retain their prescribed names and signatures.
 - Business operations receive required facts and an explicit current instant.
   They do not query a database, read ambient HTTP identity, obtain the system
   clock, call providers, or publish messages. Handlers supply these inputs.
+- Supply validated business-limit values to domain operations without introducing
+  configuration dependencies into Domain. Keep invariant safety and authorization
+  rules distinct from configurable limits.
+- Capture a consistent set of policy values for each operation. Persist derived
+  deadlines or accepted terms when later processing must preserve them; do not
+  reconstruct them from subsequently changed configuration. Existing entities
+  are not revalidated against new admission limits during materialization.
+- Supply relevant limits to frontend forms through typed API responses rather
+  than duplicate configuration values in browser code. Concurrent admission must
+  enforce the configured quota, not assume a permanently fixed limit of one.
 - Keep foreign keys and navigations consistent when an operation assigns a
   relationship. Entity getters must not fetch related data implicitly.
 - Do not add lifecycle operations before their feature needs them. When that

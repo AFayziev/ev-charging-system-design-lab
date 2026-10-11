@@ -332,6 +332,13 @@ commits the reservation, deadline, result, and outbox event. The API returns the
 committed result; subscribers update discovery and notifications asynchronously.
 Cancellation, start acceptance, and expiry use conditional primary-side transitions.
 
+Admission coordinates outstanding-booking counts and driver overlap checks across
+concurrent requests, with due, eligible allocations released in the same
+transaction. Background scheduling is not the authority for booking eligibility.
+The accepted deadline is stored with the reservation; later policy changes do
+not rewrite it. Browser forms obtain relevant policy limits from the API, while
+primary-side validation remains authoritative.
+
 ### 9.2 Start/stop execution
 
 ```mermaid

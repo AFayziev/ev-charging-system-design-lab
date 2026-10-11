@@ -7,15 +7,19 @@ and a shared React/TypeScript frontend for drivers and backoffice operator users
 It models production component interactions under small synthetic workloads,
 including concurrency, dependency failures, and uncertain external effects.
 
-| Reference | Responsibility |
-|---|---|
-| [README](README.md) | System overview, requirements, and local commands |
-| [Architecture](docs/architecture.md) | Technology-neutral component roles, ownership, data flows, and failure boundaries |
-| [Domain](docs/domain.md) | Canonical terms, permissions, lifecycle, and business rules |
-| [Integrations](docs/integrations.md) | Third-party provider contracts, simulators, delivery adapters, and command safety |
-| [Lab](docs/lab.md) | Technology selections, implementation constraints, profiles, timings, fault scenarios, and verification |
-| [Plan](docs/implementation-plan.md) | Task IDs, dependencies, status, and acceptance criteria |
-| [Backend guidelines](docs/backend-guidelines.md) | Backend design, coding, persistence, testing, and review guidance |
+| Reference | Responsibility | Keep elsewhere |
+|---|---|---|
+| [README](README.md) | Entry point: system and feature overview, prerequisites, local setup, and development commands | Detailed design and canonical rules belong in their owning references; delivery status belongs in the plan |
+| [Architecture](docs/architecture.md) | Intended technical design in technology-neutral terms: component responsibilities, data ownership, transaction and consistency boundaries, processing flows, and failure/recovery boundaries | Business eligibility and lifecycle rules belong in Domain; product/package selections and experiments belong in Lab; delivery stages belong in Plan |
+| [Domain](docs/domain.md) | Intended system behavior: canonical vocabulary, actors and permissions, business invariants, booking policies, lifecycle transitions, time semantics, and evidence required to establish outcomes | Implementation progress and temporary delivery stages belong in Plan; persistence/framework mechanisms belong in Architecture, Lab, or Backend guidelines |
+| [Integrations](docs/integrations.md) | External contracts and adapter obligations: provider guarantees, acknowledgements versus confirmed effects, retry/deduplication safety, observations, unit/identity mapping, and simulator behavior | Platform business rules belong in Domain; internal processing and storage ownership belong in Architecture; provider wiring and experiment settings belong in Lab |
+| [Lab](docs/lab.md) | Concrete lab design: selected technologies, implementation constraints, execution profiles, configurable experiment values, controlled faults, and verification tools/signals | Business-rule semantics belong in Domain; reusable coding/persistence practices belong in Backend guidelines; application logic, source configuration, and framework defaults stay in source |
+| [Plan](docs/implementation-plan.md) | Delivery tracking: stable task IDs, milestone status, dependencies, staged scope, pending work, and acceptance criteria | Link to owning design references instead of restating rules or design; verification evidence belongs in task reports or PR descriptions |
+| [Backend guidelines](docs/backend-guidelines.md) | Reusable implementation and review rules: code organization, C# style, domain/persistence boundaries, validation, identifiers, transactions, errors, testing, and enforcement | System-specific business behavior belongs in Domain; component design belongs in Architecture; technology selections and experiment values belong in Lab; CLI commands belong in README |
+
+Design references describe the intended system, independently of which features
+are implemented. The plan owns delivery stages and completion status; incomplete
+implementation does not change the intended domain rules.
 
 Follow the backend guidelines for backend code and tests. Use the repository
 EditorConfig and SDK analyzers; keep new and changed code free of warnings.

@@ -254,6 +254,16 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   adjacent/competing bookings across API instances, cross-driver denial, and
   visible validation, conflict, and dependency failures through the application.
   Depends on M04.01.
+- [ ] M05.08 Add configurable reservation admission following the
+  [domain policy](domain.md#5-reservations) and
+  [lab experiment settings](lab.md#221-reservation-policy-experiments).
+  Bind and validate typed options, enforce quotas and driver overlap atomically,
+  and expose relevant limits to the booking form through typed API contracts.
+  Verify boundaries, concurrent admission with quotas greater than one, and
+  policy changes without altering accepted slots or deadlines. Use a fresh local
+  database/model without compatibility fallbacks or legacy-data conversion.
+  Arrival-deadline enforcement is delivered with M06.01; slot-end expiry remains
+  in effect until charging start is available. Depends on M05.01.
 - [ ] M05.02 Add durable messaging and automatic reservation expiry. Introduce
   RabbitMQ/Wolverine delivery and PostgreSQL inbox/outbox persistence for expiry
   work, scoped host-family storage/roles,
@@ -261,13 +271,14 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   deadlines with stable job identities, bounded consumers, current-state checks,
   and due-work recovery after restart. Schedule existing active reservations as
   well as new bookings. Verify expiry in the driver reservation list and
-  restart recovery without duplicate state changes. Depends on M05.01.
+  restart recovery without duplicate state changes. Depends on M05.01 and M05.08.
   - [x] Wire RabbitMQ/Wolverine and host-family PostgreSQL inbox/outbox storage,
     including storage provisioning with migration credentials.
   - [x] Integrate booking transactions and deliver reservation-created messages to
     ChargingWorker; verify atomic acceptance and delivery recovery.
   - [ ] Add expiry scheduling, processing, and recovery;
-    verify expiry and restart behavior through the reservation feature.
+    coordinate overdue cleanup with booking admission and verify expiry, quota
+    release, and restart behavior through the reservation feature.
 - [ ] M05.03 Deliver reservation cancellation in the driver's reservation list
   with permitted transitions, atomic state/deadline/outbox changes, audit records,
   and immediate authoritative results. Verify repeated cancellation and expiry
@@ -289,9 +300,10 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   publisher/consumer recovery with reservation/notification workloads.
   Depends on M05.05.
 
-Acceptance: a driver books, views, and cancels eligible slots. Booking constraints
-hold across replicas and deadlines survive process loss. Notification failure
-leaves accepted reservations intact and remains separately inspectable.
+Acceptance: a driver books, views, and cancels eligible slots. Configured admission
+limits and overlap protection hold across replicas; due, eligible bookings release
+quota despite delayed background processing, and deadlines survive process loss.
+Notification failure leaves accepted reservations intact and remains separately inspectable.
 
 #### Independent follow-up tasks
 
@@ -309,6 +321,9 @@ leaves accepted reservations intact and remains separately inspectable.
   Add ownership checks, operation identity,
   payload-mismatch checks, conditional transitions, exclusive connector claims,
   persisted attempts/budgets, outcome queries, and scheduled reconciliation.
+  Activate persisted arrival deadlines and no-show expiry under the
+  [domain start rules](domain.md#51-start-and-expiry), with booking UI explanations
+  and safe handling of queued and uncertain starts.
   Verify confirmed/rejected/uncertain outcomes, duplicate submissions, and lost
   responses through the flow. Depends on M05.01 and M05.02.
 - [ ] M06.02 Deliver driver stop with the same operation tracking and recovery;

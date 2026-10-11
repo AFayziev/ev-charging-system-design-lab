@@ -97,27 +97,57 @@ Slots use UTC half-open intervals `[start, end)`; adjacent intervals do not over
 Applicable reservations for the same connector cannot overlap. Simulators receive
 charging commands, not external reservation requests.
 
-Booking admission requires finite instants, an end after the start, and an end
-after the current UTC time. A slot that has already started can be booked while
-its end remains in the future; no lead-time or duration limit applies.
+Booking admission requires finite instants, an end after the start, and a start
+at or after the current UTC time. The duration and advance-booking horizon must
+fit the configured reservation policy. Acceptance immediately creates an active
+reservation; no separate confirmation stage applies.
+
+The policy configures the maximum outstanding reservations per driver, maximum
+booking duration, maximum advance-booking horizon, and arrival allowance.
+Limits must be positive; the outstanding-booking quota is an integer.
+[Lab policy settings](lab.md#221-reservation-policy-experiments) define the initial
+experiment values. Ownership, overlap protection, and uncertain-effect safety
+remain invariants, not configurable switches.
+
+A driver's active, unused reservations count toward the outstanding-booking
+quota across all stations, including reservations with pending or uncertain
+starts. Consumed, cancelled, and expired reservations do not count. Active and
+consumed slots for the same driver cannot overlap, even on different connectors.
+Consumed reservations retain their original interval for both driver and
+connector overlap checks.
+
+Admission and quota enforcement are atomic across concurrent requests. Due,
+eligible unused reservations are expired before admission counts outstanding
+bookings; delayed background expiry cannot indefinitely block the driver's quota.
+Authorized external starts with pending or uncertain outcomes retain their claims
+under the rules below.
+
+Each booking retains its accepted slot and a persisted arrival deadline:
+the earlier of the slot end and the slot start plus the configured arrival
+allowance. Policy changes affect new bookings, without recalculating accepted
+deadlines or cancelling existing bookings. A lower quota blocks additional
+bookings until the driver has room under the new limit.
 
 | State | Meaning |
 |---|---|
 | Active | Accepted allocation not cancelled, consumed, or expired |
 | Consumed | A linked session's start has been confirmed |
 | Cancelled | Eligible allocation released by an authorized cancellation |
-| Expired | Unused allocation whose slot has ended |
+| Expired | Unused allocation released at its applicable deadline, without an unresolved external start effect |
 
 ### 5.1 Start and expiry
 
-Start requires the driver's active reservation within its slot, with no grace
-period. Ownership, current time, reservation state, and connector exclusivity are
-checked at intent acceptance and before each external start attempt.
+Start requires the driver's active reservation within its slot and before its
+arrival deadline. There is no early-start or late-arrival grace period. Ownership,
+current time, reservation state, and connector exclusivity are checked at intent
+acceptance and before each external start attempt.
 
-At or after `end`, no new external start attempt is authorized, including an
-idempotent retry that could initiate charging. Existing attempts can be reconciled.
-If no external attempt was authorized, an unexecuted queued start is rejected
-locally, its session fails, and the unused reservation expires.
+At or after the arrival deadline, no new external start attempt is authorized,
+including an idempotent retry that could initiate charging. Existing attempts can
+be reconciled.
+An unused reservation with no pending start expires at the deadline. If no
+external attempt was authorized, an unexecuted queued start is rejected locally,
+its session fails, and the unused reservation expires.
 
 An authorized attempt with unresolved outcome retains its execution claim:
 deadline expiry does not prove the provider did nothing. An established session
@@ -129,7 +159,7 @@ Cancellation is allowed only for an active reservation without a pending or
 uncertain start. Cancellation and start acceptance are atomic competing transitions.
 
 Confirmed start consumes the reservation. Definitive rejection fails that session
-and releases its execution claim. While the slot remains valid, the reservation
+and releases its execution claim. Before the arrival deadline, the reservation
 permits cancellation or another start with a new operation/session. Otherwise it
 expires. Each reservation permits at most one successful session.
 

@@ -4,8 +4,9 @@ The lab implements the [architecture](architecture.md) with synthetic fixtures,
 bounded load, and controlled faults. This reference maps architectural roles to
 selected technologies and defines implementation constraints, execution profiles,
 experiment settings, and verification.
-[Domain rules](domain.md) remain constant across profiles;
-[integration contracts](integrations.md) define simulator and real-provider behavior.
+[Domain invariants](domain.md) remain constant across profiles; configurable
+reservation limits define each experiment's admission policy.
+[Integration contracts](integrations.md) define simulator and real-provider behavior.
 The [implementation plan](implementation-plan.md) tracks delivery and pending selections.
 
 ## 1. Technical setup
@@ -329,6 +330,23 @@ Pool limits, worker concurrency, instance counts, stream/document/file retention
 and load are set per scenario. Deliberately small budgets expose saturation without a large
 user population. Overrides do not weaken eligibility, idempotency, or evidence rules.
 
+### 2.2.1 Reservation policy experiments
+
+The initial booking-limit experiment configures admission limits as follows.
+[Reservation rules](domain.md#5-reservations) define their semantics.
+
+| Setting | Initial experiment value |
+|---|---|
+| Maximum outstanding reservations per driver | 1 |
+| Maximum booking duration | 4 hours |
+| Maximum advance-booking horizon | 24 hours |
+| Arrival allowance | 15 minutes |
+
+Quota experiments also use a limit greater than one to verify configurable
+admission under concurrent API instances. Policy-change experiments verify that
+accepted deadlines remain stable and a lower quota prevents further bookings
+without cancelling accepted allocations.
+
 ### 2.3 Verification tools and signals
 
 | Area | Tool |
@@ -362,8 +380,11 @@ Verification uses correlated telemetry from the
 | Scenario | Expected behavior and acceptance evidence |
 |---|---|
 | Concurrent overlapping reservations | One conflicting booking succeeds; primary constraints remain effective across API instances |
+| Concurrent bookings by one driver across connectors | Configured quota and driver overlap protection hold across API instances |
+| Expiry worker delayed or restarted | Due, eligible allocations release capacity and quota; persisted deadlines support recovery |
+| Reservation policy changed | New admission uses the updated limits; accepted slots and deadlines remain unchanged |
 | Cancellation races start | One eligible transition wins; cancelled bookings cannot dispatch a start |
-| Slot ends with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled |
+| Arrival deadline passes with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled |
 | Start applies but response is lost | One logical operation; visible uncertainty resolves against provider evidence without blind resubmission |
 | Worker dies after effect before acknowledgement | Redelivery retains operation/attempt identity; SQL mutations deduplicate and provider ambiguity follows its contract |
 | Duplicate/late observations | Historical evidence retained; current state follows sequence policy |
