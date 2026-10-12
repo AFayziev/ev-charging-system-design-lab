@@ -3,8 +3,11 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using EvCharging.Domain.Reservations;
+using EvCharging.Gateway.Authentication;
+using EvCharging.Gateway.Persistence;
 using EvCharging.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace EvCharging.E2E.Tests;
@@ -23,6 +26,16 @@ public sealed class AppHostFixture : IAsyncLifetime
         new DbContextOptionsBuilder<PlatformDbContext>()
             .UseNpgsql(await App.GetConnectionStringAsync("platform-direct"))
             .Options);
+
+    public async Task<IHost> CreateAuthenticationHostAsync()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Configuration["ConnectionStrings:gateway-auth"] = await App.GetConnectionStringAsync("gateway-auth");
+        builder.Configuration["AuthenticationDatabase:MaximumPoolSize"] = "1";
+        builder.AddAuthenticationPersistence();
+        builder.AddAuthenticationSessions();
+        return builder.Build();
+    }
 
     public async Task InitializeAsync()
     {

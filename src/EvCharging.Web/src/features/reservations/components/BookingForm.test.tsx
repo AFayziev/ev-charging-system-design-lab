@@ -140,6 +140,43 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
+it("bounds picker choices and restores the selected date and time", async () => {
+  setup();
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Start time" }),
+  );
+  expect(
+    await screen.findByRole("button", { name: "1 January 2029" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "2 January 2029" }),
+  ).toHaveAttribute("data-selected", "true");
+  await userEvent.click(
+    screen.getByRole("spinbutton", { name: "Start hours" }),
+  );
+  expect(await screen.findByRole("button", { name: "10:01" })).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "09:45" }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "10:15" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "10 January 2029" }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Confirm start time" }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Start time" }));
+  expect(
+    await screen.findByRole("button", { name: "10 January 2029" }),
+  ).toHaveAttribute("data-selected", "true");
+  expect(screen.getByRole("spinbutton", { name: "Start hours" })).toHaveValue(
+    "10",
+  );
+  expect(screen.getByRole("spinbutton", { name: "Start minutes" })).toHaveValue(
+    "15",
+  );
+});
+
 it("shows the created booking once and clears feedback on reload", async () => {
   const saved: Reservation = {
     id: "saved",
@@ -158,6 +195,8 @@ it("shows the created booking once and clears feedback on reload", async () => {
     endsAt: "2029-01-10T11:00:00Z",
     state: "active",
     createdAt: "2029-01-02T10:00:00Z",
+    cancelledAt: null,
+    expiredAt: null,
   };
   get.mockImplementation(async (path: string) => ({
     data:
@@ -167,49 +206,7 @@ it("shows the created booking once and clears feedback on reload", async () => {
   }));
   post.mockResolvedValue({ data: saved });
   const view = setup();
-  await userEvent.click(
-    await screen.findByRole("button", { name: "Start time" }),
-  );
-  expect(
-    await screen.findByRole("button", { name: "1 January 2029" }),
-  ).toBeDisabled();
-  expect(
-    screen.getByRole("button", { name: "2 January 2029" }),
-  ).toHaveAttribute("data-selected", "true");
-  await userEvent.click(
-    await screen.findByRole("spinbutton", { name: "Start hours" }),
-  );
-  expect(await screen.findByRole("button", { name: "10:01" })).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "09:45" }),
-  ).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "10:15" }));
-  await userEvent.click(
-    screen.getByRole("button", { name: "Confirm start time" }),
-  );
   await fill();
-  for (const [label, hours] of [
-    ["Start", "10"],
-    ["End", "11"],
-  ]) {
-    await userEvent.click(
-      screen.getByRole("button", { name: `${label} time` }),
-    );
-    expect(
-      await screen.findByRole("button", { name: "10 January 2029" }),
-    ).toHaveAttribute("data-selected", "true");
-    expect(
-      screen.getByRole("spinbutton", { name: `${label} hours` }),
-    ).toHaveValue(hours);
-    expect(
-      screen.getByRole("spinbutton", { name: `${label} minutes` }),
-    ).toHaveValue("00");
-    await userEvent.click(
-      screen.getByRole("button", {
-        name: `Confirm ${label.toLowerCase()} time`,
-      }),
-    );
-  }
   await waitFor(() =>
     expect(
       screen.getByRole("button", { name: "Reserve connector" }),

@@ -1,6 +1,8 @@
-using EvCharging.Api.Features.Reservations;
+using EvCharging.Api.Authentication;
 using EvCharging.Api.Features.Stations;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
+using Wolverine;
 
 namespace EvCharging.Api.Configuration;
 
@@ -24,18 +26,19 @@ internal static class ApplicationServiceExtensions
                 "ReservationPolicy:ArrivalAllowance must be positive.")
             .ValidateOnStart();
 
-        services.AddScoped<ListStationsQueryHandler>();
-        services.AddScoped<GetStationQueryHandler>();
-        services.AddScoped<GetStationEditorQueryHandler>();
-        services.AddScoped<UpdateStationCommandHandler>();
-        services.AddScoped<ListAssignedStationsQueryHandler>();
         services.AddScoped<IAuthorizationHandler, StationAssignmentAuthorizationHandler>();
 
-        services.AddScoped<CreateReservationCommandHandler>();
-        services.AddScoped<ListReservationsQueryHandler>();
-        services.AddScoped<GetReservationQueryHandler>();
-        services.AddScoped<GetBookingPolicyQueryHandler>();
-
         return services;
+    }
+
+    public static WolverineOptions AddApplicationHandlers(this WolverineOptions options)
+    {
+        options.Policies.Add<UserContextPolicy>();
+
+        // Framework authorization and bound options require their native DI activation.
+        options.CodeGeneration.AlwaysUseServiceLocationFor<IAuthorizationService>();
+        options.CodeGeneration.AlwaysUseServiceLocationFor<IOptionsSnapshot<ReservationPolicyOptions>>();
+
+        return options;
     }
 }

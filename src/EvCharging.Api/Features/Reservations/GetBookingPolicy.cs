@@ -1,17 +1,21 @@
+using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using FluentResults;
 using Microsoft.Extensions.Options;
 
 namespace EvCharging.Api.Features.Reservations;
 
-internal sealed record BookingPolicyResponse(
+public sealed record GetBookingPolicyRequest : IAuthenticatedRequest<BookingPolicyResponse>;
+
+public sealed record BookingPolicyResponse(
     int MaximumOutstandingReservationsPerDriver,
     double MaximumBookingDurationSeconds,
     double MaximumAdvanceBookingHorizonSeconds);
 
-internal sealed class GetBookingPolicyQueryHandler(IOptionsSnapshot<ReservationPolicyOptions> options)
+public sealed class GetBookingPolicyQueryHandler(IOptionsSnapshot<ReservationPolicyOptions> options)
 {
-    public Result<BookingPolicyResponse> Handle() => Result.Ok(options.Value.ToResponse());
+    public Result<BookingPolicyResponse> Handle(GetBookingPolicyRequest request) =>
+        Result.Ok(options.Value.ToResponse());
 }
 
 internal static class BookingPolicyMappings

@@ -1,9 +1,7 @@
 using System.Diagnostics;
-using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using EvCharging.Api.Errors;
-using EvCharging.Api.Persistence;
 using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
@@ -17,20 +15,21 @@ using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Reservations;
 
-internal sealed record CreateReservationRequest(Guid ConnectorId, DateTimeOffset StartsAt, DateTimeOffset EndsAt);
+public sealed record CreateReservationRequest(Guid ConnectorId, DateTimeOffset StartsAt, DateTimeOffset EndsAt)
+    : IAuthenticatedRequest<ReservationResponse>;
 
 internal sealed class ReservationAdmissionError(string message) : Error(message);
 
-internal sealed class CreateReservationCommandHandler(
-    [FromKeyedServices(PlatformPersistenceExtensions.WriteRoute)] PlatformDbContext database,
+public sealed class CreateReservationCommandHandler(
+    PlatformDbContext database,
     IDbContextOutbox outbox,
     TimeProvider clock,
     IOptionsSnapshot<ReservationPolicyOptions> options)
 {
     public async Task<Result<ReservationResponse>> HandleAsync(
-        CreateReservationRequest request, ClaimsPrincipal user, CancellationToken cancellationToken)
+        CreateReservationRequest request, UserIdentity identity, CancellationToken cancellationToken)
     {
-        var driver = await GetDriverAsync(user, cancellationToken);
+        var driver = await GetDriverAsync(identity, cancellationToken);
         if (driver is null)
         {
             return Result.Fail<ReservationResponse>(new ForbiddenError());
@@ -65,18 +64,10 @@ internal sealed class CreateReservationCommandHandler(
         return await SaveReservationAsync(reservation, cancellationToken);
     }
 
-    private async Task<Driver?> GetDriverAsync(ClaimsPrincipal user, CancellationToken cancellationToken)
-    {
-        var identity = user.GetUserIdentity();
-        if (identity is null)
-        {
-            return null;
-        }
-
-        return await database.Drivers.SingleOrDefaultAsync(
+    private Task<Driver?> GetDriverAsync(UserIdentity identity, CancellationToken cancellationToken) =>
+        database.Drivers.SingleOrDefaultAsync(
             driver => driver.IdentityIssuer == identity.Issuer && driver.IdentitySubject == identity.Subject,
             cancellationToken);
-    }
 
     private Task<Connector?> GetConnectorAsync(Guid publicId, CancellationToken cancellationToken) =>
         database.Connectors

@@ -1,19 +1,21 @@
-import { Anchor, Paper, Stack, Text } from "@mantine/core";
+import { Anchor, Button, Paper, Stack, Text } from "@mantine/core";
 import { IconCalendar, IconPlug } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { StationPhoto } from "@/features/stations/components/StationPhoto";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
 import type { Reservation } from "../api";
+import { formatReservationSlot } from "../time-formatting";
 import { ReservationStatus } from "./ReservationStatus";
-import { formatReservationSlot } from "./ReservationTimes";
 import classes from "./Reservations.module.css";
 
 export function ReservationCard({
   reservation,
   highlighted = false,
+  onCancel,
 }: {
   reservation: Reservation;
   highlighted?: boolean;
+  onCancel?: (reservation: Reservation) => void;
 }) {
   const active = reservation.state === "active";
   const timeRange = formatReservationSlot(
@@ -69,8 +71,23 @@ export function ReservationCard({
         <Text size="xs" c="dimmed">
           Station time · {reservation.timeZoneId}
         </Text>
-        <ReservationStatus state={reservation.state} />
+        <ReservationStatus reservation={reservation} />
       </Stack>
+      {active && onCancel && (
+        <div className={classes.actions}>
+          <Button fullWidth disabled>
+            Start charging
+          </Button>
+          <Button
+            variant="outline"
+            color="red"
+            fullWidth
+            onClick={() => onCancel(reservation)}
+          >
+            Cancel reservation
+          </Button>
+        </div>
+      )}
     </Paper>
   );
 }

@@ -9,6 +9,7 @@ internal static class ApiAuthenticationExtensions
 {
     public static IHostApplicationBuilder AddApiAuthentication(this IHostApplicationBuilder builder)
     {
+        builder.Services.AddHttpContextAccessor();
         builder.Services.AddOptions<ApiAuthenticationOptions>()
             .Bind(builder.Configuration.GetSection("ApiAuthentication"))
             .ValidateDataAnnotations()
@@ -38,6 +39,15 @@ internal static class ApiAuthenticationExtensions
                 options.TokenValidationParameters.ValidIssuer = settings.Value.Authority;
                 options.TokenValidationParameters.NameClaimType = "name";
                 options.TokenValidationParameters.RoleClaimType = "role";
+                options.Events.OnTokenValidated = context =>
+                {
+                    if (context.Principal?.GetUserIdentity() is null)
+                    {
+                        context.Fail("An authenticated issuer and subject are required.");
+                    }
+
+                    return Task.CompletedTask;
+                };
             });
         builder.Services.AddAuthorization(options =>
         {

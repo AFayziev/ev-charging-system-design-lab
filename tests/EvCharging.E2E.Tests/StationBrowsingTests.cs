@@ -1,7 +1,13 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Aspire.Hosting.Testing;
+using EvCharging.Gateway.Persistence;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 using Npgsql;
 using Xunit;
@@ -103,6 +109,7 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         Assert.Equal("The limit must be between 1 and 50.", errors.GetProperty("Limit")[0].GetString());
 
         var detail = await client.GetFromJsonAsync<JsonElement>($"/api/stations/{stationId}");
+        Assert.False(detail.GetProperty("canEdit").GetBoolean());
         var charger = detail.GetProperty("chargers")[0];
         Assert.NotEqual(Guid.Empty, charger.GetProperty("id").GetGuid());
         foreach (var evse in charger.GetProperty("evses").EnumerateArray())
@@ -118,6 +125,10 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
     [Trait("Category", "Browser")]
     public async Task Browse_Operator_PublicCatalogueAndProtectedBoundaries()
     {
+        using var authenticationHost = await fixture.CreateAuthenticationHostAsync();
+        var contexts = authenticationHost.Services.GetRequiredService<IDbContextFactory<AuthenticationDbContext>>();
+        await using var database = await contexts.CreateDbContextAsync();
+        var existingSessionIds = await database.Sessions.Select(value => value.Id).ToListAsync();
         using var client = fixture.App.CreateHttpClient("gateway", "http");
         using var anonymous = await client.GetAsync("/api/stations");
         Assert.Equal(System.Net.HttpStatusCode.OK, anonymous.StatusCode);
@@ -131,6 +142,24 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         await fixture.LoginAsync(page, "operator");
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Find a station" })).ToBeVisibleAsync();
         Assert.Equal(200, await page.EvaluateAsync<int>("async () => (await fetch('/api/stations')).status"));
+        Guid sessionId = await database.Sessions.AsNoTracking()
+            .Where(value => !existingSessionIds.Contains(value.Id))
+            .Select(value => value.Id)
+            .SingleAsync();
+        var tickets = authenticationHost.Services.GetRequiredService<ITicketStore>();
+        var ticket = Assert.IsType<AuthenticationTicket>(await tickets.RetrieveAsync(sessionId.ToString()));
+        var stations = await client.GetFromJsonAsync<JsonElement>("/api/stations?limit=2");
+        var northId = stations.GetProperty("stations")[0].GetProperty("id").GetGuid();
+        var southId = stations.GetProperty("stations")[1].GetProperty("id").GetGuid();
+        using var api = fixture.App.CreateHttpClient("api", "http");
+        api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", ticket.Properties.GetTokenValue("access_token"));
+        var assignedStation = await api.GetFromJsonAsync<JsonElement>($"/stations/{northId}");
+        Assert.True(assignedStation.GetProperty("canEdit").GetBoolean());
+        var unassignedStation = await api.GetFromJsonAsync<JsonElement>($"/stations/{southId}");
+        Assert.False(unassignedStation.GetProperty("canEdit").GetBoolean());
+        Assert.False(await page.EvaluateAsync<bool>(
+            "async id => (await (await fetch(`/api/stations/${id}`)).json()).canEdit", northId.ToString()));
         await page.GetByRole(AriaRole.Link, new() { Name = "Operator area", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Operator area" })).ToBeVisibleAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Account menu" }).ClickAsync();

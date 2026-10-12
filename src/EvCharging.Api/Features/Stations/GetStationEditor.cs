@@ -1,6 +1,6 @@
 using System.Security.Claims;
+using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
-using EvCharging.Api.Persistence;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
 using FluentResults;
@@ -9,26 +9,28 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
 
-internal sealed record StationEditorResponse(
+public sealed record GetStationEditorRequest(Guid Id) : IAuthenticatedRequest<StationEditorResponse>;
+
+public sealed record StationEditorResponse(
     Guid Id,
     uint Version,
     string Name,
     string Address,
     string AccessInstructions);
 
-internal sealed class GetStationEditorQueryHandler(
-    [FromKeyedServices(PlatformPersistenceExtensions.WriteRoute)] PlatformDbContext database,
+public sealed class GetStationEditorQueryHandler(
+    PlatformDbContext database,
     IAuthorizationService authorization)
 {
     public async Task<Result<StationEditorResponse>> HandleAsync(
-        Guid id, ClaimsPrincipal user, CancellationToken cancellationToken)
+        GetStationEditorRequest request, ClaimsPrincipal user, CancellationToken cancellationToken)
     {
         var station = await database.Stations
             .AsNoTracking()
-            .SingleOrDefaultAsync(station => station.PublicId == id, cancellationToken);
+            .SingleOrDefaultAsync(station => station.PublicId == request.Id, cancellationToken);
         if (station is null)
         {
-            return Result.Fail<StationEditorResponse>(new NotFoundError<Guid>("station", id));
+            return Result.Fail<StationEditorResponse>(new NotFoundError<Guid>("station", request.Id));
         }
 
         var permission = await authorization.AuthorizeAsync(user, station, [StationAssignmentRequirement.Instance]);

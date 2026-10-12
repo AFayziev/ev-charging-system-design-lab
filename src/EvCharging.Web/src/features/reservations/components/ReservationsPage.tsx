@@ -19,16 +19,18 @@ import {
   useSearchParams,
 } from "react-router";
 import { PageHeading } from "@/components/PageHeading";
-import { reservationsQuery } from "../api";
+import { reservationsQuery, type Reservation } from "../api";
 import type { ReservationNavigationState } from "../navigation";
 import { ReservationFailure } from "./ReservationFailure";
 import { ReservationCard } from "./ReservationCard";
+import { ReservationCancellationDialog } from "./ReservationCancellationDialog";
 
 export function ReservationsPage() {
+  const [cancelling, setCancelling] = useState<Reservation | null>(null);
   const [search, setSearch] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const [createdReservation] = useState(
+  const [createdReservation, setCreatedReservation] = useState(
     () =>
       (location.state as ReservationNavigationState | null)?.createdReservation,
   );
@@ -61,6 +63,17 @@ export function ReservationsPage() {
 
   return (
     <Stack gap="lg">
+      {cancelling && (
+        <ReservationCancellationDialog
+          reservation={cancelling}
+          onCancelled={(saved) =>
+            setCreatedReservation((previous) =>
+              previous?.id === saved.id ? saved : previous,
+            )
+          }
+          onClose={() => setCancelling(null)}
+        />
+      )}
       <PageHeading
         title="My reservations"
         description="View your charging reservations and booked time slots."
@@ -117,6 +130,7 @@ export function ReservationsPage() {
                   key={reservation.id}
                   reservation={reservation}
                   highlighted={reservation.id === createdReservation?.id}
+                  onCancel={setCancelling}
                 />
               ))}
             </Stack>

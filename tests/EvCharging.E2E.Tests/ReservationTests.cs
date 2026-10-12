@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
+using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
@@ -10,6 +12,7 @@ using EvCharging.Persistence.Auditing;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
+using RabbitMQ.Client;
 using Xunit;
 using static Microsoft.Playwright.Assertions;
 
@@ -265,6 +268,11 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             entry => entry.ResourceId == accepted.Id && entry.Action == AuditAction.Updated,
             timeout.Token);
         Assert.Equal(ReservationState.Expired, accepted.State);
+        Assert.NotNull(accepted.ExpiredAt);
+        Assert.True(accepted.ExpiredAt >= accepted.EndsAt);
+        await Expect(card.GetByText(new Regex("^Expired .+"))).ToBeVisibleAsync();
+        var current = await GetAsync(page, $"/api/reservations/{publicId}");
+        Assert.Equal(accepted.ExpiredAt, current.GetProperty("expiredAt").GetDateTimeOffset());
         Assert.Equal(AuditActorType.Service, audit.ActorType);
         Assert.Equal("charging-worker", audit.ActorSubject);
         Assert.False(string.IsNullOrWhiteSpace(audit.TraceId));
@@ -346,6 +354,154 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             ? [KnownResourceStates.Exited, KnownResourceStates.Finished] : [KnownResourceStates.Running];
         await fixture.App.ResourceNotifications.WaitForResourceAsync("charging-worker", states, cancellationToken);
     }
+
+    [Fact]
+    [Trait("Category", "Browser")]
+    public async Task Cancel_ActiveBooking_CommitsOnceAndReleasesQuota()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        await fixture.LoginAsync(page, "driver");
+        var connector = await NorthConnectorAsync();
+        var start = DateTimeOffset.UtcNow.AddDays(10);
+        for (int index = 0; index < AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver; index++)
+        {
+            var booking = await PostAsync(
+                page, connector.PublicId.ToString(), start.AddHours(index), start.AddHours(index + 1));
+            Assert.Equal(201, booking.GetProperty("status").GetInt32());
+        }
+
+        await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
+        await Expect(page.GetByText("Active reservation", new() { Exact = true }))
+            .ToHaveCountAsync(AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver);
+        await CaptureAsync(page, "reservation-cancel-actions");
+        var card = page.GetByRole(AriaRole.Article).First;
+        await card.GetByRole(AriaRole.Button, new() { Name = "Cancel reservation", Exact = true }).ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Cancel reservation?" });
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Keep reservation" }).ClickAsync();
+        await Expect(dialog).ToBeHiddenAsync();
+        await Expect(card.GetByText("Active reservation", new() { Exact = true })).ToBeVisibleAsync();
+        await page.SetViewportSizeAsync(390, 844);
+        await card.GetByRole(AriaRole.Button, new() { Name = "Cancel reservation", Exact = true }).ClickAsync();
+        await Expect(dialog).ToBeVisibleAsync();
+        Assert.False(await page.EvaluateAsync<bool>("document.documentElement.scrollWidth > window.innerWidth"));
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Confirm cancellation" }).ClickAsync();
+        await Expect(dialog).ToBeHiddenAsync();
+        await Expect(page.GetByText("Cancelled", new() { Exact = true })).ToHaveCountAsync(1);
+        var cancelled = await Storage.Reservations.AsNoTracking()
+            .SingleAsync(value => value.DriverId == Driver.Id && value.State == ReservationState.Cancelled);
+        Assert.NotNull(cancelled.CancelledAt);
+        await Expect(page.GetByText(new Regex("^Cancelled .+"))).ToBeVisibleAsync();
+        var repeats = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => CancelAsync(page, cancelled.PublicId)));
+        Assert.All(
+            repeats,
+            response =>
+            {
+                Assert.Equal(200, response.GetProperty("status").GetInt32());
+                var returnedAt = response.GetProperty("body").GetProperty("cancelledAt").GetDateTimeOffset();
+                Assert.Equal(cancelled.CancelledAt, returnedAt);
+            });
+        var audit = await Storage.AuditEntries.SingleAsync(entry => entry.ResourceId == cancelled.Id
+            && entry.Action == AuditAction.Updated);
+        Assert.Equal(Driver.IdentitySubject, audit.ActorSubject);
+        Assert.Equal(Driver.IdentityIssuer, audit.ActorIssuer);
+        Assert.Equal(
+            (int)ReservationState.Cancelled, audit.Details.GetProperty("after").GetProperty("state").GetInt32());
+
+        string? brokerConnection = await fixture.App.GetConnectionStringAsync("rabbitmq");
+        Assert.NotNull(brokerConnection);
+        var factory = new ConnectionFactory { Uri = new Uri(brokerConnection) };
+        await using var connection = await factory.CreateConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+        var message = await channel.BasicGetAsync(ReservationCancelled.Queue, autoAck: true);
+        Assert.NotNull(message);
+        using var body = JsonDocument.Parse(message.Body);
+        Assert.Equal(cancelled.Id, body.RootElement.GetProperty("reservationId").GetGuid());
+        var replacement = await PostAsync(
+            page, connector.PublicId.ToString(), cancelled.StartsAt, cancelled.EndsAt);
+        Assert.Equal(201, replacement.GetProperty("status").GetInt32());
+        await page.ReloadAsync();
+        await Expect(page.GetByText("Cancelled", new() { Exact = true })).ToHaveCountAsync(1);
+        await Expect(page.GetByText(new Regex("^Cancelled .+"))).ToBeVisibleAsync();
+    }
+
+    [Theory]
+    [InlineData("foreign", 403)]
+    [InlineData("missing", 404)]
+    [InlineData("expired", 409)]
+    [InlineData("unresolved", 409)]
+    [Trait("Category", "Api")]
+    public async Task Cancel_IneligibleBooking_RejectsWithoutChanges(string scenario, int expectedStatus)
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        await fixture.LoginAsync(page, "driver");
+        if (scenario == "missing")
+        {
+            Assert.Equal(expectedStatus, (await CancelAsync(page, Guid.NewGuid())).GetProperty("status").GetInt32());
+            return;
+        }
+
+        var connector = await NorthConnectorAsync();
+        var start = DateTimeOffset.UtcNow.AddDays(10);
+        var owner = Driver;
+        if (scenario == "foreign")
+        {
+            owner = new Driver
+            {
+                IdentityIssuer = Driver.IdentityIssuer,
+                IdentitySubject = Guid.NewGuid().ToString()
+            };
+        }
+
+        var reservation = Reservation.Book(
+            connector, owner, start, start.AddHours(1), start, AppHostFixture.BookingLimits).Value;
+        if (scenario == "expired")
+        {
+            reservation.ExpireAtSlotEnd(start.AddHours(1), false);
+        }
+
+        Storage.Reservations.Add(reservation);
+        await Storage.SaveChangesAsync();
+        if (scenario == "foreign")
+        {
+            _additionalDrivers.Add(owner.Id);
+        }
+
+        if (scenario == "unresolved")
+        {
+            Storage.Sessions.Add(new ChargingSession
+            {
+                ReservationId = reservation.Id,
+                ConnectorId = connector.Id,
+                Lifecycle = SessionLifecycle.Starting,
+                CreatedAt = start
+            });
+            await Storage.SaveChangesAsync();
+        }
+
+        var originalState = reservation.State;
+        Assert.Equal(expectedStatus, (await CancelAsync(page, reservation.PublicId)).GetProperty("status").GetInt32());
+        int auditCount = await Storage.AuditEntries.CountAsync(entry => entry.Action == AuditAction.Updated
+            && entry.ResourceId == reservation.Id);
+        Assert.Equal(0, auditCount);
+        var saved = await Storage.Reservations.AsNoTracking().SingleAsync(value => value.Id == reservation.Id);
+        Assert.Equal(originalState, saved.State);
+    }
+
+    private static Task<JsonElement> CancelAsync(IPage page, Guid id) => page.EvaluateAsync<JsonElement>(
+        """
+        async id => {
+            const session = await (await fetch('/auth/session')).json();
+            const response = await fetch(`/api/reservations/${id}/cancel`, {
+                method: 'POST', headers: { 'X-CSRF-TOKEN': session.antiforgeryToken }
+            });
+            return { status: response.status, body: await response.json() };
+        }
+        """,
+        id.ToString());
 
     [Fact]
     [Trait("Category", "Api")]
@@ -540,10 +696,15 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         await page.GotoAsync(fixture.App.GetEndpoint("frontend", "http").AbsoluteUri);
         Assert.Equal(401, await StatusAsync(page, "/api/reservations"));
         Assert.Equal(401, await StatusAsync(page, "/api/reservations/booking-policy"));
+        int anonymousCancellation = await page.EvaluateAsync<int>(
+            "async () => (await fetch('/api/reservations/00000000-0000-4000-8000-000000000000/cancel', { method: 'POST' })).status");
+        Assert.Equal(401, anonymousCancellation);
         await fixture.LoginAsync(page, "operator");
         Assert.Equal(403, await StatusAsync(page, "/api/reservations"));
         Assert.Equal(403, await StatusAsync(page, "/api/reservations/booking-policy"));
         Assert.Equal(403, await StatusAsync(page, $"/api/reservations/{Guid.NewGuid()}"));
+        var deniedCancellation = await CancelAsync(page, Guid.NewGuid());
+        Assert.Equal(403, deniedCancellation.GetProperty("status").GetInt32());
         Assert.Equal(
             403,
             (await PostAsync(

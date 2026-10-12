@@ -1,7 +1,8 @@
-using System.Security.Claims;
 using EvCharging.Api.Errors;
 using EvCharging.Contracts;
+using FluentResults;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Wolverine;
 
 namespace EvCharging.Api.Features.Stations;
 
@@ -18,43 +19,48 @@ internal static class StationEndpoints
         return app;
     }
 
-    private static async Task<Results<Ok<AssignedStationListResponse>, ValidationProblem, ForbidHttpResult>> Assigned(
-        [AsParameters] ListStationsRequest request,
-        ClaimsPrincipal user,
-        ListAssignedStationsQueryHandler handler,
-        CancellationToken cancellationToken)
+    private static async Task<Results<
+        Ok<AssignedStationListResponse>, ValidationProblem, ChallengeHttpResult>> Assigned(
+            [AsParameters] ListAssignedStationsRequest request,
+            IMessageBus bus,
+            CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(request, user, cancellationToken);
+        var result = await bus.InvokeAsync<Result<AssignedStationListResponse>>(request, cancellationToken);
         return result switch
         {
-            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
             _ => TypedResults.Ok(result.Value)
         };
     }
 
-    private static async Task<Results<Ok<StationEditorResponse>, NotFound, ForbidHttpResult>> Editor(
-        Guid id, ClaimsPrincipal user, GetStationEditorQueryHandler handler, CancellationToken cancellationToken)
+    private static async Task<Results<
+        Ok<StationEditorResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult>> Editor(
+            Guid id, IMessageBus bus, CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(id, user, cancellationToken);
+        var result = await bus.InvokeAsync<Result<StationEditorResponse>>(
+            new GetStationEditorRequest(id), cancellationToken);
         return result switch
         {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<NotFoundError<Guid>>(out var errors) => errors.First().ToResponse(),
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
             _ => TypedResults.Ok(result.Value)
         };
     }
 
-    private static async Task<Results<Ok<StationEditorResponse>, NotFound, ForbidHttpResult, ProblemHttpResult>> Update(
-        Guid id,
-        UpdateStationRequest request,
-        ClaimsPrincipal user,
-        UpdateStationCommandHandler handler,
-        CancellationToken cancellationToken)
+    private static async Task<Results<
+        Ok<StationEditorResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult, ProblemHttpResult>> Update(
+            Guid id,
+            UpdateStationRequest request,
+            IMessageBus bus,
+            CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(id, request, user, cancellationToken);
+        var result = await bus.InvokeAsync<Result<StationEditorResponse>>(
+            new UpdateStationCommand(id, request), cancellationToken);
         return result switch
         {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<NotFoundError<Guid>>(out var errors) => errors.First().ToResponse(),
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
             _ when result.HasError<ConcurrencyConflictError>(out var conflicts) => conflicts.First().ToResponse(),
@@ -64,10 +70,10 @@ internal static class StationEndpoints
 
     private static async Task<Results<Ok<StationListResponse>, ValidationProblem>> List(
         [AsParameters] ListStationsRequest request,
-        ListStationsQueryHandler handler,
+        IMessageBus bus,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(request, cancellationToken);
+        var result = await bus.InvokeAsync<Result<StationListResponse>>(request, cancellationToken);
         return result switch
         {
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
@@ -77,10 +83,10 @@ internal static class StationEndpoints
 
     private static async Task<Results<Ok<StationDetailResponse>, NotFound>> Detail(
         [AsParameters] GetStationRequest request,
-        GetStationQueryHandler handler,
+        IMessageBus bus,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(request, cancellationToken);
+        var result = await bus.InvokeAsync<Result<StationDetailResponse>>(request, cancellationToken);
         return result switch
         {
             _ when result.HasError<NotFoundError<Guid>>(out var errors) => errors.First().ToResponse(),

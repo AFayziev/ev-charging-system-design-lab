@@ -1,14 +1,14 @@
 .card {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);
-  align-items: center;
+  align-items: start;
   gap: 12px 20px;
   padding: 14px 16px;
   border-color: #dfe5ea;
 }
 
 .card[data-active="true"] {
-  grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1.2fr) minmax(0, 1fr) auto;
   padding: 18px;
 }
 
@@ -78,10 +78,23 @@
   grid-row: 1 / 3;
 }
 
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  grid-column: 4;
+  grid-row: 1 / 3;
+  align-self: start;
+}
+
 @media (max-width: 61.99em) {
   .card,
   .card[data-active="true"] {
     grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .card[data-active="true"] {
+    grid-template-columns: 80px minmax(0, 1.2fr) minmax(0, 1fr) auto;
   }
 
   .card .photo,
@@ -98,6 +111,17 @@
   .card .slot {
     grid-column: 3;
     grid-row: 1 / 3;
+  }
+}
+
+@media (max-width: 47.99em) {
+  .card[data-active="true"] {
+    grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 3;
+    grid-row: 3;
   }
 }
 
@@ -118,7 +142,8 @@
   .card .equipment,
   .card[data-active="true"] .equipment,
   .card .slot,
-  .card[data-active="true"] .slot {
+  .card[data-active="true"] .slot,
+  .card .actions {
     grid-column: 1 / -1;
     grid-row: auto;
   }

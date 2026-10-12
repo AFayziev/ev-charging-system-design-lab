@@ -1,6 +1,6 @@
 namespace EvCharging.Api.Configuration;
 
-internal sealed class ReservationPolicyOptions
+public sealed class ReservationPolicyOptions
 {
     public int MaximumOutstandingReservationsPerDriver { get; set; }
     public TimeSpan MaximumBookingDuration { get; set; }

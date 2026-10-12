@@ -6,9 +6,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Persistence;
 
-public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : DbContext(options)
+public class PlatformDbContext : DbContext
 {
     internal const string Schema = "charging";
+
+    public PlatformDbContext(DbContextOptions<PlatformDbContext> options) : base(options)
+    {
+    }
+
+    protected PlatformDbContext(DbContextOptions options) : base(options)
+    {
+    }
 
     public DbSet<Station> Stations => Set<Station>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();

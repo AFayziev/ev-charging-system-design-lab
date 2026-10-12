@@ -26,6 +26,7 @@
     <Project Path="src/EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/EvCharging.Api.Tests/EvCharging.Api.Tests.csproj" />
     <Project Path="tests/EvCharging.Domain.Tests/EvCharging.Domain.Tests.csproj" />
     <Project Path="tests/EvCharging.Gateway.Tests/EvCharging.Gateway.Tests.csproj" />
     <Project Path="tests/EvCharging.Persistence.Tests/EvCharging.Persistence.Tests.csproj" />

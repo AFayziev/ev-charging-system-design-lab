@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Pagination;
@@ -9,20 +8,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Reservations;
 
-internal sealed record ListReservationsRequest(Guid? AfterId = null, int Limit = CursorPagination.DefaultPageSize);
-internal sealed record ReservationListResponse(IReadOnlyList<ReservationResponse> Reservations, Guid? NextAfterId);
+public sealed record ListReservationsRequest(Guid? AfterId = null, int Limit = CursorPagination.DefaultPageSize)
+    : IAuthenticatedRequest<ReservationListResponse>;
+public sealed record ReservationListResponse(IReadOnlyList<ReservationResponse> Reservations, Guid? NextAfterId);
 
-internal sealed class ListReservationsQueryHandler(PlatformDbContext database)
+public sealed class ListReservationsQueryHandler(PlatformReadDbContext database)
 {
     public async Task<Result<ReservationListResponse>> HandleAsync(
-        ListReservationsRequest request, ClaimsPrincipal user, CancellationToken cancellationToken)
+        ListReservationsRequest request, UserIdentity identity, CancellationToken cancellationToken)
     {
-        var identity = user.GetUserIdentity();
-        if (identity is null)
-        {
-            return Result.Fail<ReservationListResponse>(new ForbiddenError());
-        }
-
         var owned = database.Reservations
             .AsNoTracking()
             .OwnedBy(identity);

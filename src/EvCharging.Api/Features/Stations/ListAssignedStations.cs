@@ -1,8 +1,6 @@
-using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Pagination;
-using EvCharging.Api.Persistence;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
 using FluentResults;
@@ -10,24 +8,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
 
-internal sealed record AssignedStationResponse(Guid Id, string Name, string Address);
-internal sealed record AssignedStationListResponse(IReadOnlyList<AssignedStationResponse> Stations, Guid? NextAfterId);
+public sealed record ListAssignedStationsRequest(Guid? AfterId = null, int Limit = CursorPagination.DefaultPageSize)
+    : IAuthenticatedRequest<AssignedStationListResponse>;
+public sealed record AssignedStationResponse(Guid Id, string Name, string Address);
+public sealed record AssignedStationListResponse(IReadOnlyList<AssignedStationResponse> Stations, Guid? NextAfterId);
 
-internal sealed class ListAssignedStationsQueryHandler(
-    [FromKeyedServices(PlatformPersistenceExtensions.WriteRoute)] PlatformDbContext database)
+public sealed class ListAssignedStationsQueryHandler(
+    PlatformDbContext database)
 {
     public async Task<Result<AssignedStationListResponse>> HandleAsync(
-        ListStationsRequest request, ClaimsPrincipal user, CancellationToken cancellationToken)
+        ListAssignedStationsRequest request, UserIdentity identity, CancellationToken cancellationToken)
     {
         if (CursorPagination.ValidateLimit(request.Limit, nameof(request.Limit)) is { } error)
         {
             return Result.Fail<AssignedStationListResponse>(error);
-        }
-
-        var identity = user.GetUserIdentity();
-        if (identity is null)
-        {
-            return Result.Fail<AssignedStationListResponse>(new ForbiddenError());
         }
 
         var stations = database.Stations
@@ -61,7 +55,7 @@ internal sealed class ListAssignedStationsQueryHandler(
         return anchorId is { } id
             ? Result.Ok(id)
             : Result.Fail<Guid>(new ValidationError(
-                nameof(ListStationsRequest.AfterId), "The cursor does not identify an assigned station."));
+                nameof(ListAssignedStationsRequest.AfterId), "The cursor does not identify an assigned station."));
     }
 
     private static async Task<AssignedStationListResponse> GetPageAsync(

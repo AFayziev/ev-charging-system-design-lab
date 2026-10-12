@@ -14,6 +14,8 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
         entity.Property(reservation => reservation.EndsAt).IsAudited();
         entity.Property(reservation => reservation.ArrivalDeadline).IsAudited();
         entity.Property(reservation => reservation.State).IsAudited();
+        entity.Property(reservation => reservation.CancelledAt).IsAudited();
+        entity.Property(reservation => reservation.ExpiredAt).IsAudited();
         entity.Property(reservation => reservation.ConnectorId).IsAudited();
         entity.Property(reservation => reservation.DriverId).IsAudited();
         entity.Ignore(reservation => reservation.Slot);
@@ -25,6 +27,10 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
             table.HasCheckConstraint(
                 "ck_reservations_arrival_deadline",
                 "isfinite(arrival_deadline) AND starts_at < arrival_deadline AND arrival_deadline <= ends_at");
+            table.HasCheckConstraint(
+                "ck_reservations_cancelled_at", "cancelled_at IS NULL OR (state = 2 AND isfinite(cancelled_at))");
+            table.HasCheckConstraint(
+                "ck_reservations_expired_at", "expired_at IS NULL OR (state = 3 AND isfinite(expired_at))");
         });
         entity.HasOne(reservation => reservation.Connector)
             .WithMany()

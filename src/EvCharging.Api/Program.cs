@@ -18,7 +18,9 @@ builder.AddMessaging(
     {
         options.AddMessageStorage(builder.Configuration, "api");
         options.UseEntityFrameworkCoreTransactions();
+        options.AddApplicationHandlers();
         options.PublishMessage<ReservationCreated>().ToRabbitQueue(ReservationCreated.Queue);
+        options.PublishMessage<ReservationCancelled>().ToRabbitQueue(ReservationCancelled.Queue);
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddSingleton(TimeProvider.System);

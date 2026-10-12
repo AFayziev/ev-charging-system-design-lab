@@ -158,6 +158,11 @@ can continue beyond the slot until stopped; reservation expiry is not a stop.
 Cancellation is allowed only for an active reservation without a pending or
 uncertain start. Cancellation and start acceptance are atomic competing transitions.
 
+Cancellation and expiry retain the instant of their state transition. Expiry
+processing time is distinct from the applicable booking deadline; processing
+delays do not move the deadline. Repeated processing preserves recorded
+transition times.
+
 Confirmed start consumes the reservation. Definitive rejection fails that session
 and releases its execution claim. Before the arrival deadline, the reservation
 permits cancellation or another start with a new operation/session. Otherwise it

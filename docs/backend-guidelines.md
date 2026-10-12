@@ -57,9 +57,9 @@ retain their prescribed names and signatures.
   consumers; keep contracts owned by a single host with its feature.
 - Keep Minimal API route mappings and their HTTP handlers together in the
   feature's endpoint file. Keep command/query handlers separate.
-- Register command/query handlers and application services in application
-  composition, outside feature endpoint files. Bind and validate application
-  options there as well; endpoint mapping does not own service configuration.
+- Register application services and bind/validate options in application
+  composition, outside feature endpoint files. Endpoint mapping owns HTTP routes
+  and responses.
 - Commands and queries return typed results for expected failures. Reuse common
   application errors for missing resources and invalid input; reserve feature-specific
   errors for business rules. Translate errors to HTTP responses at the endpoint
@@ -81,8 +81,9 @@ retain their prescribed names and signatures.
   multiple outcomes. Simple route and query parameters may remain typed scalars.
 - Use nullable annotations honestly. Validate boundaries; avoid `null!` and `!`
   unless an invariant is proven and cannot be expressed in the type system.
-- Use constructor injection. Resolve dependencies in composition roots; avoid
-  service location inside business logic and manually building service providers.
+- Use constructor injection or framework-provided method injection. Keep
+  `IServiceProvider` and service resolution out of business logic; do not build
+  additional service providers.
 - Register shared capabilities through conventional `Add...` extension methods;
   name HTTP pipeline extensions `Use...` and endpoint extensions `Map...`.
 - Bind related settings to typed options and use the framework's Options validation
@@ -95,6 +96,38 @@ retain their prescribed names and signatures.
 - Introduce interfaces at meaningful dependency boundaries, not for every class.
   Keep persistence and transport concerns out of domain behavior.
 - Avoid generic repositories or abstraction layers that only forward calls.
+
+## Wolverine
+
+- Configure handler discovery and central middleware policies in application
+  composition. Do not add DI registrations merely to call discovered handlers.
+- Inject services through constructors in instance handlers or method parameters
+  in static handlers. Supply messages, cancellation, and middleware values through
+  handler parameters.
+- Dispatch API commands/queries through `IMessageBus.InvokeAsync<Result<TResponse>>`
+  with request cancellation; direct handler calls bypass middleware.
+- Declare HTTP user-context requirements on API messages as below. Apply them
+  through the central [user-context policy](../src/EvCharging.Api/Authentication/UserContextPolicy.cs),
+  without per-handler middleware attributes or missing-identity checks. These
+  markers do not supply browser identity to background handlers.
+
+| User-context requirement | Message contract | Handler input |
+|---|---|---|
+| No user-dependent behavior | No user-context marker | No user-context parameter |
+| Optional authentication | `IUserAwareRequest` | `RequestUser`; its `Identity` may be null |
+| Required authentication | `IAuthenticatedRequest<TResponse>` | Validated `UserIdentity` and/or `ClaimsPrincipal` |
+
+- Match the required marker's `TResponse` to the handler and invocation result.
+  Resolve identity from authenticated `HttpContext.User`, not message payloads.
+  Missing required identity returns a typed failure before the handler runs,
+  translated to a 401 challenge; do not throw for this expected outcome.
+- ASP.NET Core owns JWT claim validation and endpoint role policies. Handlers
+  enforce resource permissions and return 403 for authenticated denials.
+- Keep strict service location; allow native DI activation per type with
+  `AlwaysUseServiceLocationFor<T>()`. Inspect generated code for activation issues;
+  do not enable unrestricted service location or modify variable-source collections.
+- Use the EF Core outbox integration for durable outgoing messages; follow the
+  [transaction rules](#persistence-and-verification) for atomic entity/audit/message writes.
 
 ## Domain models, persistence, and validation
 
@@ -179,12 +212,16 @@ retain their prescribed names and signatures.
 
 ### Persistence and verification
 
+- Use distinct read/write `DbContext` types sharing model mappings. Select by
+  consistency and permissions: writes and authoritative permission/concurrency
+  reads use the writer. Verify database roles and audit participation; do not
+  broaden grants to hide wrong context selection.
 - Handlers load entities, invoke business operations, and persist accepted changes.
   The shared persistence pipeline captures ordinary change audits and commits them
   atomically. Handlers coordinate durable effects. Query handlers may project
   directly to response/read models without constructing aggregates.
 - Prefer EF Core's transaction for a single `SaveChanges` and framework-managed
-  transactions for integrated persistence such as Wolverine's outbox. Verify that
+  transactions for integrated persistence. Verify that
   entity, audit, and outbox writes share one database transaction; one transaction
   may contain multiple database writes. Add an explicit transaction only when the
   operation needs a boundary the integration does not already provide, such as
@@ -282,6 +319,11 @@ retain their prescribed names and signatures.
 - Choose the narrowest test layer that proves a behavior. Add E2E failure cases
   only for an additional cross-component guarantee; do not repeat infrastructure
   faults to recheck UI behavior already covered by component tests.
+- Use API tests for custom claim validation with correctly signed tokens containing
+  missing/invalid claims and a valid control, plus typed authentication failures
+  that HTTP authorization would intercept. Repeat role-denial cases in E2E only
+  for additional gateway/browser behavior; do not retest JWT cryptography or
+  library registrations.
 - Test implemented behavior and distinct outcomes. Remove coverage for retired
   decisions and unused helpers; preserve tests for current security, concurrency,
   atomicity, and business boundaries. Retaining accepted terms after a policy

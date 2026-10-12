@@ -26,7 +26,7 @@ internal static class StationResponseMappings
             capabilities);
     }
 
-    public static StationDetailResponse ToResponse(this Station station) => new(
+    public static StationDetailResponse ToResponse(this Station station, bool canEdit) => new(
         station.PublicId,
         station.Name,
         station.Address,
@@ -37,7 +37,8 @@ internal static class StationResponseMappings
         station.Chargers
             .OrderBy(charger => charger.Id)
             .Select(charger => charger.ToResponse())
-            .ToArray());
+            .ToArray(),
+        canEdit);
 
     public static ChargerResponse ToResponse(this Charger charger) => new(
         charger.PublicId,

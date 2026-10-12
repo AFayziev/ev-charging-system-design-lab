@@ -1,7 +1,9 @@
-using System.Security.Claims;
 using EvCharging.Api.Errors;
 using EvCharging.Contracts;
+using EvCharging.Domain.Reservations;
+using FluentResults;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Wolverine;
 
 namespace EvCharging.Api.Features.Reservations;
 
@@ -14,26 +16,56 @@ internal static class ReservationEndpoints
         reservations.MapGet("/", List);
         reservations.MapGet("/booking-policy", BookingPolicy);
         reservations.MapGet("/{id:guid}", Detail);
+        reservations.MapPost("/{id:guid}/cancel", Cancel);
         return app;
     }
 
-    private static Ok<BookingPolicyResponse> BookingPolicy(GetBookingPolicyQueryHandler handler) =>
-        TypedResults.Ok(handler.Handle().Value);
+    private static async Task<Results<Ok<BookingPolicyResponse>, ChallengeHttpResult>> BookingPolicy(
+        IMessageBus bus, CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<BookingPolicyResponse>>(
+            new GetBookingPolicyRequest(), cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
+
+    private static async Task<Results<
+        Ok<ReservationResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult, ProblemHttpResult>> Cancel(
+            Guid id, IMessageBus bus, CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<ReservationResponse>>(
+            new CancelReservationCommand(id), cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<ReservationCancellationError>(out var conflicts) => TypedResults.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Reservation cancellation conflict",
+                detail: conflicts.First().Message),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
 
     private static async Task<Results<
         Created<ReservationResponse>,
         ValidationProblem,
         NotFound,
+        ChallengeHttpResult,
         ForbidHttpResult,
         ProblemHttpResult>> Create(
             CreateReservationRequest request,
-            ClaimsPrincipal user,
-            CreateReservationCommandHandler handler,
+            IMessageBus bus,
             CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(request, user, cancellationToken);
+        var result = await bus.InvokeAsync<Result<ReservationResponse>>(request, cancellationToken);
         return result switch
         {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
@@ -45,27 +77,28 @@ internal static class ReservationEndpoints
         };
     }
 
-    private static async Task<Results<Ok<ReservationListResponse>, ValidationProblem, ForbidHttpResult>> List(
+    private static async Task<Results<Ok<ReservationListResponse>, ValidationProblem, ChallengeHttpResult>> List(
         [AsParameters] ListReservationsRequest request,
-        ClaimsPrincipal user,
-        ListReservationsQueryHandler handler,
+        IMessageBus bus,
         CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(request, user, cancellationToken);
+        var result = await bus.InvokeAsync<Result<ReservationListResponse>>(request, cancellationToken);
         return result switch
         {
-            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
             _ => TypedResults.Ok(result.Value)
         };
     }
 
-    private static async Task<Results<Ok<ReservationResponse>, NotFound, ForbidHttpResult>> Detail(
-        Guid id, ClaimsPrincipal user, GetReservationQueryHandler handler, CancellationToken cancellationToken)
+    private static async Task<Results<Ok<ReservationResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult>> Detail(
+        Guid id, IMessageBus bus, CancellationToken cancellationToken)
     {
-        var result = await handler.HandleAsync(id, user, cancellationToken);
+        var result = await bus.InvokeAsync<Result<ReservationResponse>>(
+            new GetReservationRequest(id), cancellationToken);
         return result switch
         {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
             _ => TypedResults.Ok(result.Value)

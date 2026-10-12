@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, replaceEqualDeep } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 export interface Reservation {
@@ -18,6 +18,8 @@ export interface Reservation {
   readonly endsAt: string;
   readonly state: "active" | "consumed" | "cancelled" | "expired";
   readonly createdAt: string;
+  readonly cancelledAt: string | null;
+  readonly expiredAt: string | null;
 }
 
 export interface ReservationList {
@@ -82,11 +84,45 @@ export async function getReservations(
   return response.data;
 }
 
+export async function cancelReservation(
+  id: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<Reservation> {
+  const response = await api.post<Reservation>(
+    `/api/reservations/${id}/cancel`,
+    undefined,
+    { headers: { "X-CSRF-TOKEN": token }, signal },
+  );
+  return response.data;
+}
+
 export const reservationsQuery = (afterId: string | null) =>
   queryOptions({
     queryKey: reservationKeys.list(afterId),
     queryFn: ({ signal }) => getReservations(afterId, signal),
     retry: false,
+    structuralSharing: (oldData, newData) => {
+      const previous = oldData as ReservationList | undefined;
+      const fetched = newData as ReservationList;
+      if (!previous) return fetched;
+      return replaceEqualDeep(previous, {
+        ...fetched,
+        reservations: fetched.reservations.map((reservation) => {
+          const known = previous.reservations.find(
+            (value) => value.id === reservation.id,
+          );
+          // A stale read cannot undo an authoritative cancellation.
+          return known?.state === "cancelled" && reservation.state === "active"
+            ? {
+                ...reservation,
+                state: known.state,
+                cancelledAt: known.cancelledAt,
+              }
+            : reservation;
+        }),
+      });
+    },
     refetchInterval: (query) => {
       if (query.state.error) return false;
       return query.state.data?.reservations.some(

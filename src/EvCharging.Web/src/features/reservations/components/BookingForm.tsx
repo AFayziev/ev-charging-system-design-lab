@@ -30,8 +30,9 @@ import {
   type BookingPolicy,
 } from "../api";
 import type { ReservationNavigationState } from "../navigation";
+import { formatTime } from "../time-formatting";
 import { ReservationFailure } from "./ReservationFailure";
-import { formatTime, ReservationTimes } from "./ReservationTimes";
+import { ReservationTimes } from "./ReservationTimes";
 import classes from "./Booking.module.css";
 
 interface BookingFormProps {

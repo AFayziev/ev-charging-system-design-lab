@@ -48,10 +48,14 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
 
         var saved = await setup.Reservations.AsNoTracking().SingleAsync(value => value.Id == reservation.Id);
         Assert.Equal(ReservationState.Expired, saved.State);
+        Assert.NotNull(saved.ExpiredAt);
         var audit = await setup.AuditEntries.SingleAsync(entry => entry.ResourceId == reservation.Id);
         Assert.Equal(AuditAction.Updated, audit.Action);
         Assert.Equal(0, audit.Details.GetProperty("before").GetProperty("state").GetInt32());
         Assert.Equal(3, audit.Details.GetProperty("after").GetProperty("state").GetInt32());
+        Assert.Equal(
+            saved.ExpiredAt.Value.ToUnixTimeMilliseconds(),
+            audit.Details.GetProperty("after").GetProperty("expiredAt").GetDateTimeOffset().ToUnixTimeMilliseconds());
 
         async Task ExpireAsync(string role)
         {
@@ -74,6 +78,77 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
     {
         public AuditActor GetActor() => AuditActor.Service("expiry-test");
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Cancel_ExpiryRace_DriverLockPreservesFirstTransition(bool cancellationFirst)
+    {
+        await using var setupConnection = fixture.CreateConnection("platform_writer");
+        await using var setup = Context(setupConnection);
+        var (connector, driver) = await EquipmentAsync(setup);
+        var end = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var reservation = Booking(connector, driver, end.AddHours(-1), end);
+        setup.Reservations.Add(reservation);
+        await setup.SaveChangesAsync();
+
+        await using var firstConnection = fixture.CreateConnection(
+            cancellationFirst ? "platform_writer" : "charging_messaging");
+        await using var first = AuditedContext(firstConnection);
+        await using var firstTransaction = await first.Database.BeginTransactionAsync();
+        await first.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
+        var loaded = await first.Reservations.SingleAsync(value => value.Id == reservation.Id);
+        var transitionedAt = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        if (cancellationFirst)
+        {
+            Assert.True(loaded.Cancel(transitionedAt, false).IsSuccess);
+        }
+        else
+        {
+            await first.ExpireReservationsAsync([loaded], transitionedAt, CancellationToken.None);
+        }
+
+        var competing = CompeteAsync();
+        await first.SaveChangesAsync();
+        await firstTransaction.CommitAsync();
+        await competing;
+
+        var saved = await setup.Reservations.AsNoTracking().SingleAsync(value => value.Id == reservation.Id);
+        Assert.Equal(cancellationFirst ? ReservationState.Cancelled : ReservationState.Expired, saved.State);
+        Assert.Equal(cancellationFirst ? transitionedAt : (DateTimeOffset?)null, saved.CancelledAt);
+        Assert.Equal(cancellationFirst ? (DateTimeOffset?)null : transitionedAt, saved.ExpiredAt);
+        Assert.Single(await setup.AuditEntries.Where(entry => entry.ResourceId == reservation.Id).ToListAsync());
+
+        async Task CompeteAsync()
+        {
+            await using var connection = fixture.CreateConnection(
+                cancellationFirst ? "charging_messaging" : "platform_writer");
+            await using var context = AuditedContext(connection);
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            await context.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
+            var current = await context.Reservations.SingleAsync(value => value.Id == reservation.Id);
+            if (cancellationFirst)
+            {
+                var outcomes = await context.ExpireReservationsAsync(
+                    [current], DateTimeOffset.UtcNow, CancellationToken.None);
+                Assert.Equal(ReservationExpiryOutcome.AlreadyInactive, outcomes[current.Id]);
+            }
+            else
+            {
+                Assert.True(current.Cancel(DateTimeOffset.UtcNow, false).IsFailed);
+            }
+
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+    }
+
+    private static PlatformDbContext AuditedContext(NpgsqlConnection connection) => new(
+        new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(connection)
+            .AddInterceptors(new AuditSaveChangesInterceptor(
+                new AuditEntryWriter(new ExpiryActor(), TimeProvider.System)))
+            .Options);
 
     [Theory]
     [InlineData(ReservationState.Active, true)]

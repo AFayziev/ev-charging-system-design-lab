@@ -1,5 +1,6 @@
-import { Badge } from "@mantine/core";
+import { Badge, Stack, Text } from "@mantine/core";
 import type { Reservation } from "../api";
+import { formatReservationTransitionTime } from "../time-formatting";
 
 const statuses = {
   active: { label: "Active reservation", color: "teal" },
@@ -8,17 +9,34 @@ const statuses = {
   expired: { label: "Expired", color: "gray" },
 } satisfies Record<Reservation["state"], { label: string; color: string }>;
 
-export function ReservationStatus({ state }: { state: Reservation["state"] }) {
+export function ReservationStatus({
+  reservation,
+}: {
+  reservation: Pick<
+    Reservation,
+    "state" | "cancelledAt" | "expiredAt" | "timeZoneId"
+  >;
+}) {
+  const { state, cancelledAt, expiredAt, timeZoneId } = reservation;
   const status = statuses[state];
+  const recordedAt = state === "cancelled" ? cancelledAt : expiredAt;
 
   return (
-    <Badge
-      variant="light"
-      color={status.color}
-      w="fit-content"
-      styles={{ label: { textTransform: "none" } }}
-    >
-      {status.label}
-    </Badge>
+    <Stack gap={4}>
+      <Badge
+        variant="light"
+        color={status.color}
+        w="fit-content"
+        styles={{ label: { textTransform: "none" } }}
+      >
+        {status.label}
+      </Badge>
+      {recordedAt && (
+        <Text size="xs" c="dimmed">
+          {status.label}{" "}
+          {formatReservationTransitionTime(recordedAt, timeZoneId)}
+        </Text>
+      )}
+    </Stack>
   );
 }

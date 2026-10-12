@@ -1,13 +1,16 @@
+using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
+using EvCharging.Contracts;
 using EvCharging.Persistence;
 using FluentResults;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
 
-internal sealed record GetStationRequest(Guid Id);
+public sealed record GetStationRequest(Guid Id) : IUserAwareRequest;
 
-internal sealed record StationDetailResponse(
+public sealed record StationDetailResponse(
     Guid Id,
     string Name,
     string Address,
@@ -15,23 +18,25 @@ internal sealed record StationDetailResponse(
     decimal Longitude,
     string TimeZoneId,
     string AccessInstructions,
-    IReadOnlyList<ChargerResponse> Chargers);
+    IReadOnlyList<ChargerResponse> Chargers,
+    bool CanEdit);
 
-internal sealed record ChargerResponse(Guid Id, string Name, IReadOnlyList<EvseResponse> Evses);
+public sealed record ChargerResponse(Guid Id, string Name, IReadOnlyList<EvseResponse> Evses);
 
-internal sealed record EvseResponse(Guid Id, int Number, IReadOnlyList<ConnectorResponse> Connectors);
+public sealed record EvseResponse(Guid Id, int Number, IReadOnlyList<ConnectorResponse> Connectors);
 
-internal sealed record ConnectorResponse(
+public sealed record ConnectorResponse(
     Guid Id,
     int Number,
     string ConnectorType,
     string PowerSupply,
     decimal RatedPowerKW);
 
-internal sealed class GetStationQueryHandler(PlatformDbContext database)
+public sealed class GetStationQueryHandler(PlatformReadDbContext database, IAuthorizationService authorization)
 {
     public async Task<Result<StationDetailResponse>> HandleAsync(
         GetStationRequest request,
+        RequestUser user,
         CancellationToken cancellationToken)
     {
         var station = await database.Stations
@@ -45,6 +50,10 @@ internal sealed class GetStationQueryHandler(PlatformDbContext database)
             return Result.Fail<StationDetailResponse>(new NotFoundError<Guid>("station", request.Id));
         }
 
-        return Result.Ok(station.ToResponse());
+        bool canEdit = user.Identity is not null
+            && user.Principal.IsInRole(PlatformRole.Operator.ToClaimValue())
+            && (await authorization.AuthorizeAsync(user.Principal, station, [StationAssignmentRequirement.Instance]))
+                .Succeeded;
+        return Result.Ok(station.ToResponse(canEdit));
     }
 }

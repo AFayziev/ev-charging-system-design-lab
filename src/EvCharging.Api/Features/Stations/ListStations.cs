@@ -6,11 +6,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
 
-internal sealed record ListStationsRequest(Guid? AfterId = null, int Limit = CursorPagination.DefaultPageSize);
+public sealed record ListStationsRequest(Guid? AfterId = null, int Limit = CursorPagination.DefaultPageSize);
 
-internal sealed record StationListResponse(IReadOnlyList<StationSummaryResponse> Stations, Guid? NextAfterId);
+public sealed record StationListResponse(IReadOnlyList<StationSummaryResponse> Stations, Guid? NextAfterId);
 
-internal sealed record StationSummaryResponse(
+public sealed record StationSummaryResponse(
     Guid Id,
     string Name,
     string Address,
@@ -19,9 +19,9 @@ internal sealed record StationSummaryResponse(
     int ConnectorCount,
     IReadOnlyList<ConnectorCapabilityResponse> Capabilities);
 
-internal sealed record ConnectorCapabilityResponse(string ConnectorType, string PowerSupply, decimal RatedPowerKW);
+public sealed record ConnectorCapabilityResponse(string ConnectorType, string PowerSupply, decimal RatedPowerKW);
 
-internal sealed class ListStationsQueryHandler(PlatformDbContext database)
+public sealed class ListStationsQueryHandler(PlatformReadDbContext database)
 {
     public async Task<Result<StationListResponse>> HandleAsync(
         ListStationsRequest request,

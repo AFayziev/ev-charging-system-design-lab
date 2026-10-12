@@ -292,10 +292,10 @@ dependency failures are visible without reporting unsuccessful writes as saved.
     coordinate overdue cleanup with booking admission and verify expiry, quota
     release, audit uniqueness, and the durable scheduling integration through
     the reservation feature.
-- [ ] M05.03 Deliver reservation cancellation in the driver's reservation list
+- [x] M05.03 Deliver reservation cancellation in the driver's reservation list
   with permitted transitions, atomic state/outbox changes, audit records,
-  and immediate authoritative results. Verify repeated cancellation and expiry
-  races. Depends on M05.01 and M05.02.
+  stable cancellation/expiry transition times, and immediate authoritative results.
+  Verify repeated cancellation and expiry races. Depends on M05.01 and M05.02.
 - [ ] M05.04 Deliver reservation-created/cancelled/expired notifications through
   the notification worker and third-party service simulator. Add independent
   topic subscriptions/queues, persisted delivery attempts, retry/ambiguity

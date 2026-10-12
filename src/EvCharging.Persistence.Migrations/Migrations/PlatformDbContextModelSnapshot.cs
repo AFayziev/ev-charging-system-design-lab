@@ -244,6 +244,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("arrival_deadline")
                         .HasAnnotation("Audit:Included", true);
 
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at")
+                        .HasAnnotation("Audit:Included", true);
+
                     b.Property<Guid>("ConnectorId")
                         .HasColumnType("uuid")
                         .HasColumnName("connector_id")
@@ -261,6 +266,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.Property<DateTimeOffset>("EndsAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ends_at")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset?>("ExpiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expired_at")
                         .HasAnnotation("Audit:Included", true);
 
                     b.Property<Guid>("PublicId")
@@ -299,6 +309,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.ToTable("reservations", "charging", t =>
                         {
                             t.HasCheckConstraint("ck_reservations_arrival_deadline", "isfinite(arrival_deadline) AND starts_at < arrival_deadline AND arrival_deadline <= ends_at");
+
+                            t.HasCheckConstraint("ck_reservations_cancelled_at", "cancelled_at IS NULL OR (state = 2 AND isfinite(cancelled_at))");
+
+                            t.HasCheckConstraint("ck_reservations_expired_at", "expired_at IS NULL OR (state = 3 AND isfinite(expired_at))");
 
                             t.HasCheckConstraint("ck_reservations_slot", "isfinite(starts_at) AND isfinite(ends_at) AND starts_at < ends_at");
                         });

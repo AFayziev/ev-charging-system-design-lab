@@ -20,6 +20,8 @@ public sealed class Reservation : IAuditableEntity
     public DateTimeOffset ArrivalDeadline { get; private set; }
     public ReservationState State { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset? CancelledAt { get; private set; }
+    public DateTimeOffset? ExpiredAt { get; private set; }
     public Connector? Connector { get; private set; }
     public Driver? Driver { get; private set; }
     public BookingInterval Slot => BookingInterval.Create(StartsAt, EndsAt).Value;
@@ -76,6 +78,24 @@ public sealed class Reservation : IAuditableEntity
         ? Result.Fail(new BookingValidationError(BookingBoundary.Start, "The start must not be in the past."))
         : Result.Ok();
 
+    public Result Cancel(DateTimeOffset now, bool hasUnresolvedStart)
+    {
+        if (State != ReservationState.Active)
+        {
+            return Result.Fail(new ReservationCancellationError("Only active reservations can be cancelled."));
+        }
+
+        if (hasUnresolvedStart)
+        {
+            return Result.Fail(new ReservationCancellationError(
+                "A reservation with a pending or uncertain start cannot be cancelled."));
+        }
+
+        State = ReservationState.Cancelled;
+        CancelledAt = now.ToUniversalTime();
+        return Result.Ok();
+    }
+
     public ReservationExpiryOutcome ExpireAtSlotEnd(DateTimeOffset now, bool hasUnresolvedStart)
     {
         if (State != ReservationState.Active)
@@ -94,6 +114,7 @@ public sealed class Reservation : IAuditableEntity
         }
 
         State = ReservationState.Expired;
+        ExpiredAt = now.ToUniversalTime();
         return ReservationExpiryOutcome.Expired;
     }
 }

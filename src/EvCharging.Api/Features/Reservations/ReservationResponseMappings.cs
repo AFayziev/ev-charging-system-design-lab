@@ -26,6 +26,8 @@ internal static class ReservationResponseMappings
             reservation.StartsAt,
             reservation.EndsAt,
             reservation.State,
-            reservation.CreatedAt);
+            reservation.CreatedAt,
+            reservation.CancelledAt,
+            reservation.ExpiredAt);
     }
 }

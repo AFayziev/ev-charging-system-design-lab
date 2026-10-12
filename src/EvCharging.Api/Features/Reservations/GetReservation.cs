@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
 using EvCharging.Domain.Reservations;
@@ -8,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Reservations;
 
-internal sealed record ReservationResponse(
+public sealed record ReservationResponse(
     Guid Id,
     Guid StationId,
     string StationName,
@@ -24,32 +23,32 @@ internal sealed record ReservationResponse(
     DateTimeOffset StartsAt,
     DateTimeOffset EndsAt,
     ReservationState State,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CancelledAt,
+    DateTimeOffset? ExpiredAt);
 
-internal sealed class GetReservationQueryHandler(PlatformDbContext database)
+public sealed record GetReservationRequest(Guid Id) : IAuthenticatedRequest<ReservationResponse>;
+
+public sealed class GetReservationQueryHandler(PlatformReadDbContext database)
 {
     public async Task<Result<ReservationResponse>> HandleAsync(
-        Guid id, ClaimsPrincipal user, CancellationToken cancellationToken)
+        GetReservationRequest request, UserIdentity identity, CancellationToken cancellationToken)
     {
-        var identity = user.GetUserIdentity();
-        if (identity is null)
-        {
-            return Result.Fail<ReservationResponse>(new ForbiddenError());
-        }
-
         var reservation = await database.Reservations
             .AsNoTracking()
             .OwnedBy(identity)
             .WithEquipment()
-            .SingleOrDefaultAsync(reservation => reservation.PublicId == id, cancellationToken);
+            .SingleOrDefaultAsync(reservation => reservation.PublicId == request.Id, cancellationToken);
         if (reservation is null)
         {
-            if (await database.Reservations.AnyAsync(reservation => reservation.PublicId == id, cancellationToken))
+            bool exists = await database.Reservations.AnyAsync(
+                reservation => reservation.PublicId == request.Id, cancellationToken);
+            if (exists)
             {
                 return Result.Fail<ReservationResponse>(new ForbiddenError());
             }
 
-            return Result.Fail<ReservationResponse>(new NotFoundError<Guid>("reservation", id));
+            return Result.Fail<ReservationResponse>(new NotFoundError<Guid>("reservation", request.Id));
         }
 
         return Result.Ok(reservation.ToResponse());

@@ -4,13 +4,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
-using EvCharging.Gateway.Authentication;
 using EvCharging.Gateway.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Playwright;
 using Xunit;
 using static Microsoft.Playwright.Assertions;
@@ -146,7 +144,7 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
     [Trait("Category", "Browser")]
     public async Task Refresh_ConcurrentRequests_RenewsSharedTokenAndRejectsForgedBearer()
     {
-        using var authenticationHost = await CreateAuthenticationHostAsync();
+        using var authenticationHost = await fixture.CreateAuthenticationHostAsync();
         var tickets = authenticationHost.Services.GetRequiredService<ITicketStore>();
         var contexts = authenticationHost.Services.GetRequiredService<IDbContextFactory<AuthenticationDbContext>>();
         await using var database = await contexts.CreateDbContextAsync();
@@ -186,7 +184,7 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
     [Trait("Category", "Browser")]
     public async Task Refresh_RevokedRoles_DeniesProtectedRequests()
     {
-        using var authenticationHost = await CreateAuthenticationHostAsync();
+        using var authenticationHost = await fixture.CreateAuthenticationHostAsync();
         var tickets = authenticationHost.Services.GetRequiredService<ITicketStore>();
         var contexts = authenticationHost.Services.GetRequiredService<IDbContextFactory<AuthenticationDbContext>>();
         await using var database = await contexts.CreateDbContextAsync();
@@ -267,17 +265,6 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
         var replaced = await page.EvaluateAsync<string>(
             "async () => (await (await fetch('/auth/session')).json()).user.username");
         Assert.Equal("operator", replaced);
-    }
-
-    private async Task<IHost> CreateAuthenticationHostAsync()
-    {
-        var builder = Host.CreateApplicationBuilder();
-        builder.Configuration["ConnectionStrings:gateway-auth"] =
-            await fixture.App.GetConnectionStringAsync("gateway-auth");
-        builder.Configuration["AuthenticationDatabase:MaximumPoolSize"] = "1";
-        builder.AddAuthenticationPersistence();
-        builder.AddAuthenticationSessions();
-        return builder.Build();
     }
 
     [Fact]

@@ -1,5 +1,4 @@
 using EvCharging.Api.Authentication;
-using EvCharging.Api.Persistence;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
 using Microsoft.AspNetCore.Authorization;
@@ -13,7 +12,7 @@ internal sealed class StationAssignmentRequirement : IAuthorizationRequirement
 }
 
 internal sealed class StationAssignmentAuthorizationHandler(
-    [FromKeyedServices(PlatformPersistenceExtensions.WriteRoute)] PlatformDbContext database,
+    PlatformDbContext database,
     IHttpContextAccessor httpContextAccessor)
     : AuthorizationHandler<StationAssignmentRequirement, Station>
 {
