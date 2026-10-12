@@ -1,12 +1,29 @@
+using System.Diagnostics;
 using EvCharging.Contracts.Events.Reservations;
+using EvCharging.Domain.Reservations;
+using EvCharging.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Wolverine;
+using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public static partial class ReservationCreatedHandler
+public static class ReservationCreatedHandler
 {
-    public static void Handle(ReservationCreated message, ILogger logger) =>
-        LogReservationReceived(logger, message.ReservationId, message.EndsAt);
+    [Transactional]
+    public static async Task<OutgoingMessages> HandleAsync(
+        ReservationCreated message, PlatformDbContext database, CancellationToken cancellationToken)
+    {
+        var reservation = await database.Reservations
+            .AsNoTracking()
+            .SingleOrDefaultAsync(reservation => reservation.Id == message.ReservationId, cancellationToken);
+        var outgoing = new OutgoingMessages();
+        if (reservation?.State == ReservationState.Active)
+        {
+            Activity.Current?.SetTag("reservation.public_id", reservation.PublicId.ToString());
+            outgoing.Schedule(new ExpireReservation(reservation.Id), reservation.EndsAt);
+        }
 
-    [LoggerMessage(LogLevel.Information, "Received reservation {ReservationId}, ending at {EndsAt}.")]
-    private static partial void LogReservationReceived(ILogger logger, Guid reservationId, DateTimeOffset endsAt);
+        return outgoing;
+    }
 }

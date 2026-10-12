@@ -76,14 +76,24 @@ public sealed class Reservation : IAuditableEntity
         ? Result.Fail(new BookingValidationError(BookingBoundary.Start, "The start must not be in the past."))
         : Result.Ok();
 
-    public bool TryExpireAtSlotEnd(DateTimeOffset now, bool hasUnresolvedStart)
+    public ReservationExpiryOutcome ExpireAtSlotEnd(DateTimeOffset now, bool hasUnresolvedStart)
     {
-        if (State != ReservationState.Active || now < EndsAt || hasUnresolvedStart)
+        if (State != ReservationState.Active)
         {
-            return false;
+            return ReservationExpiryOutcome.AlreadyInactive;
+        }
+
+        if (now < EndsAt)
+        {
+            return ReservationExpiryOutcome.NotDue;
+        }
+
+        if (hasUnresolvedStart)
+        {
+            return ReservationExpiryOutcome.UnresolvedStart;
         }
 
         State = ReservationState.Expired;
-        return true;
+        return ReservationExpiryOutcome.Expired;
     }
 }

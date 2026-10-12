@@ -17,7 +17,7 @@ internal sealed class DatabaseConnectionResources
     /// <summary>Schema-owning connection for gateway authentication migrations.</summary>
     public required IResourceBuilder<ConnectionStringResource> AuthenticationMigration { get; init; }
 
-    /// <summary>Runtime connection for ChargingWorker inbox and outbox storage.</summary>
+    /// <summary>Runtime connection for ChargingWorker message storage and reservation processing.</summary>
     public required IResourceBuilder<ConnectionStringResource> ChargingMessaging { get; init; }
 
     /// <summary>One-shot job that provisions database roles, schemas, and grants before migrations.</summary>

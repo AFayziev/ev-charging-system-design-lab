@@ -121,10 +121,14 @@ public sealed class ReservationTests
     {
         var reservation = Reservation.Book(Connector, Driver, Now, Now.AddHours(1), Now, Limits).Value;
 
-        Assert.False(reservation.TryExpireAtSlotEnd(Now.AddMinutes(10), unresolvedStart));
-        reservation.TryExpireAtSlotEnd(Now.AddHours(1), unresolvedStart);
+        Assert.Equal(ReservationExpiryOutcome.NotDue, reservation.ExpireAtSlotEnd(Now.AddMinutes(10), unresolvedStart));
+        Assert.Equal(
+            unresolvedStart ? ReservationExpiryOutcome.UnresolvedStart : ReservationExpiryOutcome.Expired,
+            reservation.ExpireAtSlotEnd(Now.AddHours(1), unresolvedStart));
 
         Assert.Equal(expected, reservation.State);
-        Assert.False(reservation.TryExpireAtSlotEnd(Now.AddHours(2), unresolvedStart));
+        Assert.Equal(
+            unresolvedStart ? ReservationExpiryOutcome.UnresolvedStart : ReservationExpiryOutcome.AlreadyInactive,
+            reservation.ExpireAtSlotEnd(Now.AddHours(2), unresolvedStart));
     }
 }

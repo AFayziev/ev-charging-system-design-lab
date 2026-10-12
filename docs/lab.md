@@ -124,7 +124,8 @@ work.
 
 Message envelopes include event ID, schema version, entity ID/version, occurrence
 and receipt times, correlation/causation IDs, and trace context. They exclude secrets
-and private file URLs. Stable job IDs and database uniqueness deduplicate scheduling.
+and private file URLs. Transport deduplication uses message identity; conditional
+business transitions also protect against independently submitted duplicate work.
 [Wolverine durability](https://wolverinefx.net/guide/durability/),
 [PostgreSQL storage](https://wolverinefx.net/guide/durability/postgresql),
 [EF Core integration](https://wolverinefx.net/guide/durability/efcore/),
@@ -381,7 +382,7 @@ Verification uses correlated telemetry from the
 |---|---|
 | Concurrent overlapping reservations | One conflicting booking succeeds; primary constraints remain effective across API instances |
 | Concurrent bookings by one driver across connectors | Configured quota and driver overlap protection hold across API instances |
-| Expiry worker delayed or restarted | Due, eligible allocations release capacity and quota; persisted deadlines support recovery |
+| Expiry worker delayed or restarted | Overdue eligible reservations become expired and release quota after processing resumes; duplicate checks produce one transition and audit |
 | Reservation policy changed | New admission uses the updated limits; accepted slots and deadlines remain unchanged |
 | Cancellation races start | One eligible transition wins; cancelled bookings cannot dispatch a start |
 | Arrival deadline passes with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled |

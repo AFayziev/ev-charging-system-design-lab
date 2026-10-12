@@ -5,6 +5,14 @@ namespace EvCharging.Persistence.Extensions;
 
 public static class ExceptionExtensions
 {
+    public static bool IsTransientDatabaseFailure(this Exception exception) => exception switch
+    {
+        NpgsqlException postgres => postgres.IsTransient,
+        DbUpdateException { InnerException: { } cause } => cause.IsTransientDatabaseFailure(),
+        InvalidOperationException { InnerException: { } cause } => cause.IsTransientDatabaseFailure(),
+        _ => false
+    };
+
     public static bool IsReservationOverlap(this DbUpdateException exception) =>
         exception.InnerException is PostgresException
         {

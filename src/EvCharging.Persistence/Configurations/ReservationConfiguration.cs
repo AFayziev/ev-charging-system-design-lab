@@ -36,5 +36,7 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasIndex(reservation => new { reservation.ConnectorId, reservation.StartsAt });
         entity.HasIndex(reservation => new { reservation.DriverId, reservation.State, reservation.EndsAt });
+        entity.HasIndex(reservation => new { reservation.EndsAt, reservation.Id })
+            .HasFilter("state = 0");
     }
 }

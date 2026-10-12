@@ -87,4 +87,12 @@ export const reservationsQuery = (afterId: string | null) =>
     queryKey: reservationKeys.list(afterId),
     queryFn: ({ signal }) => getReservations(afterId, signal),
     retry: false,
+    refetchInterval: (query) => {
+      if (query.state.error) return false;
+      return query.state.data?.reservations.some(
+        (reservation) => reservation.state === "active",
+      )
+        ? 15_000
+        : false;
+    },
   });

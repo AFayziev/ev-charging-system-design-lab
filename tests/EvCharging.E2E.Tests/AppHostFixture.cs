@@ -32,6 +32,12 @@ public sealed class AppHostFixture : IAsyncLifetime
                 "--Parameters:gateway-instances=2"],
             timeout.Token);
         var api = builder.Resources.OfType<ProjectResource>().Single(resource => resource.Name == "api");
+        var charging = builder.Resources.OfType<ProjectResource>()
+            .Single(resource => resource.Name == "charging-worker");
+        builder.CreateResourceBuilder(charging)
+            .WithEnvironment("ReservationExpiry__SweepInterval", "00:05:00")
+            .WithEnvironment("ReservationExpiry__SweepBatchSize", "2")
+            .WithEnvironment("ReservationExpiry__MaximumConcurrentChecks", "2");
         builder.CreateResourceBuilder(api)
             .WithEnvironment(
                 "ReservationPolicy__MaximumOutstandingReservationsPerDriver",

@@ -27,7 +27,6 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
     public DbSet<ChargingSession> Sessions => Set<ChargingSession>();
     public DbSet<Operation> Operations => Set<Operation>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
-    public DbSet<Deadline> Deadlines => Set<Deadline>();
     public DbSet<FileMetadata> Files => Set<FileMetadata>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>

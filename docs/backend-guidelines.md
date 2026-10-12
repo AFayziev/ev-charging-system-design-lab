@@ -256,6 +256,13 @@ retain their prescribed names and signatures.
   it as a transient dependency failure.
 - Choose meaningful diagnostic properties. Log failures at the boundary
   responsible for handling them.
+- Enrich framework message logs and traces with explicit resource identifiers.
+  Keep diagnostic enrichment separate from persistent audit history.
+- Record committed mutation outcomes through framework post-commit hooks.
+  A successful handler return or tracked mutation does not establish a commit.
+- Keep provider-specific failure recognition in Persistence. Configure bounded
+  message retries in the owning host for recognized transient failures; avoid
+  blanket exception retries.
 - Exclude credentials, tokens, signed URLs, and personal payloads from logs.
 - Use standard tracing and health facilities; follow the
   [integration contracts](integrations.md) for effect retries and reconciliation.
@@ -293,6 +300,11 @@ retain their prescribed names and signatures.
   dependency-injection registrations, built-in telemetry, or basic framework
   behavior such as ORM CRUD and rerunning unchanged migrations. Test application
   behavior and data/security contracts; use existing diagnostics to inspect wiring.
+- Rely on documented library guarantees. Verify application participation and
+  outcomes at integration boundaries, such as atomic entity/outbox persistence
+  and duplicate-safe business transitions. Use focused interruption checks when
+  they establish an application guarantee; do not reproduce a library's internal
+  durability or recovery test suite.
 - [.editorconfig](../.editorconfig) defines formatting and naming.
   [Directory.Build.props](../Directory.Build.props) enables SDK analyzers and
   build-visible style warnings. Design guidelines require code review.

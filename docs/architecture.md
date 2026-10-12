@@ -154,7 +154,7 @@ operation.
 |---|---|---|
 | Station/equipment identities, assignments, descriptions | Relational primary | Replica, search, cache |
 | Reservations, session lifecycle, final usage | Relational primary | Replica and frontend views |
-| Operations, attempts, deadlines, inbox/outbox, notification attempts | Relational primary | Investigation views |
+| Operations, attempts, inbox/outbox, notification attempts | Relational primary | Investigation views |
 | Gateway authentication tickets and token state | Relational primary, dedicated session records | Shared by gateway replicas; authoritative reads bypass replicas and disposable cache |
 | File ownership, processing state, publication references | Relational primary | Object delivery and media views |
 | Accepted raw/normalized observation envelopes | Durable stream | Independent consumer groups |
@@ -288,10 +288,14 @@ Replicas coordinate recovery of stranded inbox/outbox work within that boundary.
 Persisted scheduled messages represent expiry deadlines and delayed retries.
 Scheduled jobs route to the owning worker queues. Recurring producers rescan
 persisted due state after startup and periodically submit reconciliation or cleanup
-work. Stable job identity makes duplicate scheduling across replicas safe; handlers
-recheck current state rather than treating a scheduled message as authority.
+work. Handlers coordinate conditional transitions and recheck current state rather
+than treating a scheduled message as authority; duplicate submissions are harmless.
+An overdue reservation sweep runs at startup and periodically, submitting expiry
+checks for bounded batches of active reservations past their expiry time. It reads
+reservation state directly and complements durable message recovery; duplicate
+checks cannot repeat a completed transition.
 The orchestrator manages host lifecycles; the messaging runtime handles persisted
-scheduling and recovery.
+scheduling and durable message recovery.
 [Message persistence](lab.md#14-message-persistence-and-envelopes)
 
 ## 8. Observation ingestion and streams
@@ -328,8 +332,9 @@ remain those of the [domain reference](domain.md#8-time-identity-and-ordering).
 
 The API resolves request identity, authorizes the driver, and validates the
 [reservation policy](domain.md#5-reservations) on the primary. One transaction
-commits the reservation, deadline, result, and outbox event. The API returns the
-committed result; subscribers update discovery and notifications asynchronously.
+commits the reservation with its accepted deadline, audit, and outbox event. The
+API returns the committed result; subscribers update discovery and notifications
+asynchronously.
 Cancellation, start acceptance, and expiry use conditional primary-side transitions.
 
 Admission coordinates outstanding-booking counts and driver overlap checks across

@@ -1,6 +1,7 @@
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
+using EvCharging.Persistence.Auditing;
 using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -10,6 +11,70 @@ namespace EvCharging.Persistence.Tests;
 
 public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : IClassFixture<PlatformDatabaseFixture>
 {
+    [Fact]
+    public async Task LockDriver_TransientContention_RecognizesWrappedFailureForMessageRetry()
+    {
+        await using var connection = fixture.CreateConnection("platform_writer");
+        await using var holder = Context(connection);
+        var (_, driver) = await EquipmentAsync(holder);
+        await using var heldTransaction = await holder.Database.BeginTransactionAsync();
+        await holder.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
+
+        await using var competingConnection = fixture.CreateConnection("platform_writer");
+        await using var competing = Context(competingConnection);
+        await using var competingTransaction = await competing.Database.BeginTransactionAsync();
+        await competing.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '100ms'");
+        var exception = await Assert.ThrowsAnyAsync<Exception>(() =>
+            competing.LockDriverReservationsAsync(driver.Id, CancellationToken.None));
+
+        Assert.True(exception.IsTransientDatabaseFailure());
+    }
+
+    [Fact]
+    public async Task Expire_CompetingChecks_CommitsOneTransitionAndAudit()
+    {
+        await using var setupConnection = fixture.CreateConnection("platform_writer");
+        await using var setup = Context(setupConnection);
+        var (connector, driver) = await EquipmentAsync(setup);
+        var end = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var reservation = Booking(connector, driver, end.AddHours(-1), end);
+        setup.Reservations.Add(reservation);
+        await setup.SaveChangesAsync();
+
+        await Task.WhenAll(
+            ExpireAsync("charging_messaging"),
+            ExpireAsync("charging_messaging"),
+            ExpireAsync("platform_writer"));
+
+        var saved = await setup.Reservations.AsNoTracking().SingleAsync(value => value.Id == reservation.Id);
+        Assert.Equal(ReservationState.Expired, saved.State);
+        var audit = await setup.AuditEntries.SingleAsync(entry => entry.ResourceId == reservation.Id);
+        Assert.Equal(AuditAction.Updated, audit.Action);
+        Assert.Equal(0, audit.Details.GetProperty("before").GetProperty("state").GetInt32());
+        Assert.Equal(3, audit.Details.GetProperty("after").GetProperty("state").GetInt32());
+
+        async Task ExpireAsync(string role)
+        {
+            await using var connection = fixture.CreateConnection(role);
+            var writer = new AuditEntryWriter(new ExpiryActor(), TimeProvider.System);
+            await using var context = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
+                .UseNpgsql(connection)
+                .AddInterceptors(new AuditSaveChangesInterceptor(writer))
+                .Options);
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            await context.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
+            var loaded = await context.Reservations.SingleAsync(value => value.Id == reservation.Id);
+            await context.ExpireReservationsAsync([loaded], DateTimeOffset.UtcNow, CancellationToken.None);
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+    }
+
+    private sealed class ExpiryActor : IAuditActorAccessor
+    {
+        public AuditActor GetActor() => AuditActor.Service("expiry-test");
+    }
+
     [Theory]
     [InlineData(ReservationState.Active, true)]
     [InlineData(ReservationState.Consumed, true)]

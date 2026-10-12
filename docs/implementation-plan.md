@@ -206,7 +206,7 @@ access.
 - [x] M03.01 Implement canonical identifiers, UTC/time-zone handling, state
   dimensions, measurement types, and tests of invariants used by delivered features.
 - [x] M03.02 Add PostgreSQL migrations for equipment, assignments, reservations,
-  sessions, operations/attempts, deadlines, and file metadata; define boundaries
+  sessions, operations/attempts, and file metadata; define boundaries
   between domain persistence and host-specific Wolverine message-storage schemas.
 - [x] M03.03 Add synthetic equipment, driver, operator-assignment, and provider
   mappings linked to the M02 identity fixtures; provide reproducible fixture seeding
@@ -272,23 +272,28 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   - [x] Capture policy values per operation and persist accepted arrival deadlines.
   - [x] Expose limits to the booking form and verify that policy changes affect
     new admissions without altering accepted slots or deadlines.
-- [ ] M05.02 Add durable messaging and automatic reservation expiry. Introduce
+- [x] M05.02 Add durable messaging and automatic reservation expiry. Introduce
   RabbitMQ/Wolverine delivery and PostgreSQL inbox/outbox persistence for expiry
-  work, scoped host-family storage/roles,
-  versioned envelopes, confirmations, and embedded relay/recovery. Persist
-  deadlines with stable job identities, bounded consumers, current-state checks,
-  and due-work recovery after restart. Schedule existing active reservations as
-  well as new bookings. Verify expiry in the driver reservation list and
-  restart recovery without duplicate state changes. Depends on M05.01 and M05.08.
+  work and scoped host-family storage/roles.
+  Use Wolverine's provided relay, scheduling, and durable message recovery.
+  Add persisted expiry scheduling, bounded consumers, current-state checks, and
+  an overdue reservation sweep at startup and periodically. Schedule new bookings
+  and sweep existing overdue active reservations. Remove the unused separate
+  deadline record; reservation timestamps remain authoritative. Verify visible
+  expiry, quota release, and one transition/audit despite duplicate processing or
+  an admission race. Use a focused restart check to verify the application's
+  durable scheduling integration rather than the library's recovery implementation.
+  Depends on M05.01 and M05.08.
   - [x] Wire RabbitMQ/Wolverine and host-family PostgreSQL inbox/outbox storage,
     including storage provisioning with migration credentials.
   - [x] Integrate booking transactions and deliver reservation-created messages to
-    ChargingWorker; verify atomic acceptance and delivery recovery.
-  - [ ] Add expiry scheduling, processing, and recovery;
+    ChargingWorker; verify atomic acceptance and eventual worker receipt.
+  - [x] Add expiry scheduling, processing, and an overdue reservation sweep;
     coordinate overdue cleanup with booking admission and verify expiry, quota
-    release, and restart behavior through the reservation feature.
+    release, audit uniqueness, and the durable scheduling integration through
+    the reservation feature.
 - [ ] M05.03 Deliver reservation cancellation in the driver's reservation list
-  with permitted transitions, atomic state/deadline/outbox changes, audit records,
+  with permitted transitions, atomic state/outbox changes, audit records,
   and immediate authoritative results. Verify repeated cancellation and expiry
   races. Depends on M05.01 and M05.02.
 - [ ] M05.04 Deliver reservation-created/cancelled/expired notifications through
@@ -298,11 +303,12 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   simulator and Cloudflare Email Service adapters selected by configuration;
   local delivery remains simulated. Verify recipient/event mapping and failures
   without changing accepted reservations. Depends on M05.01–M05.03.
-- [ ] M05.05 Exercise reservation/notification flows through broker outage/drain,
-  duplicate delivery, consumer crash, relay recovery, scheduler restart, duplicate
-  deadline producers, dead-letter inspection, and poison-message isolation.
-  Observe queue/outbox age and verify committed work survives interruption and
-  independent subscribers receive their own copies.
+- [ ] M05.05 Exercise application outcomes during interrupted message processing:
+  accepted bookings eventually expire, duplicate processing does not repeat
+  transitions or notifications, and failed work does not block unrelated bookings
+  or subscribers. Use selected broker/worker interruptions and existing diagnostics
+  to verify these guarantees without reproducing messaging-library durability tests.
+  Observe queue/outbox age and independently delivered subscriber outcomes.
   Depends on M05.01–M05.04.
 - [ ] M05.06 Add three-node RabbitMQ quorum queues and verify leader loss and
   publisher/consumer recovery with reservation/notification workloads.
@@ -572,6 +578,7 @@ closes coverage gaps and repeats the integrated demonstrations.
 
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
+| Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
 | Cloudflare email sender and verified test recipients | Domain onboarding, scoped credentials, and real-delivery setup; cloud integration is already selected | M05.07 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.02 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

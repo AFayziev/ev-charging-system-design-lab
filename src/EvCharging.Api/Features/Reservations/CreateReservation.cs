@@ -1,10 +1,10 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Persistence;
 using EvCharging.Contracts.Events.Reservations;
-using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
@@ -55,7 +55,7 @@ internal sealed class CreateReservationCommandHandler(
         var reservation = booking.Value;
 
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-        await database.LockDriverForBookingAsync(driver.Id, cancellationToken);
+        await database.LockDriverReservationsAsync(driver.Id, cancellationToken);
         var admission = await CheckAdmissionAsync(reservation, limits, cancellationToken);
         if (admission.IsFailed)
         {
@@ -124,19 +124,7 @@ internal sealed class CreateReservationCommandHandler(
         var outstanding = await database.Reservations
             .Where(existing => existing.DriverId == driverId && existing.State == ReservationState.Active)
             .ToListAsync(cancellationToken);
-        var elapsedIds = outstanding
-            .Where(existing => existing.EndsAt <= now)
-            .Select(existing => existing.Id)
-            .ToArray();
-        var unresolvedIds = await database.Sessions
-            .Where(session => elapsedIds.Contains(session.ReservationId)
-                && session.Lifecycle == SessionLifecycle.Starting)
-            .Select(session => session.ReservationId)
-            .ToListAsync(cancellationToken);
-        foreach (var existing in outstanding)
-        {
-            existing.TryExpireAtSlotEnd(now, unresolvedIds.Contains(existing.Id));
-        }
+        await database.ExpireReservationsAsync(outstanding, now, cancellationToken);
 
         return outstanding.Count(existing => existing.State == ReservationState.Active);
     }
@@ -145,6 +133,7 @@ internal sealed class CreateReservationCommandHandler(
         Reservation reservation, CancellationToken cancellationToken)
     {
         database.Reservations.Add(reservation);
+        Activity.Current?.SetTag("reservation.id", reservation.Id.ToString());
         outbox.Enroll(database);
         await outbox.PublishAsync(new ReservationCreated(reservation.Id, reservation.EndsAt));
 
@@ -163,6 +152,7 @@ internal sealed class CreateReservationCommandHandler(
                 "You already have a reservation during the selected slot."));
         }
 
+        Activity.Current?.SetTag("reservation.public_id", reservation.PublicId.ToString());
         return Result.Ok(reservation.ToResponse());
     }
 }

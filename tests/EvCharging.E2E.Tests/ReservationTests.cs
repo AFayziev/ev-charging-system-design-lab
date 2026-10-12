@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Identity;
@@ -233,6 +234,117 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             "already have a reservation",
             driverOverlap.GetProperty("body").GetProperty("detail").GetString());
 
+    }
+
+    [Fact]
+    [Trait("Category", "Browser")]
+    public async Task Expire_WorkerRestart_UpdatesListAndReleasesQuota()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        await fixture.LoginAsync(page, "driver");
+        var connector = await NorthConnectorAsync();
+        var start = DateTimeOffset.UtcNow.AddSeconds(5);
+        var response = await PostAsync(page, connector.PublicId.ToString(), start, start.AddSeconds(30));
+        Assert.Equal(201, response.GetProperty("status").GetInt32());
+        var publicId = response.GetProperty("body").GetProperty("id").GetGuid();
+
+        await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
+        var card = page.GetByRole(AriaRole.Article, new() { Name = "North Station reservation" });
+        await Expect(card.GetByText("Active reservation", new() { Exact = true })).ToBeVisibleAsync();
+        await WorkerCommandAsync(KnownResourceCommands.RestartCommand, timeout.Token);
+        await Expect(card.GetByText("Expired", new() { Exact = true }))
+            .ToBeVisibleAsync(new() { Timeout = 90_000 });
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Active reservations", Exact = true }))
+            .ToHaveCountAsync(0);
+        var accepted = await Storage.Reservations.AsNoTracking()
+            .SingleAsync(reservation => reservation.PublicId == publicId, timeout.Token);
+        var audit = await Storage.AuditEntries.SingleAsync(
+            entry => entry.ResourceId == accepted.Id && entry.Action == AuditAction.Updated,
+            timeout.Token);
+        Assert.Equal(ReservationState.Expired, accepted.State);
+        Assert.Equal(AuditActorType.Service, audit.ActorType);
+        Assert.Equal("charging-worker", audit.ActorSubject);
+        Assert.False(string.IsNullOrWhiteSpace(audit.TraceId));
+
+        var next = DateTimeOffset.UtcNow.AddHours(1);
+        for (int index = 0; index < AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver; index++)
+        {
+            var booking = await PostAsync(
+                page, connector.PublicId.ToString(), next.AddHours(index), next.AddHours(index + 1));
+            Assert.Equal(201, booking.GetProperty("status").GetInt32());
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Browser")]
+    public async Task Sweep_ExistingOverdueReservations_ExpiresEligibleAndRetainsUnresolvedStart()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        await fixture.LoginAsync(page, "driver");
+        await WorkerCommandAsync(KnownResourceCommands.StopCommand, timeout.Token);
+        bool workerStopped = true;
+        try
+        {
+            var connector = await NorthConnectorAsync();
+            var past = DateTimeOffset.UtcNow.AddHours(-4);
+            var bookings = Enumerable.Range(0, 3)
+                .Select(index => Reservation.Book(
+                    connector,
+                    Driver,
+                    past.AddHours(index),
+                    past.AddHours(index + 1),
+                    past,
+                    AppHostFixture.BookingLimits).Value)
+                .ToArray();
+            Storage.Reservations.AddRange(bookings);
+            await Storage.SaveChangesAsync(timeout.Token);
+            Storage.Sessions.Add(new ChargingSession
+            {
+                ReservationId = bookings[0].Id,
+                ConnectorId = connector.Id,
+                Lifecycle = SessionLifecycle.Starting,
+                CreatedAt = past
+            });
+            await Storage.SaveChangesAsync(timeout.Token);
+            await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
+            await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(3);
+
+            await WorkerCommandAsync(KnownResourceCommands.StartCommand, timeout.Token);
+            workerStopped = false;
+            await Expect(page.GetByText("Expired", new() { Exact = true }))
+                .ToHaveCountAsync(2, new() { Timeout = 60_000 });
+            await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(1);
+            var audits = await Storage.AuditEntries.Where(entry => entry.Action == AuditAction.Updated
+                && bookings.Select(booking => booking.Id).Contains(entry.ResourceId))
+                .ToListAsync(timeout.Token);
+            Assert.Equal(2, audits.Count);
+            Assert.All(audits, audit => Assert.Equal("charging-worker", audit.ActorSubject));
+            Assert.DoesNotContain(audits, audit => audit.ResourceId == bookings[0].Id);
+        }
+        finally
+        {
+            if (workerStopped)
+            {
+                using var restoreTimeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+                await WorkerCommandAsync(KnownResourceCommands.StartCommand, restoreTimeout.Token);
+            }
+        }
+    }
+
+    private async Task WorkerCommandAsync(string command, CancellationToken cancellationToken)
+    {
+        var result = await fixture.App.ResourceCommands.ExecuteCommandAsync(
+            "charging-worker", command, cancellationToken);
+        Assert.True(result.Success, result.Message);
+        string[] states = command == KnownResourceCommands.StopCommand
+            ? [KnownResourceStates.Exited, KnownResourceStates.Finished] : [KnownResourceStates.Running];
+        await fixture.App.ResourceNotifications.WaitForResourceAsync("charging-worker", states, cancellationToken);
     }
 
     [Fact]
