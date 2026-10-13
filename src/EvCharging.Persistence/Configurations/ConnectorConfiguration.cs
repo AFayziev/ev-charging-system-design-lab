@@ -10,10 +10,10 @@ internal sealed class ConnectorConfiguration : IEntityTypeConfiguration<Connecto
     {
         entity.HasPublicId(connector => connector.PublicId);
 
-        entity.HasOne(connector => connector.Evse)
-            .WithMany(evse => evse.Connectors)
-            .HasForeignKey(connector => connector.EvseId)
+        entity.HasOne(connector => connector.Charger)
+            .WithMany(charger => charger.Connectors)
+            .HasForeignKey(connector => connector.ChargerId)
             .OnDelete(DeleteBehavior.Restrict);
-        entity.HasIndex(connector => connector.EvseId).IsUnique();
+        entity.HasIndex(connector => new { connector.ChargerId, connector.Number }).IsUnique();
     }
 }

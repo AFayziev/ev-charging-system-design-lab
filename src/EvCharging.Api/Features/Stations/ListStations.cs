@@ -15,7 +15,6 @@ public sealed record StationSummaryResponse(
     string Name,
     string Address,
     int ChargerCount,
-    int EvseCount,
     int ConnectorCount,
     IReadOnlyList<ConnectorCapabilityResponse> Capabilities);
 
@@ -84,17 +83,15 @@ public sealed class ListStationsQueryHandler(PlatformReadDbContext database)
                 {
                     Station = station,
                     ChargerCount = station.Chargers.Count,
-                    EvseCount = station.Chargers.SelectMany(charger => charger.Evses).Count(),
                     Connectors = station.Chargers
-                        .SelectMany(charger => charger.Evses)
-                        .SelectMany(evse => evse.Connectors)
+                        .SelectMany(charger => charger.Connectors)
                         .ToList()
                 })
             .ToListAsync(cancellationToken);
         var nextAfterId = CursorPagination.TrimPage(stations, limit, item => item.Station.PublicId);
 
         var summaries = stations
-            .Select(item => item.Station.ToResponse(item.ChargerCount, item.EvseCount, item.Connectors))
+            .Select(item => item.Station.ToResponse(item.ChargerCount, item.Connectors))
             .ToArray();
         return new StationListResponse(summaries, nextAfterId);
     }

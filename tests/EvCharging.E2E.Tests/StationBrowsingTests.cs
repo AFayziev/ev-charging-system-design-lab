@@ -58,8 +58,8 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
             + "bays are beside the north exit."))
             .ToBeVisibleAsync();
         await Expect(page.GetByText("Type 2 · AC · 22 kW")).ToHaveCountAsync(2);
-        await Expect(page.GetByText("EVSE 1 · Connector 1", new() { Exact = true })).ToBeVisibleAsync();
-        await Expect(page.GetByText("EVSE 2 · Connector 1", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(page.GetByText("Connector 1", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(page.GetByText("Connector 2", new() { Exact = true })).ToBeVisibleAsync();
         await Expect(page.GetByText("Time zone: Europe/London")).ToBeVisibleAsync();
         await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Open in maps" })).ToHaveAttributeAsync(
             "href", "https://www.google.com/maps/search/?api=1&query=51.51%2C-0.12");
@@ -85,7 +85,6 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         Assert.Equal("North Station", station.GetProperty("name").GetString());
         Assert.Equal(2, station.GetProperty("connectorCount").GetInt32());
         Assert.Equal(1, station.GetProperty("chargerCount").GetInt32());
-        Assert.Equal(2, station.GetProperty("evseCount").GetInt32());
         var stationId = station.GetProperty("id").GetGuid();
         string cursor = first.GetProperty("nextAfterId").GetString()!;
         Assert.Equal(stationId.ToString(), cursor);
@@ -112,12 +111,9 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         Assert.False(detail.GetProperty("canEdit").GetBoolean());
         var charger = detail.GetProperty("chargers")[0];
         Assert.NotEqual(Guid.Empty, charger.GetProperty("id").GetGuid());
-        foreach (var evse in charger.GetProperty("evses").EnumerateArray())
-        {
-            Assert.NotEqual(Guid.Empty, evse.GetProperty("id").GetGuid());
-            Assert.Single(evse.GetProperty("connectors").EnumerateArray());
-            Assert.NotEqual(Guid.Empty, evse.GetProperty("connectors")[0].GetProperty("id").GetGuid());
-        }
+        var connectors = charger.GetProperty("connectors").EnumerateArray().ToArray();
+        Assert.Equal(new[] { 1, 2 }, connectors.Select(connector => connector.GetProperty("number").GetInt32()));
+        Assert.All(connectors, connector => Assert.NotEqual(Guid.Empty, connector.GetProperty("id").GetGuid()));
 
     }
 

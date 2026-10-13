@@ -9,5 +9,5 @@ public sealed class Charger
 
     public Station? Station { get; set; }
 
-    public ICollection<Evse> Evses { get; } = [];
+    public ICollection<Connector> Connectors { get; } = [];
 }

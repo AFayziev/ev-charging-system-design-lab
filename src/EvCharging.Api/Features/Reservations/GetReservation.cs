@@ -15,7 +15,6 @@ public sealed record ReservationResponse(
     string TimeZoneId,
     Guid ConnectorId,
     string ChargerName,
-    int EvseNumber,
     int ConnectorNumber,
     string ConnectorType,
     string PowerSupply,

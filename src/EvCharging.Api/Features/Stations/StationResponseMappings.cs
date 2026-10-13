@@ -7,7 +7,6 @@ internal static class StationResponseMappings
     public static StationSummaryResponse ToResponse(
         this Station station,
         int chargerCount,
-        int evseCount,
         IReadOnlyList<Connector> connectors)
     {
         var capabilities = connectors.Select(connector => connector.ToCapabilityResponse())
@@ -21,7 +20,6 @@ internal static class StationResponseMappings
             station.Name,
             station.Address,
             chargerCount,
-            evseCount,
             connectors.Count,
             capabilities);
     }
@@ -43,15 +41,7 @@ internal static class StationResponseMappings
     public static ChargerResponse ToResponse(this Charger charger) => new(
         charger.PublicId,
         charger.Name,
-        charger.Evses
-            .OrderBy(evse => evse.Number)
-            .Select(evse => evse.ToResponse())
-            .ToArray());
-
-    public static EvseResponse ToResponse(this Evse evse) => new(
-        evse.PublicId,
-        evse.Number,
-        evse.Connectors
+        charger.Connectors
             .OrderBy(connector => connector.Number)
             .Select(connector => connector.ToResponse())
             .ToArray());

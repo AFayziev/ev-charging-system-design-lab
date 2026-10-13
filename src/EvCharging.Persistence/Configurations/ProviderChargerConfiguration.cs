@@ -17,6 +17,7 @@ internal sealed class ProviderChargerConfiguration : IEntityTypeConfiguration<Pr
             .WithMany()
             .HasForeignKey(mapping => mapping.ChargerId)
             .OnDelete(DeleteBehavior.Restrict);
+        entity.HasIndex(mapping => mapping.ChargerId).IsUnique();
         entity.HasIndex(mapping => new { mapping.ProviderStationId, mapping.ExternalId }).IsUnique();
     }
 }

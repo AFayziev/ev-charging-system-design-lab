@@ -26,19 +26,13 @@ const station = {
     {
       id: "charger",
       name: "Charger",
-      evses: [
+      connectors: [
         {
-          id: "evse",
+          id: "connector",
           number: 1,
-          connectors: [
-            {
-              id: "connector",
-              number: 1,
-              connectorType: "Type2",
-              powerSupply: "AC",
-              ratedPowerKW: 22,
-            },
-          ],
+          connectorType: "Type2",
+          powerSupply: "AC",
+          ratedPowerKW: 22,
         },
       ],
     },
@@ -186,7 +180,6 @@ it("shows the created booking once and clears feedback on reload", async () => {
     timeZoneId: station.timeZoneId,
     connectorId: "connector",
     chargerName: "Charger",
-    evseNumber: 1,
     connectorNumber: 1,
     connectorType: "Type2",
     powerSupply: "AC",

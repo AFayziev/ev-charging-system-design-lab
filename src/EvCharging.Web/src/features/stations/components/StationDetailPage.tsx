@@ -50,9 +50,7 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
     session.isSuccess && session.data.user?.roles.includes(PlatformRole.Driver);
   const connectorId =
     search.get("connectorId") ??
-    query.data?.chargers
-      .flatMap((charger) => charger.evses)
-      .flatMap((evse) => evse.connectors)[0]?.id ??
+    query.data?.chargers.flatMap((charger) => charger.connectors)[0]?.id ??
     "";
   const selectConnector = (id: string) => {
     const parameters = new URLSearchParams(search);
@@ -151,42 +149,34 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
                         {charger.name}
                       </Title>
                     </div>
-                    {charger.evses.length === 0 && (
+                    {charger.connectors.length === 0 && (
                       <Text size="sm" c="dimmed" p="md">
-                        No EVSEs listed.
+                        No connectors listed.
                       </Text>
                     )}
-                    {charger.evses.map((evse) => (
-                      <div key={evse.id} className={classes.evse}>
-                        {evse.connectors.length === 0 && (
-                          <Text size="sm" c="dimmed" py="sm">
-                            EVSE {evse.number}: No connectors listed.
-                          </Text>
-                        )}
-                        {evse.connectors.map((connector) => (
-                          <Radio.Card
-                            key={connector.id}
-                            className={classes.connector}
-                            value={connector.id}
-                            withBorder={false}
-                            aria-label={`${charger.name} · EVSE ${evse.number} · Connector ${connector.number} · ${capabilityLabel(connector)}`}
-                          >
-                            <ThemeIcon variant="light" size={36} radius="xl">
-                              <IconPlug size={21} aria-hidden="true" />
-                            </ThemeIcon>
-                            <Stack gap={2} className={classes.connectorBody}>
-                              <Text size="sm" fw={600}>
-                                EVSE {evse.number} · Connector{" "}
-                                {connector.number}
-                              </Text>
-                              <Text size="sm" c="dimmed">
-                                {capabilityLabel(connector)}
-                              </Text>
-                            </Stack>
-                          </Radio.Card>
-                        ))}
-                      </div>
-                    ))}
+                    <div className={classes.connectors}>
+                      {charger.connectors.map((connector) => (
+                        <Radio.Card
+                          key={connector.id}
+                          className={classes.connector}
+                          value={connector.id}
+                          withBorder={false}
+                          aria-label={`${charger.name} · Connector ${connector.number} · ${capabilityLabel(connector)}`}
+                        >
+                          <ThemeIcon variant="light" size={36} radius="xl">
+                            <IconPlug size={21} aria-hidden="true" />
+                          </ThemeIcon>
+                          <Stack gap={2} className={classes.connectorBody}>
+                            <Text size="sm" fw={600}>
+                              Connector {connector.number}
+                            </Text>
+                            <Text size="sm" c="dimmed">
+                              {capabilityLabel(connector)}
+                            </Text>
+                          </Stack>
+                        </Radio.Card>
+                      ))}
+                    </div>
                   </Card>
                 ))}
               </Stack>

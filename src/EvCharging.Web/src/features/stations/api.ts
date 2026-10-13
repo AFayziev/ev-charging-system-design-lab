@@ -12,7 +12,6 @@ export interface StationSummary {
   readonly name: string;
   readonly address: string;
   readonly chargerCount: number;
-  readonly evseCount: number;
   readonly connectorCount: number;
   readonly capabilities: readonly ConnectorCapability[];
 }
@@ -33,14 +32,10 @@ export interface StationDetail {
   readonly chargers: readonly {
     readonly id: string;
     readonly name: string;
-    readonly evses: readonly {
+    readonly connectors: readonly (ConnectorCapability & {
       readonly id: string;
       readonly number: number;
-      readonly connectors: readonly (ConnectorCapability & {
-        readonly id: string;
-        readonly number: number;
-      })[];
-    }[];
+    })[];
   }[];
 }
 

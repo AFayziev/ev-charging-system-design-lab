@@ -9,7 +9,6 @@ export interface Reservation {
   readonly timeZoneId: string;
   readonly connectorId: string;
   readonly chargerName: string;
-  readonly evseNumber: number;
   readonly connectorNumber: number;
   readonly connectorType: string;
   readonly powerSupply: string;

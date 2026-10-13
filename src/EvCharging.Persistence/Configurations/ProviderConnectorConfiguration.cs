@@ -9,14 +9,17 @@ internal sealed class ProviderConnectorConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<ProviderConnector> entity)
     {
-        entity.HasOne<ProviderEvse>()
+        entity.HasOne<ProviderCharger>()
             .WithMany()
-            .HasForeignKey(mapping => mapping.ProviderEvseId)
+            .HasForeignKey(mapping => mapping.ProviderChargerId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasOne<Connector>()
             .WithMany()
             .HasForeignKey(mapping => mapping.ConnectorId)
             .OnDelete(DeleteBehavior.Restrict);
-        entity.HasIndex(mapping => new { mapping.ProviderEvseId, mapping.ExternalId }).IsUnique();
+        entity.HasIndex(mapping => new { mapping.ProviderChargerId, mapping.ExternalEvseId, mapping.ExternalId })
+            .IsUnique()
+            .AreNullsDistinct(false);
+        entity.HasIndex(mapping => mapping.ConnectorId).IsUnique();
     }
 }

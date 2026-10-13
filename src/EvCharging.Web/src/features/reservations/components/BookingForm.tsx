@@ -108,18 +108,16 @@ function ConfiguredBookingForm({
   const compact = useMediaQuery("(max-width: 35.99em)");
   const [now, setNow] = useState(Date.now);
   const connectors = station.chargers.flatMap((charger) =>
-    charger.evses.flatMap((evse) =>
-      evse.connectors.map((connector) => {
-        const chargerLabel =
-          station.chargers.length > 1 ? `${charger.name} · ` : "";
-        const equipmentLabel = `${chargerLabel}EVSE ${evse.number} · Connector ${connector.number}`;
-        const typeLabel = connectorTypeLabel(connector.connectorType);
-        return {
-          value: connector.id,
-          label: `${equipmentLabel} (${typeLabel}, ${connector.ratedPowerKW} kW)`,
-        };
-      }),
-    ),
+    charger.connectors.map((connector) => {
+      const chargerLabel =
+        station.chargers.length > 1 ? `${charger.name} · ` : "";
+      const equipmentLabel = `${chargerLabel}Connector ${connector.number}`;
+      const typeLabel = connectorTypeLabel(connector.connectorType);
+      return {
+        value: connector.id,
+        label: `${equipmentLabel} (${typeLabel}, ${connector.ratedPowerKW} kW)`,
+      };
+    }),
   );
   const form = useForm({
     mode: "uncontrolled",

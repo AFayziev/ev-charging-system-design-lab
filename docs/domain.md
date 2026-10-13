@@ -42,9 +42,8 @@ saved after that version was loaded. Rejected edits do not create a saved-change
 |---|---|
 | Station | Driver-facing site with address, coordinates, equipment, photos, and access instructions |
 | Site / location | Geographic grouping; `station` is the canonical project term |
-| Charger | Physical charging device at a station |
-| EVSE | Electric Vehicle Supply Equipment; independently controlled unit serving one vehicle at a time |
-| Connector | Plug/socket interface belonging to an EVSE |
+| Charger | Physical charging stand at a station, assigned to one charging provider |
+| Connector | Independently reservable plug/socket on a charger, with connector type, AC/DC supply, and rated power |
 | Connector type | Vehicle-compatibility category, distinct from connector identity |
 | Capability | Advertised properties such as connector type, AC/DC supply, or maximum power |
 | Access instructions | Published guidance on finding and accessing equipment |
@@ -52,23 +51,20 @@ saved after that version was loaded. Rejected edits do not create a saved-change
 ```mermaid
 flowchart LR
     S[Station] --> C[Charger]
-    C --> E[EVSE]
-    E --> K[Connector]
+    C --> K[Connector]
 ```
 
-The EVSE is the physical exclusivity boundary. Each lab EVSE has exactly one
-reservable connector, so connector-level conflicts represent capacity. Several
-independently reservable plugs on one EVSE, shared power allocation, and load
-management are unsupported. Adapters preserve hierarchy mappings when provider
-identifiers omit or combine levels.
+Each connector is an independent capacity boundary: distinct connectors on a
+charger can be reserved and used simultaneously. Alternative cables that share
+one charging position, shared power allocation, and load management are
+unsupported. Provider equipment addressing does not change platform capacity.
 
-Industry names differ: a protocol's charge point or charging station need not mean
-this project's driver-facing site.
+Industry names and equipment hierarchies differ: a protocol's charge point or
+charging station need not mean this project's driver-facing site.
 [OCPI equipment model](https://github.com/ocpi/ocpi/blob/2.3.0/release/core/mod_locations.asciidoc)
 
-Equipment display numbers are scoped to their parent: EVSE numbers within a
-charger, connector numbers within an EVSE. These labels are distinct from entity
-identifiers.
+Connector display numbers are unique within a charger. These labels are distinct
+from entity identifiers.
 
 ## 4. Business records
 
@@ -297,7 +293,7 @@ injected; infrastructure time synchronization is outside scope.
 
 | Identifier | Scope/meaning |
 |---|---|
-| `stationId`, `chargerId`, `evseId`, `connectorId` | Stable platform equipment identities, independent of labels |
+| `stationId`, `chargerId`, `connectorId` | Stable platform equipment identities, independent of labels |
 | `providerId` | External charging-provider integration |
 | Provider entity/session ID | Namespaced by provider and relevant parent |
 | `reservationId` / `sessionId` | One platform booking / charging lifecycle |
@@ -370,7 +366,7 @@ physical charger firmware coverage.
 |---|---|
 | operator | Operator user for the human backoffice actor |
 | provider | Charging provider for the external charging system; other provider roles are qualified |
-| station / port | Station for a site; charger, EVSE, connector for equipment |
+| station / port | Station for a site; charger and connector for equipment |
 | status | Qualified reservation, lifecycle, outcome, or observed-state dimension |
 | transaction / session | Qualified database, charging, login, or provider context |
 | accepted | Boundary acknowledgement, with confirmation stated separately |

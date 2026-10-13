@@ -71,7 +71,6 @@ const reservation: Reservation = {
   timeZoneId: "Europe/London",
   connectorId: "751e5f76-830a-42b8-b21a-cc2b8a9071a5",
   chargerName: "Charger 1",
-  evseNumber: 1,
   connectorNumber: 1,
   connectorType: "Type2",
   powerSupply: "AC",
@@ -131,7 +130,7 @@ it("groups bookings by server state and links to their stations", async () => {
   expect(active.getByText("Active reservation")).toBeVisible();
   expect(active.getByText("1 Synthetic Avenue")).toBeVisible();
   expect(active.getByText("Charger 1")).toBeVisible();
-  expect(active.getByText("EVSE 1 · Connector 1")).toBeVisible();
+  expect(active.getByText("Connector 1")).toBeVisible();
   expect(active.getByText("Type 2 · AC · 22 kW")).toBeVisible();
   expect(active.getByText("Tomorrow 13:30 - 14:30")).toBeVisible();
   expect(active.getByText("Station time · Europe/London")).toBeVisible();

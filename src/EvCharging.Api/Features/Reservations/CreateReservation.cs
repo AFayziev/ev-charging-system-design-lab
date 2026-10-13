@@ -71,8 +71,7 @@ public sealed class CreateReservationCommandHandler(
 
     private Task<Connector?> GetConnectorAsync(Guid publicId, CancellationToken cancellationToken) =>
         database.Connectors
-            .Include(connector => connector.Evse)
-            .ThenInclude(evse => evse!.Charger)
+            .Include(connector => connector.Charger)
             .ThenInclude(charger => charger!.Station)
             .SingleOrDefaultAsync(connector => connector.PublicId == publicId, cancellationToken);
 

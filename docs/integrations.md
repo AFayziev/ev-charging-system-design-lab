@@ -46,6 +46,11 @@ effect.
 
 ## 3. Observations and recovery
 
+Adapters map platform chargers and connectors to provider addresses. A provider
+may require an EVSE identifier in addition to its charger and connector identifiers.
+That address component belongs to the adapter mapping, not the platform equipment hierarchy.
+Distinct platform connectors must map to independently usable provider capacity.
+
 Each simulator provides:
 
 - Source event IDs unique within that provider.

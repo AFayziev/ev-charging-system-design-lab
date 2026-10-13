@@ -64,18 +64,12 @@ it("keeps connector selection synchronized with the URL and booking form", async
       {
         id: "charger",
         name: "Charger 1",
-        evses: [1, 2].map((number) => ({
-          id: `evse-${number}`,
+        connectors: [1, 2].map((number) => ({
+          id: `connector-${number}`,
           number,
-          connectors: [
-            {
-              id: `connector-${number}`,
-              number: 1,
-              connectorType: "Type2",
-              powerSupply: "AC",
-              ratedPowerKW: 22,
-            },
-          ],
+          connectorType: "Type2",
+          powerSupply: "AC",
+          ratedPowerKW: 22,
         })),
       },
     ],
@@ -115,14 +109,14 @@ it("keeps connector selection synchronized with the URL and booking form", async
     </MantineProvider>,
   );
 
-  const second = await screen.findByRole("radio", { name: /EVSE 2/ });
+  const second = await screen.findByRole("radio", { name: /Connector 2/ });
   expect(second).toBeChecked();
   expect(
     await screen.findByRole("combobox", { name: "Connector" }),
-  ).toHaveValue("EVSE 2 · Connector 1 (Type 2, 22 kW)");
-  await userEvent.click(screen.getByRole("radio", { name: /EVSE 1/ }));
+  ).toHaveValue("Connector 2 (Type 2, 22 kW)");
+  await userEvent.click(screen.getByRole("radio", { name: /Connector 1/ }));
   expect(screen.getByRole("combobox", { name: "Connector" })).toHaveValue(
-    "EVSE 1 · Connector 1 (Type 2, 22 kW)",
+    "Connector 1 (Type 2, 22 kW)",
   );
   expect(router.state.location.search).toBe(
     "?source=catalog&connectorId=connector-1",
@@ -131,7 +125,7 @@ it("keeps connector selection synchronized with the URL and booking form", async
   await userEvent.keyboard("{ArrowDown}");
   expect(second).toBeChecked();
   expect(screen.getByRole("combobox", { name: "Connector" })).toHaveValue(
-    "EVSE 2 · Connector 1 (Type 2, 22 kW)",
+    "Connector 2 (Type 2, 22 kW)",
   );
   expect(router.state.location.search).toBe(
     "?source=catalog&connectorId=connector-2",

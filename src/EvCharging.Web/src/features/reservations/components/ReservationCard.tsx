@@ -55,8 +55,7 @@ export function ReservationCard({
             {reservation.chargerName}
           </Text>
           <Text size="sm" fw={600}>
-            EVSE {reservation.evseNumber} · Connector{" "}
-            {reservation.connectorNumber}
+            Connector {reservation.connectorNumber}
           </Text>
           <Text size="sm" c="dimmed">
             {capabilityLabel(reservation)}

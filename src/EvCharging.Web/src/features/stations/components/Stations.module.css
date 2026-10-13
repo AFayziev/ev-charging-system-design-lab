@@ -96,12 +96,8 @@
   border-bottom: 1px solid #e5eaee;
 }
 
-.evse {
+.connectors {
   padding: 0 16px;
-}
-
-.evse + .evse {
-  border-top: 1px solid #e5eaee;
 }
 
 .connector {

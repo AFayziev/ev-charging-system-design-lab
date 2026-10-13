@@ -107,9 +107,7 @@ export function StationListPage() {
                             {station.chargerCount === 1
                               ? "charger"
                               : "chargers"}{" "}
-                            · {station.evseCount}{" "}
-                            {station.evseCount === 1 ? "EVSE" : "EVSEs"} ·{" "}
-                            {station.connectorCount}{" "}
+                            · {station.connectorCount}{" "}
                             {station.connectorCount === 1
                               ? "connector"
                               : "connectors"}

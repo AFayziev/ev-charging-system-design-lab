@@ -190,6 +190,40 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
     }
 
     [Fact]
+    public async Task Book_DistinctConnectorsOnSameCharger_AllowsConcurrentSlots()
+    {
+        await using var connection = fixture.CreateConnection("platform_writer");
+        await using var database = Context(connection);
+        var (first, driver) = await EquipmentAsync(database);
+        var second = new Connector
+        {
+            Charger = first.Charger,
+            Number = 2,
+            ConnectorType = "CCS2",
+            PowerSupply = "DC",
+            RatedPowerKW = 50
+        };
+        var secondDriver = new Driver
+        {
+            IdentityIssuer = driver.IdentityIssuer,
+            IdentitySubject = Guid.NewGuid().ToString()
+        };
+        database.Connectors.Add(second);
+        database.Drivers.Add(secondDriver);
+        await database.SaveChangesAsync();
+        var start = new DateTimeOffset(2030, 1, 1, 10, 0, 0, TimeSpan.Zero);
+        database.Reservations.AddRange(
+            Booking(first, driver, start, start.AddHours(1)),
+            Booking(second, secondDriver, start, start.AddHours(1)));
+
+        await database.SaveChangesAsync();
+
+        var count = await database.Reservations.CountAsync(
+            value => value.ConnectorId == first.Id || value.ConnectorId == second.Id);
+        Assert.Equal(2, count);
+    }
+
+    [Fact]
     public async Task Book_CompetingConnections_OneWinsAndAdjacentSucceeds()
     {
         await using var setupConnection = fixture.CreateConnection("platform_writer");
@@ -275,10 +309,9 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
             AccessInstructions = "Test"
         };
         var charger = new Charger { Station = station, Name = "Charger" };
-        var evse = new Evse { Charger = charger, Number = 1 };
         var connector = new Connector
         {
-            Evse = evse,
+            Charger = charger,
             Number = 1,
             ConnectorType = "Type2",
             PowerSupply = "AC",

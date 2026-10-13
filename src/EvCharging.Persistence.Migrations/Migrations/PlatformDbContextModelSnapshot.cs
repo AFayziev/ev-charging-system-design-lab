@@ -66,14 +66,14 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid>("ChargerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("charger_id");
+
                     b.Property<string>("ConnectorType")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("connector_type");
-
-                    b.Property<Guid>("EvseId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("evse_id");
 
                     b.Property<int>("Number")
                         .HasColumnType("integer")
@@ -97,50 +97,15 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.HasKey("Id")
                         .HasName("pk_connectors");
 
-                    b.HasIndex("EvseId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_connectors_evse_id");
-
                     b.HasIndex("PublicId")
                         .IsUnique()
                         .HasDatabaseName("ix_connectors_public_id");
 
-                    b.ToTable("connectors", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Domain.Equipment.Evse", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ChargerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("charger_id");
-
-                    b.Property<int>("Number")
-                        .HasColumnType("integer")
-                        .HasColumnName("number");
-
-                    b.Property<Guid>("PublicId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("public_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.HasKey("Id")
-                        .HasName("pk_evses");
-
-                    b.HasIndex("PublicId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_evses_public_id");
-
                     b.HasIndex("ChargerId", "Number")
                         .IsUnique()
-                        .HasDatabaseName("ix_evses_charger_id_number");
+                        .HasDatabaseName("ix_connectors_charger_id_number");
 
-                    b.ToTable("evses", "charging");
+                    b.ToTable("connectors", "charging");
                 });
 
             modelBuilder.Entity("EvCharging.Domain.Equipment.Station", b =>
@@ -685,6 +650,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasName("pk_provider_chargers");
 
                     b.HasIndex("ChargerId")
+                        .IsUnique()
                         .HasDatabaseName("ix_provider_chargers_charger_id");
 
                     b.HasIndex("ProviderStationId", "ExternalId")
@@ -705,38 +671,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("connector_id");
 
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
+                    b.Property<string>("ExternalEvseId")
                         .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<Guid>("ProviderEvseId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("provider_evse_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_provider_connectors");
-
-                    b.HasIndex("ConnectorId")
-                        .HasDatabaseName("ix_provider_connectors_connector_id");
-
-                    b.HasIndex("ProviderEvseId", "ExternalId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_provider_connectors_provider_evse_id_external_id");
-
-                    b.ToTable("provider_connectors", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderEvse", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("EvseId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("evse_id");
+                        .HasColumnName("external_evse_id");
 
                     b.Property<string>("ExternalId")
                         .IsRequired()
@@ -748,16 +685,19 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("provider_charger_id");
 
                     b.HasKey("Id")
-                        .HasName("pk_provider_evses");
+                        .HasName("pk_provider_connectors");
 
-                    b.HasIndex("EvseId")
-                        .HasDatabaseName("ix_provider_evses_evse_id");
-
-                    b.HasIndex("ProviderChargerId", "ExternalId")
+                    b.HasIndex("ConnectorId")
                         .IsUnique()
-                        .HasDatabaseName("ix_provider_evses_provider_charger_id_external_id");
+                        .HasDatabaseName("ix_provider_connectors_connector_id");
 
-                    b.ToTable("provider_evses", "charging");
+                    b.HasIndex("ProviderChargerId", "ExternalEvseId", "ExternalId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_provider_connectors_provider_charger_id_external_evse_id_ex");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("ProviderChargerId", "ExternalEvseId", "ExternalId"), false);
+
+                    b.ToTable("provider_connectors", "charging");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderStation", b =>
@@ -807,24 +747,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Domain.Equipment.Connector", b =>
                 {
-                    b.HasOne("EvCharging.Domain.Equipment.Evse", "Evse")
-                        .WithMany("Connectors")
-                        .HasForeignKey("EvseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_connectors_evses_evse_id");
-
-                    b.Navigation("Evse");
-                });
-
-            modelBuilder.Entity("EvCharging.Domain.Equipment.Evse", b =>
-                {
                     b.HasOne("EvCharging.Domain.Equipment.Charger", "Charger")
-                        .WithMany("Evses")
+                        .WithMany("Connectors")
                         .HasForeignKey("ChargerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_evses_chargers_charger_id");
+                        .HasConstraintName("fk_connectors_chargers_charger_id");
 
                     b.Navigation("Charger");
                 });
@@ -964,29 +892,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_provider_connectors_connectors_connector_id");
 
-                    b.HasOne("EvCharging.Persistence.Entities.ProviderEvse", null)
-                        .WithMany()
-                        .HasForeignKey("ProviderEvseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_provider_connectors_provider_evses_provider_evse_id");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderEvse", b =>
-                {
-                    b.HasOne("EvCharging.Domain.Equipment.Evse", null)
-                        .WithMany()
-                        .HasForeignKey("EvseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_provider_evses_evses_evse_id");
-
                     b.HasOne("EvCharging.Persistence.Entities.ProviderCharger", null)
                         .WithMany()
                         .HasForeignKey("ProviderChargerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_provider_evses_provider_chargers_provider_charger_id");
+                        .HasConstraintName("fk_provider_connectors_provider_chargers_provider_charger_id");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.ProviderStation", b =>
@@ -1007,11 +918,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                 });
 
             modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>
-                {
-                    b.Navigation("Evses");
-                });
-
-            modelBuilder.Entity("EvCharging.Domain.Equipment.Evse", b =>
                 {
                     b.Navigation("Connectors");
                 });

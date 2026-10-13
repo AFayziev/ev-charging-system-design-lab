@@ -69,7 +69,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         var page = await browser.NewPageAsync(new() { TimezoneId = "Europe/London" });
         await fixture.LoginAsync(page, "driver");
         await page.GetByRole(AriaRole.Link, new() { Name = "View North Station", Exact = true }).ClickAsync();
-        await page.GetByRole(AriaRole.Radio, new() { Name = "EVSE", Exact = false }).First.ClickAsync();
+        await page.GetByRole(AriaRole.Radio, new() { Name = "Connector", Exact = false }).First.ClickAsync();
         var policy = await GetAsync(page, "/api/reservations/booking-policy");
         Assert.Equal(
             AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver,
@@ -99,14 +99,14 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "End time", Exact = true }))
             .ToHaveTextAsync(DisplayTime(earliestEnd));
         await PickTimeAsync(page, "End", endInput);
-        await page.GetByRole(AriaRole.Radio, new() { Name = "EVSE", Exact = false }).Last.ClickAsync();
+        await page.GetByRole(AriaRole.Radio, new() { Name = "Connector", Exact = false }).Last.ClickAsync();
         await Expect(page.GetByRole(AriaRole.Combobox, new() { Name = "Connector" }))
-            .ToHaveValueAsync("EVSE 2 · Connector 1 (Type 2, 22 kW)");
+            .ToHaveValueAsync("Connector 2 (Type 2, 22 kW)");
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Start time", Exact = true }))
             .ToHaveTextAsync(DisplayTime(startInput));
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "End time", Exact = true }))
             .ToHaveTextAsync(DisplayTime(endInput));
-        await page.GetByRole(AriaRole.Radio, new() { Name = "EVSE", Exact = false }).First.ClickAsync();
+        await page.GetByRole(AriaRole.Radio, new() { Name = "Connector", Exact = false }).First.ClickAsync();
         await page.GetByText("Review resolved times", new() { Exact = true }).ClickAsync();
         await Expect(page.GetByText("Resolved browser time:", new() { Exact = false })).ToBeVisibleAsync();
         string browserPreview = await page.GetByText("Resolved browser time:", new() { Exact = false })
@@ -228,7 +228,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
                 .GetInt32());
 
         var otherConnectorId = await Storage.Connectors
-            .Where(value => value.Evse!.Charger!.Station!.Name == "South Station")
+            .Where(value => value.Charger!.Station!.Name == "South Station")
             .Select(value => value.PublicId)
             .FirstAsync();
         var driverOverlap = await PostAsync(page, otherConnectorId.ToString(), start, end);
@@ -678,10 +678,9 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     }
 
     private Task<EvCharging.Domain.Equipment.Connector> NorthConnectorAsync() => Storage.Connectors
-        .Include(value => value.Evse!)
-        .ThenInclude(value => value.Charger!)
+        .Include(value => value.Charger!)
         .ThenInclude(value => value.Station)
-        .Where(value => value.Evse!.Charger!.Station!.Name == "North Station")
+        .Where(value => value.Charger!.Station!.Name == "North Station")
         .OrderBy(value => value.Number)
         .ThenBy(value => value.Id)
         .FirstAsync();

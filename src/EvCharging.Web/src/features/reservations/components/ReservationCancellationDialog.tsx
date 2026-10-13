@@ -65,8 +65,7 @@ export function ReservationCancellationDialog({
       <Stack>
         <Text>Release your booking at {reservation.stationName}?</Text>
         <Text size="sm">
-          {reservation.chargerName} · EVSE {reservation.evseNumber} · Connector{" "}
-          {reservation.connectorNumber}
+          {reservation.chargerName} · Connector {reservation.connectorNumber}
         </Text>
         <Text size="sm">
           {formatReservationSlot(

@@ -190,7 +190,7 @@ public static class LabDataSeeder
         string powerSupply,
         decimal ratedPowerKW,
         int chargerCount,
-        int evsesPerCharger,
+        int connectorsPerCharger,
         string accessInstructions,
         CancellationToken cancellationToken)
     {
@@ -247,35 +247,24 @@ public static class LabDataSeeder
             context.ProviderChargers.Add(providerCharger);
             await context.SaveChangesAsync(cancellationToken);
 
-            for (var number = 1; number <= evsesPerCharger; number++)
+            for (var number = 1; number <= connectorsPerCharger; number++)
             {
-                var evse = new Evse { ChargerId = charger.Id, Number = number };
-                context.Evses.Add(evse);
-                await context.SaveChangesAsync(cancellationToken);
-
                 var connector = new Connector
                 {
-                    EvseId = evse.Id,
-                    Number = 1,
+                    ChargerId = charger.Id,
+                    Number = number,
                     ConnectorType = connectorType,
                     PowerSupply = powerSupply,
                     RatedPowerKW = ratedPowerKW
                 };
-                var providerEvse = new ProviderEvse
-                {
-                    ProviderChargerId = providerCharger.Id,
-                    EvseId = evse.Id,
-                    ExternalId = $"evse-{number}"
-                };
                 context.Connectors.Add(connector);
-                context.ProviderEvses.Add(providerEvse);
                 await context.SaveChangesAsync(cancellationToken);
 
                 context.ProviderConnectors.Add(new()
                 {
-                    ProviderEvseId = providerEvse.Id,
+                    ProviderChargerId = providerCharger.Id,
                     ConnectorId = connector.Id,
-                    ExternalId = "connector-1"
+                    ExternalId = $"connector-{number}"
                 });
             }
         }

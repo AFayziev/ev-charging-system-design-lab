@@ -21,7 +21,6 @@ public class PlatformDbContext : DbContext
     public DbSet<Station> Stations => Set<Station>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
     public DbSet<Charger> Chargers => Set<Charger>();
-    public DbSet<Evse> Evses => Set<Evse>();
     public DbSet<Connector> Connectors => Set<Connector>();
     public DbSet<Driver> Drivers => Set<Driver>();
     public DbSet<OperatorUser> OperatorUsers => Set<OperatorUser>();
@@ -29,7 +28,6 @@ public class PlatformDbContext : DbContext
     public DbSet<ChargingProvider> ChargingProviders => Set<ChargingProvider>();
     public DbSet<ProviderStation> ProviderStations => Set<ProviderStation>();
     public DbSet<ProviderCharger> ProviderChargers => Set<ProviderCharger>();
-    public DbSet<ProviderEvse> ProviderEvses => Set<ProviderEvse>();
     public DbSet<ProviderConnector> ProviderConnectors => Set<ProviderConnector>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<ChargingSession> Sessions => Set<ChargingSession>();
