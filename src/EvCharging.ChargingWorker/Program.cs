@@ -3,6 +3,7 @@ using EvCharging.ChargingWorker.Handlers;
 using EvCharging.ChargingWorker.Persistence;
 using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Persistence.Extensions;
+using EvCharging.ServiceDefaults.Messaging;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.ErrorHandling;
 using Wolverine.RabbitMQ;
@@ -18,6 +19,7 @@ builder.AddMessaging(
     {
         options.AddMessageStorage(builder.Configuration, "charging");
         options.UseEntityFrameworkCoreTransactions();
+        options.AddReservationEventRouting();
         options.Policies.LogMessageStarting(LogLevel.Information);
         options.Policies.ForMessagesOfType<ReservationCreated>().Audit(message => message.ReservationId);
         options.Policies.ForMessagesOfType<ExpireReservation>().Audit(message => message.ReservationId);
@@ -30,7 +32,8 @@ builder.AddMessaging(
         options.LocalQueueFor<ExpireReservation>()
             .MaximumParallelMessages(maximumConcurrentChecks);
         options.LocalQueueFor<SweepOverdueReservations>().Sequential();
-        options.ListenToRabbitQueue(ReservationCreated.Queue).MaximumParallelMessages(maximumConcurrentChecks);
+        options.ListenToRabbitQueue(ReservationEventTopology.ChargingQueue)
+            .MaximumParallelMessages(maximumConcurrentChecks);
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddHttpClient("gateway", client => client.BaseAddress = new("https+http://gateway/api/"));

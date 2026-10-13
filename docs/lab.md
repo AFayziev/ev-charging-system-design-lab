@@ -382,7 +382,7 @@ Verification uses correlated telemetry from the
 |---|---|
 | Concurrent overlapping reservations | One conflicting booking succeeds; primary constraints remain effective across API instances |
 | Concurrent bookings by one driver across connectors | Configured quota and driver overlap protection hold across API instances |
-| Expiry worker delayed or restarted | Overdue eligible reservations become expired and release quota after processing resumes; duplicate checks produce one transition and audit |
+| Expiry worker delayed or restarted | Admission preserves capacity under the [reservation quota rules](domain.md#5-reservations); resumed expiry processing records one transition, audit, and event despite duplicate checks |
 | Reservation policy changed | New admission uses the updated limits; accepted slots and deadlines remain unchanged |
 | Cancellation races start | One eligible transition wins; cancelled bookings cannot dispatch a start |
 | Arrival deadline passes with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled |

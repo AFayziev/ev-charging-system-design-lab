@@ -3,10 +3,9 @@ using EvCharging.Api.Configuration;
 using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
-using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Persistence.Extensions;
+using EvCharging.ServiceDefaults.Messaging;
 using Wolverine.EntityFrameworkCore;
-using Wolverine.RabbitMQ;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
@@ -19,8 +18,7 @@ builder.AddMessaging(
         options.AddMessageStorage(builder.Configuration, "api");
         options.UseEntityFrameworkCoreTransactions();
         options.AddApplicationHandlers();
-        options.PublishMessage<ReservationCreated>().ToRabbitQueue(ReservationCreated.Queue);
-        options.PublishMessage<ReservationCancelled>().ToRabbitQueue(ReservationCancelled.Queue);
+        options.AddReservationEventRouting();
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddSingleton(TimeProvider.System);

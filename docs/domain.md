@@ -106,15 +106,18 @@ experiment values. Ownership, overlap protection, and uncertain-effect safety
 remain invariants, not configurable switches.
 
 A driver's active, unused reservations count toward the outstanding-booking
-quota across all stations, including reservations with pending or uncertain
-starts. Consumed, cancelled, and expired reservations do not count. Active and
+quota across all stations, except allocations already eligible for expiry.
+Reservations with pending or uncertain starts retain their quota allocation.
+Consumed, cancelled, and expired reservations do not count. Active and
 consumed slots for the same driver cannot overlap, even on different connectors.
 Consumed reservations retain their original interval for both driver and
 connector overlap checks.
 
 Admission and quota enforcement are atomic across concurrent requests. Due,
-eligible unused reservations are expired before admission counts outstanding
-bookings; delayed background expiry cannot indefinitely block the driver's quota.
+eligible unused reservations are excluded from the outstanding count without
+changing their stored state during admission; delayed expiry processing cannot
+indefinitely block the driver's quota. Expiry separately records the state
+transition and its timestamp.
 Authorized external starts with pending or uncertain outcomes retain their claims
 under the rules below.
 

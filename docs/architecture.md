@@ -338,8 +338,10 @@ asynchronously.
 Cancellation, start acceptance, and expiry use conditional primary-side transitions.
 
 Admission coordinates outstanding-booking counts and driver overlap checks across
-concurrent requests, with due, eligible allocations released in the same
-transaction. Background scheduling is not the authority for booking eligibility.
+concurrent requests. It excludes allocations eligible for expiry from the quota
+count without changing their state. The charging worker owns expiry transitions,
+their audits, and outgoing events. Background scheduling is not the authority for
+booking eligibility.
 The accepted deadline is stored with the reservation; later policy changes do
 not rewrite it. Browser forms obtain relevant policy limits from the API, while
 primary-side validation remains authoritative.

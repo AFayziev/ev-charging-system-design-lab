@@ -3,16 +3,17 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
-using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Auditing;
 using EvCharging.Persistence.Entities;
+using EvCharging.ServiceDefaults.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 using Xunit;
 using static Microsoft.Playwright.Assertions;
 
@@ -257,6 +258,13 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         var response = await PostAsync(page, connector.PublicId.ToString(), start, start.AddSeconds(30));
         Assert.Equal(201, response.GetProperty("status").GetInt32());
         var publicId = response.GetProperty("body").GetProperty("id").GetGuid();
+        Guid reservationId = await Storage.Reservations.AsNoTracking()
+            .Where(reservation => reservation.PublicId == publicId)
+            .Select(reservation => reservation.Id)
+            .SingleAsync(timeout.Token);
+        var createdEvents = await ObserveReservationEventsAsync(
+            ReservationEventTopology.CreatedTopic, [reservationId], timeout.Token);
+        Assert.Equal(reservationId, createdEvents[reservationId].GetProperty("reservationId").GetGuid());
 
         await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
         var card = page.GetByRole(AriaRole.Article, new() { Name = "North Station reservation" });
@@ -327,6 +335,11 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
             await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(3);
 
+            var expiryEvents = ObserveReservationEventsAsync(
+                ReservationEventTopology.ExpiredTopic,
+                bookings.Skip(1).Select(booking => booking.Id).ToArray(),
+                timeout.Token);
+
             await WorkerCommandAsync(KnownResourceCommands.StartCommand, timeout.Token);
             workerStopped = false;
             await Expect(page.GetByText("Expired", new() { Exact = true }))
@@ -338,6 +351,16 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             Assert.Equal(2, audits.Count);
             Assert.All(audits, audit => Assert.Equal("charging-worker", audit.ActorSubject));
             Assert.DoesNotContain(audits, audit => audit.ResourceId == bookings[0].Id);
+            var published = await expiryEvents;
+            var expired = await Storage.Reservations.AsNoTracking()
+                .Where(reservation => published.Keys.Contains(reservation.Id))
+                .ToListAsync(timeout.Token);
+            Assert.All(
+                expired,
+                reservation => Assert.Equal(
+                    reservation.ExpiredAt!.Value.UtcTicks / TimeSpan.TicksPerMicrosecond,
+                    published[reservation.Id].GetProperty("expiredAt").GetDateTimeOffset().UtcTicks
+                        / TimeSpan.TicksPerMicrosecond));
         }
         finally
         {
@@ -363,6 +386,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     [Trait("Category", "Browser")]
     public async Task Cancel_ActiveBooking_CommitsOnceAndReleasesQuota()
     {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
@@ -413,15 +437,9 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         Assert.Equal(
             (int)ReservationState.Cancelled, audit.Details.GetProperty("after").GetProperty("state").GetInt32());
 
-        string? brokerConnection = await fixture.App.GetConnectionStringAsync("rabbitmq");
-        Assert.NotNull(brokerConnection);
-        var factory = new ConnectionFactory { Uri = new Uri(brokerConnection) };
-        await using var connection = await factory.CreateConnectionAsync();
-        await using var channel = await connection.CreateChannelAsync();
-        var message = await channel.BasicGetAsync(ReservationCancelled.Queue, autoAck: true);
-        Assert.NotNull(message);
-        using var body = JsonDocument.Parse(message.Body);
-        Assert.Equal(cancelled.Id, body.RootElement.GetProperty("reservationId").GetGuid());
+        var published = await ObserveReservationEventsAsync(
+            ReservationEventTopology.CancelledTopic, [cancelled.Id], timeout.Token);
+        Assert.Equal(cancelled.Id, published[cancelled.Id].GetProperty("reservationId").GetGuid());
         var replacement = await PostAsync(
             page, connector.PublicId.ToString(), cancelled.StartsAt, cancelled.EndsAt);
         Assert.Equal(201, replacement.GetProperty("status").GetInt32());
@@ -637,48 +655,112 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     [Trait("Category", "Api")]
     public async Task Book_OverdueAllocations_ReleasesCapacityExceptUnresolvedStarts()
     {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
         await fixture.LoginAsync(page, "driver");
-        var storage = Storage;
-        var driver = Driver;
-        var connector = await NorthConnectorAsync();
-        string connectorId = connector.PublicId.ToString();
-        var past = DateTimeOffset.UtcNow.AddHours(-6);
-        var overdue = Enumerable.Range(0, AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver)
-            .Select(index => Reservation.Book(
-                connector,
-                driver,
-                past.AddHours(index),
-                past.AddHours(index + 1),
-                past,
-                AppHostFixture.BookingLimits).Value)
-            .ToArray();
-        storage.Reservations.AddRange(overdue);
-        await storage.SaveChangesAsync();
-        storage.Sessions.Add(new ChargingSession
+        await WorkerCommandAsync(KnownResourceCommands.StopCommand, timeout.Token);
+        try
         {
-            ReservationId = overdue[0].Id,
-            ConnectorId = connector.Id,
-            Lifecycle = SessionLifecycle.Starting,
-            CreatedAt = past
-        });
-        await storage.SaveChangesAsync();
-        var upcoming = DateTimeOffset.UtcNow.AddHours(2);
-        Assert.Equal(
-            201,
-            (await PostAsync(page, connectorId, upcoming, upcoming.AddHours(1)))
-                .GetProperty("status")
-                .GetInt32());
-        Assert.Equal(
-            3,
-            await storage.Reservations.CountAsync(value =>
-                value.DriverId == driver.Id && value.State == ReservationState.Expired));
-        Assert.Equal(
-            2,
-            await storage.Reservations.CountAsync(value =>
-                value.DriverId == driver.Id && value.State == ReservationState.Active));
+            var storage = Storage;
+            var driver = Driver;
+            var connector = await NorthConnectorAsync();
+            string connectorId = connector.PublicId.ToString();
+            var past = DateTimeOffset.UtcNow.AddHours(-6);
+            var overdue = Enumerable.Range(0, AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver)
+                .Select(index => Reservation.Book(
+                    connector,
+                    driver,
+                    past.AddHours(index),
+                    past.AddHours(index + 1),
+                    past,
+                    AppHostFixture.BookingLimits).Value)
+                .ToArray();
+            storage.Reservations.AddRange(overdue);
+            await storage.SaveChangesAsync();
+            storage.Sessions.Add(new ChargingSession
+            {
+                ReservationId = overdue[0].Id,
+                ConnectorId = connector.Id,
+                Lifecycle = SessionLifecycle.Starting,
+                CreatedAt = past
+            });
+            await storage.SaveChangesAsync();
+            var upcoming = DateTimeOffset.UtcNow.AddHours(2);
+            for (int index = 0; index < AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver; index++)
+            {
+                var response = await PostAsync(
+                    page, connectorId, upcoming.AddHours(index), upcoming.AddHours(index + 1));
+                int expectedStatus = index < AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver - 1
+                    ? 201 : 409;
+                Assert.Equal(expectedStatus, response.GetProperty("status").GetInt32());
+            }
+
+            var overdueIds = overdue.Select(reservation => reservation.Id).ToArray();
+            var unchanged = await storage.Reservations.AsNoTracking()
+                .Where(reservation => overdueIds.Contains(reservation.Id))
+                .ToListAsync(timeout.Token);
+            Assert.Equal(overdue.Length, unchanged.Count);
+            Assert.All(
+                unchanged,
+                reservation =>
+                {
+                    Assert.Equal(ReservationState.Active, reservation.State);
+                    Assert.Null(reservation.ExpiredAt);
+                });
+            Assert.False(await storage.AuditEntries.AnyAsync(
+                entry => overdueIds.Contains(entry.ResourceId) && entry.Action == AuditAction.Updated, timeout.Token));
+            Assert.Equal(
+                overdue.Length + AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver - 1,
+                await storage.Reservations.CountAsync(value =>
+                    value.DriverId == driver.Id && value.State == ReservationState.Active));
+        }
+        finally
+        {
+            using var restoreTimeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            await WorkerCommandAsync(KnownResourceCommands.StartCommand, restoreTimeout.Token);
+        }
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, JsonElement>> ObserveReservationEventsAsync(
+        string topic, IReadOnlyCollection<Guid> reservationIds, CancellationToken cancellationToken)
+    {
+        string? brokerConnection = await fixture.App.GetConnectionStringAsync("rabbitmq", cancellationToken);
+        Assert.NotNull(brokerConnection);
+        var factory = new ConnectionFactory { Uri = new Uri(brokerConnection) };
+        await using var connection = await factory.CreateConnectionAsync(cancellationToken);
+        await using var channel = await connection.CreateChannelAsync(cancellationToken: cancellationToken);
+        var received = new Dictionary<Guid, JsonElement>();
+        var completed = new TaskCompletionSource<IReadOnlyDictionary<Guid, JsonElement>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += (_, message) =>
+        {
+            if (message.RoutingKey != topic)
+            {
+                return Task.CompletedTask;
+            }
+
+            using var body = JsonDocument.Parse(message.Body);
+            Guid reservationId = body.RootElement.GetProperty("reservationId").GetGuid();
+            if (reservationIds.Contains(reservationId))
+            {
+                received[reservationId] = body.RootElement.Clone();
+                if (received.Count == reservationIds.Count)
+                {
+                    completed.TrySetResult(new Dictionary<Guid, JsonElement>(received));
+                }
+            }
+
+            return Task.CompletedTask;
+        };
+        await channel.BasicConsumeAsync(
+            ReservationEventTopology.NotificationQueue,
+            autoAck: true,
+            consumer: consumer,
+            cancellationToken: cancellationToken);
+        return await completed.Task.WaitAsync(cancellationToken);
     }
 
     private Task<EvCharging.Domain.Equipment.Connector> NorthConnectorAsync() => Storage.Connectors

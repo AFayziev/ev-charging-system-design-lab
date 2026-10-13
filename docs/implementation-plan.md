@@ -289,8 +289,8 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   - [x] Integrate booking transactions and deliver reservation-created messages to
     ChargingWorker; verify atomic acceptance and eventual worker receipt.
   - [x] Add expiry scheduling, processing, and an overdue reservation sweep;
-    coordinate overdue cleanup with booking admission and verify expiry, quota
-    release, audit uniqueness, and the durable scheduling integration through
+    verify admission capacity independently of expiry processing, audit
+    uniqueness, and the durable scheduling integration through
     the reservation feature.
 - [x] M05.03 Deliver reservation cancellation in the driver's reservation list
   with permitted transitions, atomic state/outbox changes, audit records,
@@ -303,6 +303,12 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   simulator and Cloudflare Email Service adapters selected by configuration;
   local delivery remains simulated. Verify recipient/event mapping and failures
   without changing accepted reservations. Depends on M05.01–M05.03.
+  - [x] Complete reservation lifecycle events and transactional publication paths.
+  - [x] Add topic routing and an independent notification subscription.
+  - [ ] Add recipient data, notification records, and durable send jobs.
+  - [ ] Implement simulator delivery and persisted attempts with safe failure handling.
+  - [ ] Add the configuration-selected Cloudflare adapter.
+  - [ ] Review the complete flow and verify notification isolation and outcomes.
 - [ ] M05.05 Exercise application outcomes during interrupted message processing:
   accepted bookings eventually expire, duplicate processing does not repeat
   transitions or notifications, and failed work does not block unrelated bookings

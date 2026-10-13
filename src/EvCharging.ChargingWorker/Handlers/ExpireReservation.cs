@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Extensions;
@@ -15,7 +16,7 @@ public sealed partial class ExpireReservationHandler
     private ReservationExpiryOutcome? _outcome;
 
     [Transactional]
-    public async Task HandleAsync(
+    public async Task<ReservationExpired?> HandleAsync(
         ExpireReservation message,
         PlatformDbContext database,
         TimeProvider clock,
@@ -30,7 +31,7 @@ public sealed partial class ExpireReservationHandler
             .SingleOrDefaultAsync(cancellationToken);
         if (driverId is null)
         {
-            return;
+            return null;
         }
 
         await database.LockDriverReservationsAsync(driverId.Value, cancellationToken);
@@ -42,7 +43,13 @@ public sealed partial class ExpireReservationHandler
             Activity.Current?.SetTag("reservation.public_id", reservation.PublicId.ToString());
             var outcomes = await database.ExpireReservationsAsync([reservation], clock.GetUtcNow(), cancellationToken);
             _outcome = outcomes[reservation.Id];
+            if (_outcome == ReservationExpiryOutcome.Expired)
+            {
+                return new ReservationExpired(reservation.Id, reservation.ExpiredAt!.Value);
+            }
         }
+
+        return null;
     }
 
     public void AfterCommit(ExpireReservation message, ILogger logger)

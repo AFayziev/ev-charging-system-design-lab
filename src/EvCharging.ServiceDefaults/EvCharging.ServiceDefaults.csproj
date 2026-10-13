@@ -14,5 +14,6 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
     <PackageReference Include="WolverineFx.RabbitMQ" />
     <PackageReference Include="WolverineFx.RuntimeCompilation" />
+    <ProjectReference Include="../EvCharging.Contracts/EvCharging.Contracts.csproj" />
   </ItemGroup>
 </Project>

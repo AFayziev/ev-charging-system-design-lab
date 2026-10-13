@@ -3,6 +3,7 @@ using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using EvCharging.Api.Errors;
 using EvCharging.Contracts.Events.Reservations;
+using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
@@ -87,7 +88,7 @@ public sealed class CreateReservationCommandHandler(
                 .Select(error => error.ToValidationError()));
         }
 
-        var outstandingCount = await ExpireOverdueReservationsAsync(reservation.DriverId, now, cancellationToken);
+        int outstandingCount = await CountOutstandingReservationsAsync(reservation.DriverId, now, cancellationToken);
         var overlapping = await database.Reservations.AnyAsync(
             existing => existing.DriverId == reservation.DriverId
                 && (existing.State == ReservationState.Active || existing.State == ReservationState.Consumed)
@@ -108,16 +109,13 @@ public sealed class CreateReservationCommandHandler(
         return Result.Ok();
     }
 
-    private async Task<int> ExpireOverdueReservationsAsync(
-        Guid driverId, DateTimeOffset now, CancellationToken cancellationToken)
-    {
-        var outstanding = await database.Reservations
-            .Where(existing => existing.DriverId == driverId && existing.State == ReservationState.Active)
-            .ToListAsync(cancellationToken);
-        await database.ExpireReservationsAsync(outstanding, now, cancellationToken);
-
-        return outstanding.Count(existing => existing.State == ReservationState.Active);
-    }
+    private Task<int> CountOutstandingReservationsAsync(
+        Guid driverId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        database.Reservations.CountAsync(
+            existing => existing.DriverId == driverId && existing.State == ReservationState.Active
+                && (existing.EndsAt > now || database.Sessions.Any(session => session.ReservationId == existing.Id
+                    && session.Lifecycle == SessionLifecycle.Starting)),
+            cancellationToken);
 
     private async Task<Result<ReservationResponse>> SaveReservationAsync(
         Reservation reservation, CancellationToken cancellationToken)
