@@ -7,7 +7,7 @@ import {
   type Reservation,
   type ReservationList,
 } from "../api";
-import { formatReservationSlot } from "../time-formatting";
+import { formatReservationSlot, getBrowserTimeZone } from "../time-formatting";
 import { ReservationFailure } from "./ReservationFailure";
 
 export function ReservationCancellationDialog({
@@ -68,14 +68,10 @@ export function ReservationCancellationDialog({
           {reservation.chargerName} · Connector {reservation.connectorNumber}
         </Text>
         <Text size="sm">
-          {formatReservationSlot(
-            reservation.startsAt,
-            reservation.endsAt,
-            reservation.timeZoneId,
-          )}
+          {formatReservationSlot(reservation.startsAt, reservation.endsAt)}
         </Text>
         <Text size="sm" c="dimmed">
-          Station time · {reservation.timeZoneId}
+          Your time · {getBrowserTimeZone()}
         </Text>
         <Text size="sm">
           This time slot will be available to other drivers.

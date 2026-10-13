@@ -12,12 +12,9 @@ const statuses = {
 export function ReservationStatus({
   reservation,
 }: {
-  reservation: Pick<
-    Reservation,
-    "state" | "cancelledAt" | "expiredAt" | "timeZoneId"
-  >;
+  reservation: Pick<Reservation, "state" | "cancelledAt" | "expiredAt">;
 }) {
-  const { state, cancelledAt, expiredAt, timeZoneId } = reservation;
+  const { state, cancelledAt, expiredAt } = reservation;
   const status = statuses[state];
   const recordedAt = state === "cancelled" ? cancelledAt : expiredAt;
 
@@ -33,8 +30,7 @@ export function ReservationStatus({
       </Badge>
       {recordedAt && (
         <Text size="xs" c="dimmed">
-          {status.label}{" "}
-          {formatReservationTransitionTime(recordedAt, timeZoneId)}
+          {status.label} {formatReservationTransitionTime(recordedAt)}
         </Text>
       )}
     </Stack>

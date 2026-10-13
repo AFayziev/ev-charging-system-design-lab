@@ -30,9 +30,8 @@ import {
   type BookingPolicy,
 } from "../api";
 import type { ReservationNavigationState } from "../navigation";
-import { formatTime } from "../time-formatting";
+import { getBrowserTimeZone } from "../time-formatting";
 import { ReservationFailure } from "./ReservationFailure";
-import { ReservationTimes } from "./ReservationTimes";
 import classes from "./Booking.module.css";
 
 interface BookingFormProps {
@@ -104,7 +103,7 @@ function ConfiguredBookingForm({
   const session = useQuery(sessionQuery);
   const client = useQueryClient();
   const navigate = useNavigate();
-  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const browserZone = getBrowserTimeZone();
   const compact = useMediaQuery("(max-width: 35.99em)");
   const [now, setNow] = useState(Date.now);
   const connectors = station.chargers.flatMap((charger) =>
@@ -187,7 +186,6 @@ function ConfiguredBookingForm({
       field === "endsAt" && afterStart.isAfter(minimum) ? afterStart : minimum;
     form.setFieldValue(field, initial.format("YYYY-MM-DD HH:mm:ss"));
   };
-  const preview = dayjs(start).isValid() && dayjs(end).isValid();
   const mutation = useMutation({
     mutationFn: (booking: Booking) =>
       createReservation(booking, session.data?.antiforgeryToken ?? ""),
@@ -236,6 +234,36 @@ function ConfiguredBookingForm({
             Book a connector
           </Title>
           {policyFailure}
+          <Alert
+            color="blue"
+            variant="light"
+            title="Booking limits"
+            icon={<IconInfoCircle size={18} aria-hidden="true" />}
+            role="region"
+            aria-label="Booking limits"
+          >
+            <Stack gap={4}>
+              <Text size="sm">
+                <Text component="span" fw={600}>
+                  Outstanding reservations:
+                </Text>{" "}
+                up to {policy.maximumOutstandingReservationsPerDriver}
+              </Text>
+              <Text size="sm">
+                <Text component="span" fw={600}>
+                  Maximum slot duration:
+                </Text>{" "}
+                {formatDuration(policy.maximumBookingDurationSeconds)}
+              </Text>
+              <Text size="sm">
+                <Text component="span" fw={600}>
+                  Book ahead:
+                </Text>{" "}
+                up to{" "}
+                {formatDuration(policy.maximumAdvanceBookingHorizonSeconds)}
+              </Text>
+            </Stack>
+          </Alert>
           <Select
             label="Connector"
             data={connectors}
@@ -311,39 +339,8 @@ function ConfiguredBookingForm({
             />
           </Stack>
           <Text size="xs" c="dimmed">
-            Up to {policy.maximumOutstandingReservationsPerDriver} outstanding{" "}
-            {policy.maximumOutstandingReservationsPerDriver === 1
-              ? "reservation"
-              : "reservations"}
-            . Slots up to {formatDuration(policy.maximumBookingDurationSeconds)}
-            ; book up to{" "}
-            {formatDuration(policy.maximumAdvanceBookingHorizonSeconds)} ahead.
+            Your time · {browserZone}
           </Text>
-          <Text size="xs" c="dimmed">
-            Station time · {station.timeZoneId}
-          </Text>
-          {browserZone !== station.timeZoneId && (
-            <Text size="xs" c="dimmed">
-              Enter times in {browserZone}, your browser time zone.
-            </Text>
-          )}
-          {preview && (
-            <details className={classes.timePreview}>
-              <summary>Review resolved times</summary>
-              <Stack gap="xs" mt="sm" aria-live="polite">
-                <Text size="sm">
-                  Resolved browser time:{" "}
-                  {formatTime(dayjs(start).toISOString(), browserZone)} →{" "}
-                  {formatTime(dayjs(end).toISOString(), browserZone)}
-                </Text>
-                <ReservationTimes
-                  startsAt={dayjs(start).toISOString()}
-                  endsAt={dayjs(end).toISOString()}
-                  timeZoneId={station.timeZoneId}
-                />
-              </Stack>
-            </details>
-          )}
           {mutation.isError && (
             <ReservationFailure error={mutation.error} booking />
           )}

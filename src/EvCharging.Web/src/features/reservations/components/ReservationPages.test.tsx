@@ -93,8 +93,8 @@ it("groups bookings by server state and links to their stations", async () => {
           id: "39f5e9a0-ead6-4243-b25d-9426434d4ab1",
           stationName: "South Station",
           state: "cancelled",
-          startsAt: "2026-10-10T22:45:00Z",
-          endsAt: "2026-10-11T00:30:00Z",
+          startsAt: "2026-10-11T18:45:00Z",
+          endsAt: "2026-10-11T20:30:00Z",
           cancelledAt: "2026-10-10T22:15:00Z",
         },
         {
@@ -104,7 +104,7 @@ it("groups bookings by server state and links to their stations", async () => {
           state: "expired",
           startsAt: "2026-10-09T12:30:00Z",
           endsAt: "2026-10-09T13:30:00Z",
-          expiredAt: "2026-10-09T17:00:00Z",
+          expiredAt: "2026-10-10T17:00:00Z",
         },
         {
           ...reservation,
@@ -132,8 +132,8 @@ it("groups bookings by server state and links to their stations", async () => {
   expect(active.getByText("Charger 1")).toBeVisible();
   expect(active.getByText("Connector 1")).toBeVisible();
   expect(active.getByText("Type 2 · AC · 22 kW")).toBeVisible();
-  expect(active.getByText("Tomorrow 13:30 - 14:30")).toBeVisible();
-  expect(active.getByText("Station time · Europe/London")).toBeVisible();
+  expect(active.getByText("Today 17:30 - 18:30")).toBeVisible();
+  expect(active.getByText("Your time · Asia/Tashkent")).toBeVisible();
   expect(active.queryByText("Expired")).not.toBeInTheDocument();
 
   const past = within(
@@ -141,12 +141,12 @@ it("groups bookings by server state and links to their stations", async () => {
   );
   expect(past.getByText("Cancelled")).toBeVisible();
   expect(past.getByText("Expired")).toBeVisible();
-  expect(past.getByText("Cancelled today at 23:15")).toBeVisible();
-  expect(past.getByText("Expired yesterday at 18:00")).toBeVisible();
+  expect(past.getByText("Cancelled today at 03:15")).toBeVisible();
+  expect(past.getByText("Expired yesterday at 22:00")).toBeVisible();
   expect(past.getByText("Consumed")).toBeVisible();
   expect(past.getByText("Today 23:45 - Tomorrow 01:30")).toBeVisible();
-  expect(past.getByText("Today 20:00 - 21:00")).toBeVisible();
-  expect(past.getByText("9 Oct 2026 13:30 - 14:30")).toBeVisible();
+  expect(past.getByText("Today 00:00 - 01:00")).toBeVisible();
+  expect(past.getByText("9 Oct 2026 17:30 - 18:30")).toBeVisible();
   expect(
     past.queryByRole("link", { name: "North Station" }),
   ).not.toBeInTheDocument();
@@ -180,6 +180,8 @@ it("retains the committed cancellation through stale refreshes and page remounts
   let dialog = within(
     await screen.findByRole("dialog", { name: "Cancel reservation?" }),
   );
+  expect(dialog.getByText("Today 17:30 - 18:30")).toBeVisible();
+  expect(dialog.getByText("Your time · Asia/Tashkent")).toBeVisible();
   await user.click(dialog.getByRole("button", { name: "Keep reservation" }));
   expect(post).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Cancel reservation" }));
@@ -190,7 +192,7 @@ it("retains the committed cancellation through stale refreshes and page remounts
     dialog.getByRole("button", { name: "Confirm cancellation" }),
   );
   expect(await screen.findByText("Cancelled")).toBeVisible();
-  expect(screen.getByText("Cancelled today at 23:30")).toBeVisible();
+  expect(screen.getByText("Cancelled today at 03:30")).toBeVisible();
   expect(post).toHaveBeenCalledWith(
     `/api/reservations/${reservation.id}/cancel`,
     undefined,
@@ -206,7 +208,7 @@ it("retains the committed cancellation through stale refreshes and page remounts
   unmount();
   setup(client);
   expect(await screen.findByText("Cancelled")).toBeVisible();
-  expect(screen.getByText("Cancelled today at 23:30")).toBeVisible();
+  expect(screen.getByText("Cancelled today at 03:30")).toBeVisible();
   expect(screen.queryByText("Active reservation")).not.toBeInTheDocument();
 });
 
@@ -292,11 +294,11 @@ it("preserves cancellation when the initial list response arrives after the muta
     });
     await initialRead;
   });
-  expect(screen.getByText("Cancelled today at 23:30")).toBeVisible();
+  expect(screen.getByText("Cancelled today at 03:30")).toBeVisible();
   expect(screen.queryByText("Active reservation")).not.toBeInTheDocument();
   unmount();
   setup(client);
-  expect(await screen.findByText("Cancelled today at 23:30")).toBeVisible();
+  expect(await screen.findByText("Cancelled today at 03:30")).toBeVisible();
   expect(screen.queryByText("Active reservation")).not.toBeInTheDocument();
 });
 

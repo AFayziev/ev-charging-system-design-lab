@@ -115,6 +115,21 @@ For externally referenced resources:
   every persisted record.
 - Preserve resource authorization independently of identifier predictability.
 
+## Verification scope
+
+Match verification to the changed behavior and affected boundaries:
+
+- For styling or text changes, inspect the affected UI in the browser.
+- For frontend behavior, run relevant component tests and typechecking.
+- For API, persistence, or cross-component behavior, run relevant integration or
+  E2E scenarios.
+- Broaden to a wider suite when the affected scope, shared behavior, unresolved
+  risks, or required completion checks justify it. Do not run the entire E2E suite
+  automatically after every small change.
+
+Batch related E2E scenarios into one invocation to share stack startup and teardown.
+Do not repeat successful checks unless further changes or new findings affect them.
+
 ## Frontend
 
 Organize code by feature: application composition in `app`, feature-owned UI and
@@ -123,6 +138,13 @@ tests with the code they cover; add directories as their contents are needed.
 
 Use `@/` imports across application areas and relative imports for nearby files
 within an area or feature.
+
+Before frontend changes, check existing application and UI components library for
+a suitable component and variant. Prefer their provided behavior and styling
+when they fit the purpose. Choose colours, icons, and accents by meaning:
+information, success, warning, error, action, or neutral content. Use established
+semantic styling consistently; do not default every element to the global brand
+accent.
 
 ### Validation and errors
 

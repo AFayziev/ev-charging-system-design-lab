@@ -184,8 +184,8 @@ it("shows the created booking once and clears feedback on reload", async () => {
     connectorType: "Type2",
     powerSupply: "AC",
     ratedPowerKW: 22,
-    startsAt: "2029-01-10T10:00:00Z",
-    endsAt: "2029-01-10T11:00:00Z",
+    startsAt: "2029-01-10T05:00:00Z",
+    endsAt: "2029-01-10T06:00:00Z",
     state: "active",
     createdAt: "2029-01-02T10:00:00Z",
     cancelledAt: null,
@@ -200,6 +200,7 @@ it("shows the created booking once and clears feedback on reload", async () => {
   post.mockResolvedValue({ data: saved });
   const view = setup();
   await fill();
+  expect(screen.getByText("Your time · Asia/Tashkent")).toBeVisible();
   await waitFor(() =>
     expect(
       screen.getByRole("button", { name: "Reserve connector" }),
@@ -222,6 +223,8 @@ it("shows the created booking once and clears feedback on reload", async () => {
   expect(
     screen.getByRole("link", { name: "Authoritative name" }),
   ).toHaveAttribute("href", "/stations/station");
+  expect(screen.getByText("10 Jan 2029 10:00 - 11:00")).toBeVisible();
+  expect(screen.getByText("Your time · Asia/Tashkent")).toBeVisible();
   expect(post).toHaveBeenCalledWith(
     "/api/reservations",
     {
@@ -302,15 +305,15 @@ it("applies refreshed policy limits without losing the booking draft", async () 
   const { client } = setup();
   await fill();
   expect(
-    screen.getByText(/Up to 3 outstanding reservations/),
-  ).toHaveTextContent("Slots up to 2 hours");
+    screen.getByRole("region", { name: "Booking limits" }),
+  ).toHaveTextContent("Maximum slot duration: 2 hours");
   get.mockImplementation(async (path: string) =>
     path === "/api/reservations/booking-policy"
       ? { data: { ...policy, maximumBookingDurationSeconds: 30 * 60 } }
       : respond(path),
   );
   await client.invalidateQueries({ queryKey: reservationKeys.bookingPolicy });
-  await screen.findByText(/Slots up to 30 minutes/);
+  await screen.findByText(/30 minutes/);
   expect(screen.getByRole("button", { name: "End time" })).toHaveTextContent(
     "10 Jan 2029, 11:00",
   );
@@ -327,7 +330,7 @@ it("applies refreshed policy limits without losing the booking draft", async () 
       : respond(path),
   );
   await client.invalidateQueries({ queryKey: reservationKeys.bookingPolicy });
-  await screen.findByText(/book up to 1 day ahead/);
+  await screen.findByText(/up to 1 day/);
   await userEvent.click(screen.getByRole("button", { name: "Start time" }));
   expect(
     await screen.findByRole("button", { name: "10 January 2029" }),

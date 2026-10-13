@@ -64,9 +64,12 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     [Trait("Category", "Browser")]
     public async Task Book_Driver_CreatesAuditedBookingAndClearsFeedbackOnReload()
     {
+        var browserTimeZone = Environment.GetEnvironmentVariable("TZ");
+        ArgumentException.ThrowIfNullOrWhiteSpace(browserTimeZone, "TZ");
+
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync(new() { TimezoneId = "Europe/London" });
+        var page = await browser.NewPageAsync(new() { TimezoneId = browserTimeZone });
         await fixture.LoginAsync(page, "driver");
         await page.GetByRole(AriaRole.Link, new() { Name = "View North Station", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Radio, new() { Name = "Connector", Exact = false }).First.ClickAsync();
@@ -80,11 +83,13 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         Assert.Equal(
             AppHostFixture.BookingLimits.MaximumAdvanceBookingHorizon.TotalSeconds,
             policy.GetProperty("maximumAdvanceBookingHorizonSeconds").GetDouble());
-        await Expect(page.GetByText("Up to 4 outstanding reservations.", new() { Exact = false }))
-            .ToContainTextAsync("Slots up to 3 hours; book up to 20 days ahead.");
+        var bookingLimits = page.GetByRole(AriaRole.Region, new() { Name = "Booking limits" });
+        await Expect(bookingLimits).ToContainTextAsync("Outstanding reservations: up to 4");
+        await Expect(bookingLimits).ToContainTextAsync("Maximum slot duration: 3 hours");
+        await Expect(bookingLimits).ToContainTextAsync("Book ahead: up to 20 days");
         var startsAt = DateTimeOffset.UtcNow.AddDays(10);
         var endsAt = startsAt.AddHours(1);
-        var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(browserTimeZone);
         string startInput = TimeZoneInfo.ConvertTime(startsAt, zone).ToString(
             "yyyy-MM-ddTHH:mm",
             CultureInfo.InvariantCulture);
@@ -107,15 +112,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "End time", Exact = true }))
             .ToHaveTextAsync(DisplayTime(endInput));
         await page.GetByRole(AriaRole.Radio, new() { Name = "Connector", Exact = false }).First.ClickAsync();
-        await page.GetByText("Review resolved times", new() { Exact = true }).ClickAsync();
-        await Expect(page.GetByText("Resolved browser time:", new() { Exact = false })).ToBeVisibleAsync();
-        string browserPreview = await page.GetByText("Resolved browser time:", new() { Exact = false })
-            .InnerTextAsync();
-        string stationStart = await page.GetByText("Start:", new() { Exact = false }).InnerTextAsync();
-        string stationEnd = await page.GetByText("End:", new() { Exact = false }).InnerTextAsync();
-        Assert.Contains(stationStart["Start: ".Length..], browserPreview, StringComparison.Ordinal);
-        Assert.Contains(stationEnd["End: ".Length..], browserPreview, StringComparison.Ordinal);
-        await page.GetByText("Review resolved times", new() { Exact = true }).ClickAsync();
+        await Expect(page.GetByText($"Your time · {browserTimeZone}", new() { Exact = true })).ToBeVisibleAsync();
         await CaptureAsync(page, "booking");
         await CaptureAsync(page, "booking-picker", openPicker: true);
         await page.GetByRole(AriaRole.Button, new() { Name = "Reserve connector" }).ClickAsync();
@@ -165,6 +162,13 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         await Expect(page.GetByText("1 Synthetic Avenue, Demo North Quarter, London", new() { Exact = true }))
             .ToBeVisibleAsync();
         await Expect(page.GetByText("Type 2 · AC · 22 kW", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(page.GetByText($"Your time · {browserTimeZone}", new() { Exact = true })).ToBeVisibleAsync();
+        var localStart = TimeZoneInfo.ConvertTime(start, zone);
+        var localEnd = TimeZoneInfo.ConvertTime(end, zone);
+        string endFormat = localStart.Date == localEnd.Date ? "HH:mm" : "d MMM yyyy HH:mm";
+        string localSlot = localStart.ToString("d MMM yyyy HH:mm", CultureInfo.InvariantCulture)
+            + " - " + localEnd.ToString(endFormat, CultureInfo.InvariantCulture);
+        await Expect(page.GetByText(localSlot, new() { Exact = true })).ToBeVisibleAsync();
         await CaptureAsync(page, "reservation-list");
         await page.ReloadAsync();
         await Expect(page.GetByText("Reservation created.", new() { Exact = true })).ToHaveCountAsync(0);
@@ -188,7 +192,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync(new() { TimezoneId = "Europe/London" });
+        var page = await browser.NewPageAsync();
         await fixture.LoginAsync(page, "driver");
         var connector = await NorthConnectorAsync();
         string connectorId = connector.PublicId.ToString();
@@ -509,7 +513,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync(new() { TimezoneId = "Europe/London" });
+        var page = await browser.NewPageAsync();
         await fixture.LoginAsync(page, "driver");
         string connectorId = (await NorthConnectorAsync()).PublicId.ToString();
         var end = DateTimeOffset.UtcNow.AddDays(10);
@@ -551,7 +555,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync(new() { TimezoneId = "Europe/London" });
+        var page = await browser.NewPageAsync();
         await fixture.LoginAsync(page, "driver");
         var storage = Storage;
         var connector = await NorthConnectorAsync();
@@ -635,7 +639,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     {
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
-        var page = await browser.NewPageAsync(new() { TimezoneId = "Europe/London" });
+        var page = await browser.NewPageAsync();
         await fixture.LoginAsync(page, "driver");
         var storage = Storage;
         var driver = Driver;

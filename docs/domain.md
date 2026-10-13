@@ -284,9 +284,13 @@ same frozen facts; file or notification failure does not change completion.
 | Last observed at | Source occurrence time of the accepted current observation |
 | Deadline | Persisted instant after which an eligibility/recovery rule applies |
 
-Instants are UTC. Stations retain a named time zone for local display and booking
-interpretation; local wall time alone is insufficient across daylight-saving
-changes. Normal simulator clocks share the lab UTC clock. Clock skew can be
+Instants are UTC. Driver booking inputs, reservation slots, and lifecycle timestamps
+use the browser's local time zone, explicitly labelled in the UI. Relative day
+labels such as today, tomorrow, and yesterday use that same zone. Browser-local
+booking times resolve to UTC instants. Stations retain a named time zone as site
+metadata; station time does not reinterpret browser-local input. Local wall time
+alone is insufficient across daylight-saving changes.
+Normal simulator clocks share the lab UTC clock. Clock skew can be
 injected; infrastructure time synchronization is outside scope.
 
 ### 8.2 Identity and idempotency

@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { StationPhoto } from "@/features/stations/components/StationPhoto";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
 import type { Reservation } from "../api";
-import { formatReservationSlot } from "../time-formatting";
+import { formatReservationSlot, getBrowserTimeZone } from "../time-formatting";
 import { ReservationStatus } from "./ReservationStatus";
 import classes from "./Reservations.module.css";
 
@@ -21,7 +21,6 @@ export function ReservationCard({
   const timeRange = formatReservationSlot(
     reservation.startsAt,
     reservation.endsAt,
-    reservation.timeZoneId,
   );
 
   return (
@@ -68,7 +67,7 @@ export function ReservationCard({
           <Text size="sm">{timeRange}</Text>
         </div>
         <Text size="xs" c="dimmed">
-          Station time · {reservation.timeZoneId}
+          Your time · {getBrowserTimeZone()}
         </Text>
         <ReservationStatus reservation={reservation} />
       </Stack>

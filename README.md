@@ -192,6 +192,13 @@ dotnet test tests/EvCharging.Persistence.Tests
 
 ### Frontend component tests
 
+Supply the browser timezone fixture through the process environment before
+starting either mode:
+
+```powershell
+$env:TZ = "Asia/Tashkent"
+```
+
 | Mode | Command |
 |---|---|
 | Single run | `npm --prefix src/EvCharging.Web run test` |
@@ -201,6 +208,8 @@ dotnet test tests/EvCharging.Persistence.Tests
 
 - Isolated Aspire application and disposable container data.
 - Require Docker, frontend dependencies, and Chromium.
+- Supply `TZ` through the process environment for the browser-time booking journey,
+  as shown under [frontend component tests](#frontend-component-tests).
 
 1. Build the test project:
 
