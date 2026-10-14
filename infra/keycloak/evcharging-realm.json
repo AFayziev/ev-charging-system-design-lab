@@ -3,6 +3,8 @@
   "realm": "evcharging",
   "displayName": "EV Charging Lab",
   "enabled": true,
+  "ssoSessionIdleTimeout": 28800,
+  "ssoSessionMaxLifespan": 86400,
   "sslRequired": "none",
   "registrationAllowed": true,
   "registrationEmailAsUsername": true,
