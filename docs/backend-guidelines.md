@@ -216,6 +216,11 @@ retain their prescribed names and signatures.
   consistency and permissions: writes and authoritative permission/concurrency
   reads use the writer. Verify database roles and audit participation; do not
   broaden grants to hide wrong context selection.
+- Map persisted state, lifecycle, outcome, and kind enums to native PostgreSQL
+  types through shared persistence registration, including EF options and external data sources.
+  Use mapped labels in SQL predicates. Native enum types replace redundant
+  allowed-value checks; retain business constraints and partial-index predicates.
+  Treat mapped labels as persisted contracts; renames and removals require explicit migrations.
 - Handlers load entities, invoke business operations, and persist accepted changes.
   The shared persistence pipeline captures ordinary change audits and commits them
   atomically. Handlers coordinate durable effects. Query handlers may project

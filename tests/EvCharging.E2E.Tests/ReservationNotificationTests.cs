@@ -285,7 +285,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         await Database.Database.ExecuteSqlRawAsync("""
             CREATE FUNCTION charging.reject_test_notification_outcome() RETURNS trigger LANGUAGE plpgsql AS $$
             BEGIN
-                IF NEW.outcome = 2 AND EXISTS (
+                IF NEW.outcome = 'captured' AND EXISTS (
                     SELECT 1 FROM charging.notifications
                     WHERE id = NEW.notification_id AND recipient_email = 'outcome-failure@example.test') THEN
                     RAISE EXCEPTION 'Injected capture-outcome persistence failure';

@@ -1,5 +1,6 @@
 using EvCharging.Gateway.Persistence;
 using EvCharging.Persistence;
+using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -11,6 +12,7 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
 {
     private readonly string _password = Guid.NewGuid().ToString("N");
     private readonly PostgreSqlContainer _postgres;
+    private readonly Dictionary<string, NpgsqlDataSource> _dataSources = [];
 
     public PlatformDatabaseFixture()
     {
@@ -29,7 +31,9 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
             .Build();
     }
 
-    public NpgsqlConnection CreateConnection(string role)
+    public NpgsqlConnection CreateConnection(string role) => GetDataSource(role).CreateConnection();
+
+    public string GetConnectionString(string role)
     {
         var options = new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString())
         {
@@ -37,7 +41,19 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
             Password = _password
         };
 
-        return new(options.ConnectionString);
+        return options.ConnectionString;
+    }
+
+    public NpgsqlDataSource GetDataSource(string role)
+    {
+        if (_dataSources.TryGetValue(role, out var existing))
+        {
+            return existing;
+        }
+
+        var dataSource = new NpgsqlDataSourceBuilder(GetConnectionString(role)).MapPlatformEnums().Build();
+        _dataSources.Add(role, dataSource);
+        return dataSource;
     }
 
     public async Task InitializeAsync()
@@ -58,7 +74,15 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
         await platform.Database.MigrateAsync(timeout.Token);
     }
 
-    public async Task DisposeAsync() => await _postgres.DisposeAsync();
+    public async Task DisposeAsync()
+    {
+        foreach (var dataSource in _dataSources.Values)
+        {
+            await dataSource.DisposeAsync();
+        }
+
+        await _postgres.DisposeAsync();
+    }
 
     public async Task ReprovisionAsync(CancellationToken cancellationToken = default)
     {

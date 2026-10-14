@@ -3,6 +3,7 @@ using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence.Entities;
+using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Persistence;
@@ -41,7 +42,7 @@ public class PlatformDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseSnakeCaseNamingConvention()
-            .UseNpgsql(postgres => postgres.MigrationsHistoryTable("ef_migrations_history", Schema)
+            .UseNpgsql(postgres => postgres.MapPlatformEnums().MigrationsHistoryTable("ef_migrations_history", Schema)
                 .MigrationsAssembly("EvCharging.Persistence.Migrations"));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

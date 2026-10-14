@@ -1,5 +1,6 @@
 using EvCharging.Persistence;
 using EvCharging.Persistence.Auditing;
+using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -23,7 +24,9 @@ internal static class PlatformPersistenceExtensions
                 throw new InvalidOperationException($"The {route} connection is required.");
             }
 
-            builder.Services.AddKeyedSingleton(route, (_, _) => NpgsqlDataSource.Create(connection));
+            builder.Services.AddKeyedSingleton(
+                route,
+                (_, _) => new NpgsqlDataSourceBuilder(connection).MapPlatformEnums().Build());
         }
 
         builder.Services.AddDbContext<PlatformReadDbContext>((services, options) =>

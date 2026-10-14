@@ -21,10 +21,10 @@ internal sealed class ChargingSessionConfiguration : IEntityTypeConfiguration<Ch
         entity.Property(session => session.ConnectorId).IsAudited();
         entity.Property(session => session.Lifecycle).IsAudited();
         entity.HasIndex(session => session.ConnectorId).IsUnique()
-            .HasFilter("lifecycle IN (0, 1, 2)")
+            .HasFilter("lifecycle IN ('starting', 'active', 'stopping')")
             .HasDatabaseName(ConnectorClaimIndexName);
         entity.HasIndex(session => session.ReservationId).IsUnique()
-            .HasFilter("lifecycle <> 4")
+            .HasFilter("lifecycle <> 'failed'")
             .HasDatabaseName(ReservationClaimIndexName);
         entity.HasOne(session => session.Reservation)
             .WithMany()

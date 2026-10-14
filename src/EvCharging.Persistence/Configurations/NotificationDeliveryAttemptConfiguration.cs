@@ -16,7 +16,6 @@ internal sealed class NotificationDeliveryAttemptConfiguration : IEntityTypeConf
         entity.ToTable(table =>
         {
             table.HasCheckConstraint("ck_notification_delivery_attempts_number", "number > 0");
-            table.HasCheckConstraint("ck_notification_delivery_attempts_outcome", "outcome IN (1, 2, 3, 4)");
             table.HasCheckConstraint("ck_notification_delivery_attempts_provider", "length(provider) > 0");
             table.HasCheckConstraint(
                 "ck_notification_delivery_attempts_times",
@@ -24,10 +23,10 @@ internal sealed class NotificationDeliveryAttemptConfiguration : IEntityTypeConf
                 + "OR (isfinite(completed_at) AND completed_at >= started_at))");
             table.HasCheckConstraint(
                 "ck_notification_delivery_attempts_evidence",
-                "outcome = 1 OR completed_at IS NOT NULL");
+                "outcome = 'uncertain' OR completed_at IS NOT NULL");
             table.HasCheckConstraint(
                 "ck_notification_delivery_attempts_capture",
-                "(outcome = 2) = (external_message_id IS NOT NULL) "
+                "(outcome = 'captured') = (external_message_id IS NOT NULL) "
                 + "AND (external_message_id IS NULL OR length(external_message_id) > 0)");
         });
     }

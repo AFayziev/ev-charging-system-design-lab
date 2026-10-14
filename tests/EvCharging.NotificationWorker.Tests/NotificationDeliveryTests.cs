@@ -107,17 +107,16 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
         builder.Services.AddApplicationServices();
         builder.Services.AddSingleton<INotificationDelivery>(delivery);
         builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
-        using var runtimeConnection = fixture.CreateConnection("notification_messaging");
         builder.Services.AddDbContext<PlatformDbContext>(
-            options => options.UseNpgsql(runtimeConnection.ConnectionString));
-        using var storageOwner = fixture.CreateConnection("platform_migrator");
+            options => options.UseNpgsql(fixture.GetDataSource("notification_messaging")));
         builder.UseWolverine(options =>
         {
             options.UseEntityFrameworkCoreTransactions();
             options.Discovery.DisableConventionalDiscovery();
             options.Discovery.IncludeType(typeof(SendNotificationHandler));
             options.CodeGeneration.AlwaysUseServiceLocationFor<INotificationDelivery>();
-            options.PersistMessagesWithPostgresql(storageOwner.ConnectionString, "notification_messages");
+            options.PersistMessagesWithPostgresql(
+                fixture.GetConnectionString("platform_migrator"), "notification_messages");
             options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
             options.StubAllExternalTransports();
             options.Policies.UseDurableLocalQueues();
@@ -186,8 +185,8 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
 
     private PlatformDbContext CreateDatabase()
     {
-        using var connection = fixture.CreateConnection("notification_messaging");
-        return new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connection.ConnectionString).Options);
+        return new(new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(fixture.GetDataSource("notification_messaging")).Options);
     }
 
     private async Task<Notification> PrepareAsync()

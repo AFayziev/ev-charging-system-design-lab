@@ -22,6 +22,5 @@ internal sealed class ReservationNotificationConfiguration : IEntityTypeConfigur
         entity.HasIndex(value => new { value.ReservationId, value.Kind })
             .IsUnique()
             .HasDatabaseName(ReservationKindIndexName);
-        entity.ToTable(table => table.HasCheckConstraint("ck_reservation_notifications_kind", "kind IN (0, 1, 2)"));
     }
 }

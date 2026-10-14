@@ -209,7 +209,7 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
             INSERT INTO charging.reservations
                 (id, connector_id, driver_id, starts_at, ends_at, arrival_deadline, state, created_at)
             VALUES (uuidv7(), {connector.Id}, {driver.Id}, {startsAt}, {startsAt.AddHours(1)},
-                {startsAt.AddMinutes(10)}, {(int)state}, {startsAt})
+                {startsAt.AddMinutes(10)}, {state}, {startsAt})
             """);
         database.Reservations.Add(Booking(connector, competingDriver, startsAt.AddMinutes(30), startsAt.AddHours(2)));
         if (conflicts)
@@ -305,7 +305,7 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
             INSERT INTO charging.reservations
                 (id, connector_id, driver_id, starts_at, ends_at, arrival_deadline, state, created_at)
             VALUES (uuidv7(), @connector, @driver, CAST(@start AS timestamptz), CAST(@end AS timestamptz),
-                CAST(@start AS timestamptz) + interval '10 minutes', 0, now())
+                CAST(@start AS timestamptz) + interval '10 minutes', 'active', now())
             """,
             connection);
         command.Parameters.AddWithValue("connector", connector.Id);

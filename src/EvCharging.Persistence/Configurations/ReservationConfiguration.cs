@@ -28,9 +28,10 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
                 "ck_reservations_arrival_deadline",
                 "isfinite(arrival_deadline) AND starts_at < arrival_deadline AND arrival_deadline <= ends_at");
             table.HasCheckConstraint(
-                "ck_reservations_cancelled_at", "cancelled_at IS NULL OR (state = 2 AND isfinite(cancelled_at))");
+                "ck_reservations_cancelled_at",
+                "cancelled_at IS NULL OR (state = 'cancelled' AND isfinite(cancelled_at))");
             table.HasCheckConstraint(
-                "ck_reservations_expired_at", "expired_at IS NULL OR (state = 3 AND isfinite(expired_at))");
+                "ck_reservations_expired_at", "expired_at IS NULL OR (state = 'expired' AND isfinite(expired_at))");
         });
         entity.HasOne(reservation => reservation.Connector)
             .WithMany()
@@ -43,6 +44,6 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
         entity.HasIndex(reservation => new { reservation.ConnectorId, reservation.StartsAt });
         entity.HasIndex(reservation => new { reservation.DriverId, reservation.State, reservation.EndsAt });
         entity.HasIndex(reservation => new { reservation.EndsAt, reservation.Id })
-            .HasFilter("state = 0");
+            .HasFilter("state = 'active'");
     }
 }
