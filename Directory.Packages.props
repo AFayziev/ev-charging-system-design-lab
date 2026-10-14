@@ -20,6 +20,7 @@
     <PackageVersion Include="Aspire.Hosting.Valkey" Version="13.6.0" />
     <PackageVersion Include="AWSSDK.S3" Version="4.0.104.1" />
     <PackageVersion Include="CommunityToolkit.Aspire.Hosting.Elasticsearch.Extensions" Version="13.6.0" />
+    <PackageVersion Include="CommunityToolkit.Aspire.Hosting.MailPit" Version="13.6.0" />
     <PackageVersion Include="Confluent.Kafka" Version="2.15.1" />
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.3" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />

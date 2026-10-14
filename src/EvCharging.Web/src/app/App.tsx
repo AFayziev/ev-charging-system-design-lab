@@ -32,6 +32,7 @@ import { StationDetailPage } from "@/features/stations/components/StationDetailP
 import { StationEditPage } from "@/features/stations/components/StationEditPage";
 import { AssignedStationsPage } from "@/features/stations/components/AssignedStationsPage";
 import { ReservationsPage } from "@/features/reservations/components/ReservationsPage";
+import { SignInErrorPage } from "@/features/auth/components/SignInErrorPage";
 
 import { PageHeading } from "@/components/PageHeading";
 import { Activity, type ReactNode } from "react";
@@ -235,6 +236,7 @@ export function App() {
           <SentryRoutes>
             <Route path="/" element={<Navigate to="/stations" replace />} />
             <Route path="/stations" element={<StationListPage />} />
+            <Route path="/sign-in-error" element={<SignInErrorPage />} />
             <Route
               path="/stations/:stationId"
               element={

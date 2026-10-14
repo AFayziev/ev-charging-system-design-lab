@@ -4,8 +4,20 @@
   "displayName": "EV Charging Lab",
   "enabled": true,
   "sslRequired": "none",
-  "registrationAllowed": false,
-  "resetPasswordAllowed": false,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "verifyEmail": true,
+  "resetPasswordAllowed": true,
+  "defaultRoles": ["driver"],
+  "smtpServer": {
+    "host": "${REGISTRATION_SMTP_HOST}",
+    "port": "${REGISTRATION_SMTP_PORT}",
+    "from": "accounts@example.test",
+    "fromDisplayName": "EV Charging",
+    "ssl": "false",
+    "starttls": "false",
+    "auth": "false"
+  },
   "roles": {
     "realm": [
       { "name": "driver" },

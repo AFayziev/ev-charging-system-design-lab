@@ -507,6 +507,15 @@ on the application's public origin. Server-side protocol exchanges use internal
 connectivity; the provider's public issuer remains the token-validation identity.
 Identity administration uses restricted access independent of browser login routes.
 
+After identity verification, the gateway requests driver-profile provisioning from
+the API before establishing the browser session. The API owns the profile and
+stores the verified email from the validated identity. Issuer and subject uniquely
+identify the account; repeated provisioning returns the existing profile without
+changing its email. Identity registration and platform provisioning are separate
+transactions. A provisioning failure leaves browser sign-in incomplete, and a
+subsequent sign-in can retry without duplicating the profile. Verified account
+email changes use a separate synchronization flow.
+
 A relational session store holds authentication and protected token state shared
 by gateway replicas. The browser receives a protected session-reference cookie.
 Store unavailability fails authenticated

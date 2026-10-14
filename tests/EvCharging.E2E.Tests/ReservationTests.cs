@@ -471,11 +471,8 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         var owner = Driver;
         if (scenario == "foreign")
         {
-            owner = new Driver
-            {
-                IdentityIssuer = Driver.IdentityIssuer,
-                IdentitySubject = Guid.NewGuid().ToString()
-            };
+            owner = Driver.Register(
+                Driver.IdentityIssuer, Guid.NewGuid().ToString(), EmailAddress.Create("foreign@example.test").Value);
         }
 
         var reservation = Reservation.Book(
@@ -595,11 +592,8 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
 
         await storage.SaveChangesAsync();
         var accepted = created[0];
-        var foreignDriver = new Driver
-        {
-            IdentityIssuer = Driver.IdentityIssuer,
-            IdentitySubject = Guid.NewGuid().ToString()
-        };
+        var foreignDriver = Driver.Register(
+            Driver.IdentityIssuer, Guid.NewGuid().ToString(), EmailAddress.Create("foreign@example.test").Value);
         var foreignBooking = Reservation.Book(
             connector,
             foreignDriver,

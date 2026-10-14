@@ -122,6 +122,7 @@ api.WithReference(identity.GetEndpoint("http"))
     .WithEnvironment("ApiAuthentication__AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false");
 
 gateway.WithEnvironment("BrowserAuthentication__PublicOrigin", gatewayPublicOrigin)
+    .WithEnvironment("BrowserAuthentication__SignInErrorPath", "/sign-in-error")
     .WithEnvironment("BrowserAuthentication__Authority", identityAuthority)
     .WithEnvironment("BrowserAuthentication__MetadataAddress", IdentityMetadataAddress)
     .WithEnvironment("BrowserAuthentication__ClientId", "evcharging-gateway")

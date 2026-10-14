@@ -18,7 +18,7 @@ internal static class BrowserAuthentication
         page.SetDefaultTimeout(30_000);
         await page.GotoAsync(new Uri(fixture.App.GetEndpoint("frontend", "http"), "/auth/login?returnUrl=/stations")
             .AbsoluteUri);
-        await page.GetByLabel("Username or email").FillAsync(username);
+        await page.GetByLabel("Email", new() { Exact = true }).FillAsync($"{username}@example.test");
         await page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
         await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Account menu" })).ToBeVisibleAsync();

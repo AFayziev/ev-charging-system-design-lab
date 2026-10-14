@@ -1,3 +1,4 @@
+using EvCharging.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -5,6 +6,13 @@ namespace EvCharging.Persistence.Extensions;
 
 public static class ExceptionExtensions
 {
+    public static bool IsDriverIdentityConflict(this DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: DriverConfiguration.IdentityIndexName
+        };
+
     public static bool IsTransientDatabaseFailure(this Exception exception) => exception switch
     {
         NpgsqlException postgres => postgres.IsTransient,

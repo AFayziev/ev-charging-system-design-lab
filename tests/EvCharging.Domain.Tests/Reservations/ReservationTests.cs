@@ -17,12 +17,8 @@ public sealed class ReservationTests
         ConnectorType = "Type2",
         PowerSupply = "AC"
     };
-    private static readonly Driver Driver = new()
-    {
-        Id = Guid.NewGuid(),
-        IdentityIssuer = "https://test.invalid",
-        IdentitySubject = "driver"
-    };
+    private static readonly Driver Driver = Driver.Register(
+        "https://test.invalid", "driver", EmailAddress.Create("driver@example.test").Value);
 
     [Theory]
     [InlineData(0)]

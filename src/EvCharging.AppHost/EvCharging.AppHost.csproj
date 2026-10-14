@@ -16,6 +16,7 @@
     <PackageReference Include="Aspire.Hosting.RabbitMQ" />
     <PackageReference Include="Aspire.Hosting.Kafka" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.Elasticsearch.Extensions" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.MailPit" />
     <ProjectReference Include="../EvCharging.Gateway/EvCharging.Gateway.csproj" />
     <ProjectReference Include="../EvCharging.Gateway.Migrations/EvCharging.Gateway.Migrations.csproj" />
     <ProjectReference Include="../EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />

@@ -82,6 +82,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 |---|---|
 | pgAdmin | Application and identity PostgreSQL servers |
 | Keycloak Admin Console | Identity provider |
+| Mailpit (`registration-mail`) | Captured account-verification emails |
 | Mongo Express | MongoDB |
 | Kafbat UI | Kafka |
 | Valkey Admin | Valkey |
@@ -92,6 +93,19 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 - Valkey Admin **Add Connection**: `valkey:6379`, user `default`,
   `valkey-password`, TLS disabled.
 - RabbitMQ login: configured resource credentials.
+
+### Driver registration
+
+Choose **Sign in**, then **Register** on the identity-provider page. Register with
+an email address, then open the verification email through the
+dashboard's `registration-mail` HTTP endpoint and set a password. Completing
+verification and sign-in creates the required driver profile. Later sign-ins reuse it.
+
+An existing Keycloak realm is retained across restarts. Apply registration and SMTP
+changes through its Admin Console; the source configuration is
+[the realm definition](infra/keycloak/evcharging-realm.json), and SMTP connection
+values come from the Keycloak resource environment. Restart does not reimport
+an existing realm. Account-email changes are a separate delivery task.
 
 ### Detached execution
 

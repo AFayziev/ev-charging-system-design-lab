@@ -33,6 +33,14 @@ diagnostic bundles. An operator role does not grant access to every station.
 Account administration, assignment-management workflows, and manual overrides of
 physical charging state are outside the feature set.
 
+Driver registration requires a verified email, whether credentials are managed
+by the identity provider or obtained through a supported external sign-in provider.
+The platform creates a driver profile before granting access to driver workflows.
+Email is required on that profile. Signing in, creating a reservation, and
+cancelling a reservation do not change it. Notifications use the driver's current
+stored email when prepared. Account email changes require verification and explicit
+synchronization to the profile.
+
 Station content edits reject a stale editor version rather than overwrite changes
 saved after that version was loaded. Rejected edits do not create a saved-change audit record.
 

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EvCharging.Domain.Equipment;
+using EvCharging.Domain.Identity;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,11 +20,20 @@ public static class LabDataSeeder
         var driverSubject = SubjectForRole(users, "driver");
         var operatorSubject = SubjectForRole(users, "operator");
 
+        var seedDriver = UserForRole(users, "driver");
+        string email = seedDriver.GetProperty("email").GetString()
+            ?? throw new InvalidOperationException("The driver seed user requires an email address.");
+        var address = EmailAddress.Create(email);
+        if (address.IsFailed || !seedDriver.GetProperty("emailVerified").GetBoolean())
+        {
+            throw new InvalidOperationException("The driver seed user requires a valid verified email address.");
+        }
+
         if (!await context.Drivers.AnyAsync(
             driver => driver.IdentityIssuer == identityIssuer && driver.IdentitySubject == driverSubject,
             cancellationToken))
         {
-            context.Drivers.Add(new() { IdentityIssuer = identityIssuer, IdentitySubject = driverSubject });
+            context.Drivers.Add(Driver.Register(identityIssuer, driverSubject, address.Value));
         }
 
         var operatorUser = await context.OperatorUsers.SingleOrDefaultAsync(
@@ -173,8 +183,10 @@ public static class LabDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static string SubjectForRole(JsonElement users, string role) => users.EnumerateArray()
-        .Single(user => user.GetProperty("realmRoles").EnumerateArray().Any(value => value.GetString() == role))
+    private static JsonElement UserForRole(JsonElement users, string role) => users.EnumerateArray()
+        .Single(user => user.GetProperty("realmRoles").EnumerateArray().Any(value => value.GetString() == role));
+
+    private static string SubjectForRole(JsonElement users, string role) => UserForRole(users, role)
         .GetProperty("id")
         .GetString() ?? throw new InvalidOperationException($"The {role} seed user requires a subject ID.");
 

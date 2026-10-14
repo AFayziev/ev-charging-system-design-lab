@@ -200,6 +200,12 @@ access.
 - [ ] M02.08 Optional, after M02.06 and an established frontend visual design:
   customize the Keycloak login theme to match the application's branding and
   verify authentication flows with the themed pages.
+- [x] M02.09 After M02.05 and M03.03: deliver driver registration with required
+  verified email, idempotent profile provisioning before browser sign-in, and
+  local verification-email capture. Verify registration and repeated sign-in
+  with real dependencies, retaining existing synthetic account identities.
+- [ ] M02.10 After M02.09: deliver verified account-email changes and explicit
+  synchronization to the stored driver profile.
 
 ### M03 — Domain and seeded persistence baseline
 

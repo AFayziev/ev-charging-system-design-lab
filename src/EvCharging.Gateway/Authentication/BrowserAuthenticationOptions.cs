@@ -8,6 +8,9 @@ internal sealed class BrowserAuthenticationOptions
     public string PublicOrigin { get; set; } = "";
 
     [Required]
+    public string SignInErrorPath { get; set; } = "";
+
+    [Required]
     public string Authority { get; set; } = "";
 
     [Required]

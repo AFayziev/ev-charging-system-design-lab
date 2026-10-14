@@ -44,6 +44,8 @@ internal static class ResourceExtensions
         this IDistributedApplicationBuilder builder,
         IResourceBuilder<ParameterResource> gatewayOidcSecret)
     {
+        var registrationMail = builder.AddMailPit("registration-mail");
+        var smtp = registrationMail.GetEndpoint("smtp");
         var database = builder.AddPostgres(
             "identity-postgres",
             password: builder.AddPersistentSecret("identity-postgres-password"))
@@ -73,6 +75,8 @@ internal static class ResourceExtensions
             .WithEnvironment("SYNTHETIC_DRIVER_PASSWORD", builder.AddPersistentSecret("synthetic-driver-password"))
             .WithEnvironment("SYNTHETIC_OPERATOR_PASSWORD", builder.AddPersistentSecret("synthetic-operator-password"))
             .WithEnvironment("KC_HEALTH_ENABLED", "true")
+            .WithEnvironment("REGISTRATION_SMTP_HOST", smtp.Property(EndpointProperty.Host))
+            .WithEnvironment("REGISTRATION_SMTP_PORT", smtp.Property(EndpointProperty.Port))
             .WithHttpEndpoint(
                 port: builder.ExecutionContext.IsRunMode
                     ? builder.Configuration.GetValue("Keycloak:HttpPort", 8080) : null,
@@ -81,7 +85,8 @@ internal static class ResourceExtensions
             .WithHttpEndpoint(targetPort: 9000, name: "management")
             .WithEndpoint("management", e => e.ExcludeReferenceEndpoint = true)
             .WithHttpHealthCheck("/health/ready", endpointName: "management")
-            .WaitFor(database);
+            .WaitFor(database)
+            .WaitFor(registrationMail);
 
         if (builder.ExecutionContext.IsRunMode)
         {

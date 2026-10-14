@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using EvCharging.Gateway.Persistence;
@@ -18,6 +19,68 @@ namespace EvCharging.E2E.Tests;
 [Collection(nameof(E2ECollection))]
 public sealed class AuthenticationTests(AppHostFixture fixture)
 {
+    [Fact]
+    [Trait("Category", "Browser")]
+    public async Task Register_VerifiedEmail_CreatesDriverAndReusesProfileOnSignIn()
+    {
+        string email = $"registration-{Guid.NewGuid():N}@example.test";
+        string password = $"Registration-{Guid.NewGuid():N}";
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        var frontend = fixture.App.GetEndpoint("frontend", "http");
+        await using var storage = await fixture.CreatePlatformDbContextAsync();
+        try
+        {
+            await page.GotoAsync(new Uri(frontend, "/auth/login?returnUrl=/reservations").AbsoluteUri);
+            await page.GetByRole(AriaRole.Link, new() { Name = "Register", Exact = true }).ClickAsync();
+            await page.GetByLabel("Email").FillAsync(email);
+            await page.GetByLabel("First name").FillAsync("Registered");
+            await page.GetByLabel("Last name").FillAsync("Driver");
+            await page.GetByRole(AriaRole.Button, new() { Name = "Register", Exact = true }).ClickAsync();
+            await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Email verification" })).ToBeVisibleAsync();
+            Assert.False(await storage.Drivers.AnyAsync(driver => driver.Email == email, timeout.Token));
+
+            using var mailbox = fixture.App.CreateHttpClient("registration-mail", "http");
+            var messages = await mailbox.GetFromJsonAsync<MailMessages>(
+                "/api/v1/search?query=" + Uri.EscapeDataString("to:" + email), timeout.Token);
+            var message = Assert.Single(messages!.Messages);
+            var content = await mailbox.GetFromJsonAsync<MailMessage>(
+                "/api/v1/message/" + message.ID, timeout.Token);
+            string verificationUrl = Regex.Match(content!.Text, @"https?://[^\s<>]+").Value;
+            Assert.False(string.IsNullOrWhiteSpace(verificationUrl));
+            await page.GotoAsync(verificationUrl);
+            await page.GetByLabel("New Password", new() { Exact = true }).FillAsync(password);
+            await page.GetByLabel("Confirm password").FillAsync(password);
+            await page.GetByRole(AriaRole.Button, new() { Name = "Submit", Exact = true }).ClickAsync();
+            await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Account menu" })).ToBeVisibleAsync();
+            await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "My reservations" })).ToBeVisibleAsync();
+            var driver = await storage.Drivers.AsNoTracking().SingleAsync(
+                driver => driver.Email == email, timeout.Token);
+            Assert.False(string.IsNullOrWhiteSpace(driver.IdentitySubject));
+
+            await page.GetByRole(AriaRole.Button, new() { Name = "Account menu" }).ClickAsync();
+            await page.GetByRole(AriaRole.Menuitem, new() { Name = "Sign out", Exact = true }).ClickAsync();
+            await page.GotoAsync(new Uri(frontend, "/auth/login?returnUrl=/reservations").AbsoluteUri);
+            await page.GetByLabel("Email", new() { Exact = true }).FillAsync(email);
+            await page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
+            await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
+            await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "My reservations" })).ToBeVisibleAsync();
+            var repeated = await storage.Drivers.AsNoTracking().SingleAsync(
+                value => value.Email == email, timeout.Token);
+            Assert.Equal(driver.Id, repeated.Id);
+        }
+        finally
+        {
+            await storage.Drivers.Where(driver => driver.Email == email).ExecuteDeleteAsync();
+        }
+    }
+
+    private sealed record MailMessages(MailMessageSummary[] Messages);
+    private sealed record MailMessageSummary(string ID);
+    private sealed record MailMessage(string Text);
+
     [Theory]
     [InlineData("driver")]
     [InlineData("operator")]
@@ -47,7 +110,7 @@ public sealed class AuthenticationTests(AppHostFixture fixture)
 
         await page.GotoAsync(new Uri(frontend, "/auth/login?returnUrl=/").AbsoluteUri);
         Assert.StartsWith(new Uri(identity, "/realms/evcharging/").AbsoluteUri, page.Url);
-        await page.GetByLabel("Username or email").FillAsync(username);
+        await page.GetByLabel("Email", new() { Exact = true }).FillAsync($"{username}@example.test");
         await page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
         await Expect(page).ToHaveURLAsync(

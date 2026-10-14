@@ -189,6 +189,10 @@ independently of public HTTPS. Browser session cookies use
 HttpOnly and SameSite=Lax; hosted execution requires Secure. Explicitly enabled
 local HTTP uses loopback browser origins without TLS provisioning.
 Keycloak administration is directly accessible through its local loopback endpoint.
+Local registration uses Keycloak-hosted forms and email verification. Mailpit
+captures verification emails for inspection and link activation; no real email is
+delivered. Its registration mailbox is independent of reservation-notification
+delivery adapters.
 Hosted ingress must restrict administration and management endpoints.
 Keycloak uses a dedicated PostgreSQL database. Its pool starts with the configured
 number of connections and remains within configured limits; identity connections

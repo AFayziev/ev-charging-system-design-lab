@@ -160,11 +160,8 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         await using var connection = fixture.CreateConnection("platform_writer");
         await using var database = Context(connection);
         var (connector, driver) = await EquipmentAsync(database);
-        var competingDriver = new Driver
-        {
-            IdentityIssuer = driver.IdentityIssuer,
-            IdentitySubject = Guid.NewGuid().ToString()
-        };
+        var competingDriver = Driver.Register(
+            driver.IdentityIssuer, Guid.NewGuid().ToString(), EmailAddress.Create("competitor@example.test").Value);
         database.Drivers.Add(competingDriver);
         await database.SaveChangesAsync();
         var startsAt = new DateTimeOffset(2030, 1, 1, 10, 0, 0, TimeSpan.Zero);
@@ -203,11 +200,8 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
             PowerSupply = "DC",
             RatedPowerKW = 50
         };
-        var secondDriver = new Driver
-        {
-            IdentityIssuer = driver.IdentityIssuer,
-            IdentitySubject = Guid.NewGuid().ToString()
-        };
+        var secondDriver = Driver.Register(
+            driver.IdentityIssuer, Guid.NewGuid().ToString(), EmailAddress.Create("second@example.test").Value);
         database.Connectors.Add(second);
         database.Drivers.Add(secondDriver);
         await database.SaveChangesAsync();
@@ -317,11 +311,8 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
             PowerSupply = "AC",
             RatedPowerKW = 22
         };
-        var driver = new Driver
-        {
-            IdentityIssuer = "https://test.invalid",
-            IdentitySubject = Guid.NewGuid().ToString()
-        };
+        var driver = Driver.Register(
+            "https://test.invalid", Guid.NewGuid().ToString(), EmailAddress.Create("driver@example.test").Value);
         database.Connectors.Add(connector);
         database.Drivers.Add(driver);
         await database.SaveChangesAsync();
