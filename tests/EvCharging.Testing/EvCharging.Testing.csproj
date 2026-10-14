@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="xunit" />
+    <ProjectReference Include="../../src/EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />
+    <ProjectReference Include="../../src/EvCharging.Gateway.Migrations/EvCharging.Gateway.Migrations.csproj" />
+    <Content Include="../../infra/postgres/*.sql" TargetPath="provisioning/%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

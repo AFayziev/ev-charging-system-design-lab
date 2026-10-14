@@ -3,6 +3,7 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="EvCharging.NotificationWorker.Tests" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Handlebars.Net" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />

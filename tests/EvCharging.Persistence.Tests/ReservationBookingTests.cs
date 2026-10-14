@@ -3,6 +3,7 @@ using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence.Auditing;
 using EvCharging.Persistence.Extensions;
+using EvCharging.Testing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;

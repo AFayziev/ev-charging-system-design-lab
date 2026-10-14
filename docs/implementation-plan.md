@@ -90,8 +90,8 @@ monorepo baseline.
 - [x] M01.02 Add the Aspire C# AppHost, YARP gateway, API host, and independent
   charging, observation, search index, cache, media, and notification worker hosts using
   [settled host responsibilities](architecture.md#3-components-and-request-topology).
-  Add stub API hosts for the synchronous and queued provider simulators and the
-  third-party notification service simulator (`NotificationProviderApi`). Wire HTTP
+  Add stub API hosts for the synchronous and queued provider simulators and add a
+  local notification mail sink. Wire HTTP
   dependencies with Aspire references and service discovery: gateway destinations,
   gateway-routed platform clients, and direct external simulator clients. Share
   defaults for HTTP resilience, dashboard telemetry, and process health.
@@ -302,19 +302,17 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   with permitted transitions, atomic state/outbox changes, audit records,
   stable cancellation/expiry transition times, and immediate authoritative results.
   Verify repeated cancellation and expiry races. Depends on M05.01 and M05.02.
-- [ ] M05.04 Deliver reservation-created/cancelled/expired notifications through
-  the notification worker and third-party service simulator. Add independent
-  topic subscriptions/queues, persisted delivery attempts, retry/ambiguity
-  handling, concurrency isolation, and inspectable failure outcomes. Provide
-  simulator and Cloudflare Email Service adapters selected by configuration;
-  local delivery remains simulated. Verify recipient/event mapping and failures
+- [x] M05.04 Deliver reservation-created/cancelled/expired notifications through
+  the notification worker and local mail sink. Add independent topic subscriptions/queues,
+  persisted attempts, safe bounded retries, uncertainty handling, concurrency isolation,
+  and inspectable failures under the [notification contract](integrations.md#4-notification-providers).
+  Verify recipient/event mapping and failures
   without changing accepted reservations. Depends on M05.01–M05.03.
   - [x] Complete reservation lifecycle events and transactional publication paths.
   - [x] Add topic routing and an independent notification subscription.
   - [x] Add recipient data, notification records, and durable send jobs.
-  - [ ] Implement simulator delivery and persisted attempts with safe failure handling.
-  - [ ] Add the configuration-selected Cloudflare adapter.
-  - [ ] Review the complete flow and verify notification isolation and outcomes.
+  - [x] Implement direct local mail-sink delivery and persisted attempts with safe failure handling.
+  - [x] Review the complete flow and verify notification isolation and outcomes.
 - [ ] M05.05 Exercise application outcomes during interrupted message processing:
   accepted bookings eventually expire, duplicate processing does not repeat
   transitions or notifications, and failed work does not block unrelated bookings
@@ -333,10 +331,10 @@ Notification failure leaves accepted reservations intact and remains separately 
 
 #### Independent follow-up tasks
 
-- [ ] M05.07 Hosted gate, after M05.04: configure Cloudflare Email Service and
-  verify real delivery to verified test recipients, including acceptance versus
-  recipient-delivery evidence, usage, and cleanup. Requires the
-  [hosted setup](lab.md#18-notification-adapters).
+- [ ] M05.07 External email integration exercise, after M05.04: select a provider,
+  implement its adapter and safety contract, and verify real delivery, outcome
+  evidence, usage, and cleanup with test recipients.
+  Depends on [provider selection and hosted setup](lab.md#18-notification-adapters).
 
 ### M06 — Charging start/stop and operator investigation
 
@@ -564,7 +562,7 @@ use the same application contracts with configured provider endpoints.
 | RabbitMQ jobs/topics, Wolverine inbox/outbox | Reservation expiry M05.02; independent subscribers M05.04 onward | Publish/ack crash windows, redelivery, independent subscribers |
 | Durable scheduler / reconciliation | Reservation expiry M05.02; charging M06, files M10 | Restart, deadlines, exhaustion, expiry races, missing notices |
 | Provider simulators, HTTP resilience | M06, M07 | Lost responses, idempotency differences, rate limits, physical evidence |
-| Notification provider simulator/adapters and worker | Reservation notifications M05.04; completion M07.02; hosted gate M05.07 | Synthetic faults, real email delivery, ambiguity, independent retry |
+| Notification mail sink/adapters and worker | Reservation notifications M05.04; completion M07.02; external exercise M05.07 | Local capture, real email delivery, ambiguity, independent retry |
 | Kafka and observation consumers | M07 | Durable acceptance, lag, offset recovery, replay |
 | MongoDB | M07, M10 | Latest/history ordering, outage catch-up, diagnostic queries |
 | Valkey and SignalR backplane | M08 | Cache flush, bounded fallback, fan-out loss/recovery |
@@ -591,6 +589,6 @@ closes coverage gaps and repeats the integrated demonstrations.
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
 | Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
-| Cloudflare email sender and verified test recipients | Domain onboarding, scoped credentials, and real-delivery setup; cloud integration is already selected | M05.07 |
+| External email provider and test recipients | Provider selection, sender onboarding, scoped credentials, and real-delivery setup | M05.07 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.02 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

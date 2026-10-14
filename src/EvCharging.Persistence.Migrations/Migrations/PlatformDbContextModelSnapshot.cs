@@ -592,6 +592,72 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EvCharging.Persistence.Entities.NotificationDeliveryAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<string>("ExternalMessageId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("external_message_id");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("failure_code");
+
+                    b.Property<Guid>("NotificationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("notification_id");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("provider");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notification_delivery_attempts");
+
+                    b.HasIndex("NotificationId", "Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_notification_delivery_attempts_notification_id_number");
+
+                    b.ToTable("notification_delivery_attempts", "charging", t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_delivery_attempts_capture", "(outcome = 2) = (external_message_id IS NOT NULL) AND (external_message_id IS NULL OR length(external_message_id) > 0)");
+
+                            t.HasCheckConstraint("ck_notification_delivery_attempts_evidence", "outcome = 1 OR completed_at IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_notification_delivery_attempts_number", "number > 0");
+
+                            t.HasCheckConstraint("ck_notification_delivery_attempts_outcome", "outcome IN (1, 2, 3, 4)");
+
+                            t.HasCheckConstraint("ck_notification_delivery_attempts_provider", "length(provider) > 0");
+
+                            t.HasCheckConstraint("ck_notification_delivery_attempts_times", "isfinite(started_at) AND (completed_at IS NULL OR (isfinite(completed_at) AND completed_at >= started_at))");
+                        });
+                });
+
             modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -927,6 +993,18 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasForeignKey("StationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_file_metadata_stations_station_id");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.NotificationDeliveryAttempt", b =>
+                {
+                    b.HasOne("EvCharging.Persistence.Entities.Notification", "Notification")
+                        .WithMany()
+                        .HasForeignKey("NotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_notification_delivery_attempts_notifications_notification_id");
+
+                    b.Navigation("Notification");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>

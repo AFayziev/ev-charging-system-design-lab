@@ -141,11 +141,7 @@ var queuedChargingProviderApi = builder.AddProject<Projects.EvCharging_QueuedCha
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint()
     .WithHttpHealthCheck("/health");
-var notificationProviderApi = builder.AddProject<Projects.EvCharging_NotificationProviderApi>(
-    "notification-provider-api", launchProfileName: null)
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
-    .WithHttpEndpoint()
-    .WithHttpHealthCheck("/health");
+var notificationMail = builder.AddMailPit("notification-mail").WithDataVolume("notification-mail-data");
 
 var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
@@ -177,8 +173,8 @@ var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("n
     .WaitForCompletion(platformMigrations)
     .WithReference(broker)
     .WaitFor(broker)
-    .WithReference(notificationProviderApi)
-    .WaitFor(notificationProviderApi);
+    .WithReference(notificationMail.GetEndpoint("http"))
+    .WaitFor(notificationMail);
 
 foreach (var worker in new[] { charging, observation, search, cache, media })
 {

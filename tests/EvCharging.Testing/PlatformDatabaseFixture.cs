@@ -1,10 +1,11 @@
 using EvCharging.Gateway.Persistence;
+using EvCharging.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
 
-namespace EvCharging.Persistence.Tests;
+namespace EvCharging.Testing;
 
 public sealed class PlatformDatabaseFixture : IAsyncLifetime
 {

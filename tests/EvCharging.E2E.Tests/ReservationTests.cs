@@ -61,7 +61,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
                     .Select(value => value.Id)
                     .ToArrayAsync();
                 using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-                await AwaitNotificationPreparationAsync(reservationIds, cleanupTimeout.Token);
+                await AwaitNotificationDeliveryAsync(reservationIds, cleanupTimeout.Token);
                 var notificationIds = await Storage.ReservationNotifications
                     .Where(value => reservationIds.Contains(value.ReservationId))
                     .Select(value => value.NotificationId)
@@ -213,6 +213,8 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             && entry.ResourceType == AuditResourceType.Reservation && entry.Action == AuditAction.Added);
         Assert.Equal(accepted.Driver!.IdentityIssuer, audit.ActorIssuer);
         Assert.Equal(accepted.Driver.IdentitySubject, audit.ActorSubject);
+        using var deliveryTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        await AwaitNotificationDeliveryAsync([accepted.Id], deliveryTimeout.Token);
         Assert.Equal(accepted.StartsAt + AppHostFixture.BookingLimits.ArrivalAllowance, accepted.ArrivalDeadline);
     }
 
@@ -318,6 +320,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         Assert.Equal("charging-worker", audit.ActorSubject);
         Assert.False(string.IsNullOrWhiteSpace(audit.TraceId));
 
+        await AwaitNotificationDeliveryAsync([reservationId], timeout.Token);
         var next = DateTimeOffset.UtcNow.AddHours(1);
         for (int index = 0; index < AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver; index++)
         {
@@ -469,6 +472,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         var published = await ObserveReservationEventsAsync(
             ReservationEventTopology.CancelledTopic, [cancelled.Id], timeout.Token);
         Assert.Equal(cancelled.Id, published[cancelled.Id].GetProperty("reservationId").GetGuid());
+        await AwaitNotificationDeliveryAsync([cancelled.Id], timeout.Token);
         var replacement = await PostAsync(
             page, connector.PublicId.ToString(), cancelled.StartsAt, cancelled.EndsAt);
         Assert.Equal(201, replacement.GetProperty("status").GetInt32());
@@ -747,7 +751,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         }
     }
 
-    private async Task AwaitNotificationPreparationAsync(Guid[] reservationIds, CancellationToken cancellationToken)
+    private async Task AwaitNotificationDeliveryAsync(Guid[] reservationIds, CancellationToken cancellationToken)
     {
         var audits = await Storage.AuditEntries.AsNoTracking()
             .Where(entry => entry.ResourceType == AuditResourceType.Reservation
@@ -775,6 +779,18 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         {
             while (!await Storage.ReservationNotifications.AnyAsync(
                 value => value.ReservationId == reservationId && value.Kind == kind, cancellationToken))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+            }
+
+            var notificationId = await Storage.ReservationNotifications
+                .Where(value => value.ReservationId == reservationId && value.Kind == kind)
+                .Select(value => value.NotificationId)
+                .SingleAsync(cancellationToken);
+            while (!await Storage.NotificationDeliveryAttempts.AnyAsync(
+                value => value.NotificationId == notificationId
+                    && value.Outcome == NotificationDeliveryOutcome.Captured,
+                cancellationToken))
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
             }

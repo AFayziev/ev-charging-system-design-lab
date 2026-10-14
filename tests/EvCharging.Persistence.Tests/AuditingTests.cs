@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence.Auditing;
+using EvCharging.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;

@@ -31,7 +31,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Messaging | Wolverine RabbitMQ transport and EF Core/PostgreSQL durability |
 | Observation stream | Confluent.Kafka client; Kafka in KRaft mode |
 | Object storage / CDN | RustFS locally, Cloudflare R2 hosted; AWSSDK.S3 / Cloudflare CDN |
-| Notification delivery | [Simulator and selected real-provider adapter](#18-notification-adapters) |
+| Notification delivery | [Local Mailpit adapter and external-provider options](#18-notification-adapters) |
 | File processing | SkiaSharp images, PDFsharp summaries, .NET ZIP/JSON diagnostics |
 | HTTP resilience | Microsoft.Extensions.Http.Resilience and Polly |
 | Default diagnostics | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export to Aspire Dashboard |
@@ -226,23 +226,14 @@ the browser application's
 for email-client compatibility.
 Email timestamps use explicit UTC labels.
 
-NotificationWorker selects `Simulator` (local default) or `Cloudflare` through
-configuration. Missing provider configuration fails explicitly without switching
-providers. Delivery semantics are defined in
-[integrations](integrations.md#4-notification-providers).
+Local email uses Mailpit's HTTP API and a dedicated `notification-mail` mailbox,
+independent of registration email. Mailpit provides content inspection; persisted
+attempts provide failure evidence. Configuration belongs to
+[worker options](../src/EvCharging.NotificationWorker/Configuration/NotificationDeliveryOptions.cs);
+delivery semantics belong to [integrations](integrations.md#4-notification-providers).
 
-| Provider | Adapter and setup |
-|---|---|
-| Cloudflare Email Service — selected | Discovery-independent HTTPS REST client; account ID, secret API token with Email Sending permission, and onboarded sender domain using Cloudflare DNS; email sending is in beta |
-| Azure Communication Services Email — extension option | .NET email SDK; Communication Services/Email resources, credentials, and verified sender |
-| Amazon SES — extension option | AWS SDK; region, credentials, and verified sender; sandbox recipients must also be verified |
-
-Cloudflare DNS is already in use for the lab domain. Email Sending onboarding,
-sender/verified-recipient configuration, and credentials are hosted-exercise
-dependencies. Provider SDKs and wire formats remain inside their adapters.
-[Cloudflare REST API](https://developers.cloudflare.com/email-service/api/send-emails/rest-api/),
-[Azure email SDK](https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/email/send-email),
-[SES SDK](https://docs.aws.amazon.com/ses/latest/dg/send-an-email-using-sdk-programmatically.html)
+External-provider selection remains unresolved among Cloudflare Email Service,
+Azure Communication Services Email, and Amazon SES. Hosted setup depends on that selection.
 
 ### 1.9 Frontend diagnostics
 
@@ -277,7 +268,7 @@ The build and startup release identifiers must refer to the same deployed build.
 | Optional Sentry | Enables [frontend diagnostics](#19-frontend-diagnostics); requires a hosted project and build-upload credentials |
 | Broker leader loss | Three RabbitMQ nodes with quorum queues; leader-loss and recovery behavior |
 | Cloudflare files/CDN | R2 and Cloudflare CDN deliver versioned frontend assets and published media through a custom domain; real presigned transfers, warm/cold cache behavior, and purge |
-| Cloudflare notification delivery | The real email adapter replaces the notification service simulator; verified test recipients and recorded provider/delivery outcomes |
+| External notification delivery | Provider selection unresolved; test recipients and recorded provider/delivery outcomes |
 | Azure database failover | Managed PostgreSQL HA plus readable replica/pooler routes; provider-supported failover exposes application interruption and recovery |
 
 The local baseline covers redelivery, outbox recovery, projection replay, cache
@@ -287,8 +278,8 @@ replicas share a host failure boundary and do not demonstrate multi-zone availab
 
 MongoDB, Valkey, Elasticsearch, RabbitMQ, and Kafka need no cloud subscriptions.
 The synchronous and queued charging providers are controlled simulators.
-`NotificationProviderApi` simulates a third-party delivery service without sending
-real messages. Hosted notification delivery uses the [selected adapter](#18-notification-adapters).
+Notification email is captured locally in Mailpit without real delivery.
+Hosted notification delivery depends on [provider selection](#18-notification-adapters).
 Local S3 storage does not demonstrate hosted CDN or R2 signing behavior;
 the files/CDN profile uses the [R2 delivery constraints](#15-storage-and-delivery).
 
@@ -296,12 +287,10 @@ The local profile requires no paid product subscriptions. Cloudflare CDN uses th
 Free plan; R2 Standard storage has monthly free allowances with billed overages.
 Managed Azure PostgreSQL, its HA standby, and its readable replica incur cloud
 resource charges. Cloudflare and Azure profiles are active only for their exercises.
-Real Cloudflare notification delivery uses verified test recipients; sending to
-arbitrary recipients requires the Workers Paid plan. The simulator remains free
-of cloud subscriptions.
+The local notification sink requires no cloud subscription. Hosted email costs and
+recipient restrictions depend on the provider selected for the external exercise.
 [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
 [Cloudflare Free plan](https://www.cloudflare.com/plans/free/),
-[Cloudflare Email Service pricing](https://developers.cloudflare.com/email-service/platform/pricing/),
 [Azure PostgreSQL pricing](https://azure.microsoft.com/en-us/pricing/details/postgresql/flexible-server/)
 
 ### 2.1.1 Synthetic fixtures
@@ -371,7 +360,7 @@ without cancelling accepted allocations.
 | Browser workflows | Playwright |
 | Load and saturation | k6 |
 | Network latency/isolation | Toxiproxy |
-| External faults | Charging-provider simulator APIs and `NotificationProviderApi`, the third-party notification service simulator |
+| External faults | Charging-provider simulator APIs; local notification adapter and mail-sink interruption scenarios |
 
 Verification uses correlated telemetry from the
 [configured diagnostics path](#12-application-wiring).

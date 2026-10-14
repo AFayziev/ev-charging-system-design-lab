@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Aspire.Hosting.Testing;
 using EvCharging.Contracts.Events.Reservations;
@@ -26,9 +27,9 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
     private IHost? _publisher;
     private IConnection? _connection;
     private IChannel? _channel;
-    private Reservation? _reservation;
-    private readonly ConcurrentQueue<Guid> _jobs = new();
+    private readonly List<Reservation> _reservations = [];
     private readonly ConcurrentQueue<Guid> _failures = new();
+    private readonly ConcurrentQueue<Guid> _deliveryFailures = new();
 
     private PlatformDbContext Database =>
         _database ?? throw new InvalidOperationException("Storage is not initialized.");
@@ -53,14 +54,6 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         _connection = await new ConnectionFactory { Uri = new Uri(rabbit) }.CreateConnectionAsync();
         _channel = await _connection.CreateChannelAsync();
         await _channel.QueueDeclarePassiveAsync("notification-send");
-        var consumer = new AsyncEventingBasicConsumer(_channel);
-        consumer.ReceivedAsync += (_, message) =>
-        {
-            using var document = JsonDocument.Parse(message.Body);
-            _jobs.Enqueue(document.RootElement.GetProperty("notificationId").GetGuid());
-            return Task.CompletedTask;
-        };
-        await _channel.BasicConsumeAsync("notification-send", autoAck: true, consumer: consumer);
         var failures = new AsyncEventingBasicConsumer(_channel);
         failures.ReceivedAsync += (_, message) =>
         {
@@ -68,6 +61,11 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
             if (document.RootElement.TryGetProperty("reservationId", out var reservationId))
             {
                 _failures.Enqueue(reservationId.GetGuid());
+            }
+
+            if (document.RootElement.TryGetProperty("notificationId", out var notificationId))
+            {
+                _deliveryFailures.Enqueue(notificationId.GetGuid());
             }
 
             return Task.CompletedTask;
@@ -97,8 +95,9 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         {
             try
             {
-                if (_reservation is { Connector.Charger.Station: { } station } reservation)
+                foreach (var reservation in _reservations)
                 {
+                    var station = reservation.Connector!.Charger!.Station!;
                     var notificationIds = await _database.ReservationNotifications
                         .Where(value => value.ReservationId == reservation.Id)
                         .Select(value => value.NotificationId)
@@ -153,7 +152,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         };
         await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
         var notification = await NotificationAsync(reservation.Id, kind);
-        await AwaitAsync(() => Task.FromResult(_jobs.Contains(notification.Id)));
+        await AssertCapturedAsync(notification);
         Assert.Equal("current@example.test", notification.RecipientEmail);
         Assert.NotNull(notification.HtmlBody);
         Assert.Contains("EV Charging", notification.HtmlBody, StringComparison.Ordinal);
@@ -182,7 +181,10 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         Assert.Equal(notification.Body, saved.Body);
         Assert.Equal(notification.HtmlBody, saved.HtmlBody);
         Assert.Equal(notification.PreparedAt, saved.PreparedAt);
-        Assert.Equal(1, _jobs.Count(id => id == notification.Id));
+        Assert.Equal(
+            1,
+            await Database.NotificationDeliveryAttempts.CountAsync(value =>
+                value.NotificationId == notification.Id));
     }
 
     [Fact]
@@ -194,11 +196,14 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
             Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45))));
         var notification = await NotificationAsync(reservation.Id, ReservationNotificationKind.Created);
-        await AwaitAsync(() => Task.FromResult(_jobs.Contains(notification.Id)));
+        await AssertCapturedAsync(notification);
         Assert.Equal(
             1, await Database.ReservationNotifications.CountAsync(value => value.ReservationId == reservation.Id));
         Assert.Equal(originalNotificationCount + 1, await Database.Notifications.CountAsync());
-        Assert.Equal(1, _jobs.Count(id => id == notification.Id));
+        Assert.Equal(
+            1,
+            await Database.NotificationDeliveryAttempts.CountAsync(value =>
+                value.NotificationId == notification.Id));
         Assert.DoesNotContain(reservation.Id, _failures);
     }
 
@@ -215,13 +220,11 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
                 .ExecuteUpdateAsync(setters => setters.SetProperty(driver => driver.Email, "invalid"));
         }
 
-        int originalJobCount = _jobs.Count;
         int originalNotificationCount = await Database.Notifications.CountAsync();
         await Bus.PublishAsync(new ReservationCreated(id, reservation.EndsAt));
         await AwaitAsync(() => Task.FromResult(_failures.Contains(id)));
         Assert.False(await Database.ReservationNotifications.AnyAsync(value => value.ReservationId == id));
         Assert.Equal(originalNotificationCount, await Database.Notifications.CountAsync());
-        Assert.Equal(originalJobCount, _jobs.Count);
         Assert.Equal(
             ReservationState.Active,
             await Database.Reservations
@@ -234,7 +237,6 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
     public async Task Prepare_OutboxWriteFails_RollsBackNotificationAndAllowsLaterPreparation()
     {
         var reservation = await BookAsync();
-        int originalJobCount = _jobs.Count;
         int originalNotificationCount = await Database.Notifications.CountAsync();
         await Database.Database.ExecuteSqlRawAsync("""
             CREATE FUNCTION notification_messages.reject_test_send() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -254,7 +256,6 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
             Assert.False(
                 await Database.ReservationNotifications.AnyAsync(value => value.ReservationId == reservation.Id));
             Assert.Equal(originalNotificationCount, await Database.Notifications.CountAsync());
-            Assert.Equal(originalJobCount, _jobs.Count);
         }
         finally
         {
@@ -267,9 +268,102 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         await Bus.InvokeAsync(
             new ReservationCreated(reservation.Id, reservation.EndsAt), timeout: TimeSpan.FromSeconds(45));
         var notification = await NotificationAsync(reservation.Id, ReservationNotificationKind.Created);
-        await AwaitAsync(() => Task.FromResult(_jobs.Contains(notification.Id)));
-        Assert.Equal(1, _jobs.Count(id => id == notification.Id));
+        await AssertCapturedAsync(notification);
+        Assert.Equal(
+            1,
+            await Database.NotificationDeliveryAttempts.CountAsync(value =>
+                value.NotificationId == notification.Id));
     }
+
+    [Fact]
+    public async Task Deliver_OutcomeWriteFails_CaptureRemainsUncertainAndDuplicateFactDoesNotResend()
+    {
+        var reservation = await BookAsync();
+        const string Recipient = "outcome-failure@example.test";
+        await Database.Drivers.Where(driver => driver.Id == reservation.DriverId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(driver => driver.Email, Recipient));
+        await Database.Database.ExecuteSqlRawAsync("""
+            CREATE FUNCTION charging.reject_test_notification_outcome() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.outcome = 2 AND EXISTS (
+                    SELECT 1 FROM charging.notifications
+                    WHERE id = NEW.notification_id AND recipient_email = 'outcome-failure@example.test') THEN
+                    RAISE EXCEPTION 'Injected capture-outcome persistence failure';
+                END IF;
+                RETURN NEW;
+            END; $$;
+            CREATE TRIGGER reject_test_notification_outcome BEFORE UPDATE ON charging.notification_delivery_attempts
+                FOR EACH ROW EXECUTE FUNCTION charging.reject_test_notification_outcome();
+            """);
+        try
+        {
+            var message = new ReservationCreated(reservation.Id, reservation.EndsAt);
+            await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
+            var notification = await NotificationAsync(reservation.Id, ReservationNotificationKind.Created);
+            await AwaitAsync(() => Database.NotificationDeliveryAttempts.AnyAsync(value =>
+                value.NotificationId == notification.Id));
+            var attempt = await Database.NotificationDeliveryAttempts.AsNoTracking()
+                .SingleAsync(value => value.NotificationId == notification.Id);
+            await AwaitAsync(() => Task.FromResult(_deliveryFailures.Contains(notification.Id)));
+            Assert.Equal(NotificationDeliveryOutcome.Uncertain, attempt.Outcome);
+            Assert.Null(attempt.CompletedAt);
+            using var mailbox = fixture.App.CreateHttpClient("notification-mail", "http");
+            var captured = await mailbox.GetFromJsonAsync<CapturedEmails>(
+                "/api/v1/search?query=" + Uri.EscapeDataString("to:" + Recipient));
+            Assert.NotNull(captured);
+            Assert.Single(captured.Messages);
+            await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
+            Assert.Equal(
+                1,
+                await Database.NotificationDeliveryAttempts.CountAsync(value =>
+                    value.NotificationId == notification.Id));
+            Assert.Equal(
+                ReservationState.Active,
+                await Database.Reservations.AsNoTracking()
+                    .Where(value => value.Id == reservation.Id)
+                    .Select(value => value.State)
+                    .SingleAsync());
+
+            var unrelated = await BookAsync();
+            await Bus.InvokeAsync(
+                new ReservationCreated(unrelated.Id, unrelated.EndsAt), timeout: TimeSpan.FromSeconds(45));
+            await AssertCapturedAsync(await NotificationAsync(unrelated.Id, ReservationNotificationKind.Created));
+        }
+        finally
+        {
+            await Database.Database.ExecuteSqlRawAsync("""
+                DROP TRIGGER reject_test_notification_outcome ON charging.notification_delivery_attempts;
+                DROP FUNCTION charging.reject_test_notification_outcome();
+                """);
+        }
+    }
+
+    private sealed record CapturedEmails(CapturedEmailSummary[] Messages);
+    private sealed record CapturedEmailSummary(string ID);
+
+    private async Task AssertCapturedAsync(Notification notification)
+    {
+        await AwaitAsync(() => Database.NotificationDeliveryAttempts.AnyAsync(value =>
+            value.NotificationId == notification.Id && value.Outcome == NotificationDeliveryOutcome.Captured));
+        var attempt = await Database.NotificationDeliveryAttempts.AsNoTracking()
+            .SingleAsync(value => value.NotificationId == notification.Id);
+        Assert.NotNull(attempt.CompletedAt);
+        Assert.NotNull(attempt.ExternalMessageId);
+        using var mailbox = fixture.App.CreateHttpClient("notification-mail", "http");
+        var captured = await mailbox.GetFromJsonAsync<CapturedEmail>("/api/v1/message/" + attempt.ExternalMessageId);
+        Assert.NotNull(captured);
+        Assert.Equal(notification.Subject, captured.Subject);
+        Assert.Equal(
+            notification.Body.Replace("\r\n", "\n", StringComparison.Ordinal),
+            captured.Text.Replace("\r\n", "\n", StringComparison.Ordinal));
+        Assert.Equal(
+            notification.HtmlBody?.Replace("\r\n", "\n", StringComparison.Ordinal),
+            captured.HTML.Replace("\r\n", "\n", StringComparison.Ordinal));
+        Assert.Equal(notification.RecipientEmail, Assert.Single(captured.To).Address);
+    }
+
+    private sealed record CapturedEmail(string Subject, string Text, string HTML, CapturedAddress[] To);
+    private sealed record CapturedAddress(string Address);
 
     private async Task<Reservation> BookAsync()
     {
@@ -296,7 +390,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
             connector, driver, now.AddHours(1), now.AddHours(2), now, AppHostFixture.BookingLimits).Value;
         Database.Reservations.Add(reservation);
         await Database.SaveChangesAsync();
-        _reservation = reservation;
+        _reservations.Add(reservation);
         return reservation;
     }
 

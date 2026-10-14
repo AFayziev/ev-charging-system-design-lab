@@ -1,9 +1,8 @@
 # External Integration Contracts
 
 `SynchronousChargingProviderApi` and `QueuedChargingProviderApi` simulate external
-charging systems with different command contracts. `NotificationProviderApi`
-simulates a third-party notification service; a real provider can replace it through
-an outbound adapter. OCPP/OCPI implementation is outside scope.
+charging systems with different command contracts. Local notification delivery uses
+a mail sink through an outbound adapter. OCPP/OCPI implementation is outside scope.
 Canonical meanings are defined in [domain](domain.md); processing and persistence
 are defined in [architecture](architecture.md).
 
@@ -87,12 +86,14 @@ identity, recipient, content, and selected provider. It returns a normalized out
 with provider identity, external request/message IDs, and timestamps.
 NotificationWorker retains that evidence in durable delivery-attempt records.
 
-`NotificationProviderApi` is the local simulator of a third-party service. It
-accepts synthetic delivery requests and exposes inspectable outcomes, including
-latency, rejection, outage, and lost-response faults. It sends no real email or SMS.
+The local adapter sends frozen email content to an inspectable mail sink.
+Its returned message ID establishes local capture, not real recipient delivery.
+The sink provides no assumed send deduplication. Local retries require proof of
+non-capture and a remaining budget; uncertainty stops automatic sending.
+Reconciliation and manual resend are outside the local contract.
 
 Real delivery uses an explicitly selected adapter in NotificationWorker and calls
-the external provider directly. Cloudflare Email Service is the selected email adapter.
+the external provider directly. Its guarantees depend on the selected provider.
 Provider acceptance is recorded separately from confirmed recipient delivery;
 unavailable delivery evidence remains unknown.
 An ambiguous send does not authorize blind retry. Adapter policies define permitted
@@ -103,7 +104,7 @@ executes. Changing the configured provider does not establish that an uncertain
 earlier send is safe to repeat.
 Notification failure does not change a reservation or completed charging session.
 
-The simulator is the local default. There is no claim of provider-side deduplication
+The mail sink is the local default. There is no claim of provider-side deduplication
 unless the selected service documents and verifies it. Technical configuration,
 sender setup, and extension options are recorded in
 [notification adapters](lab.md#18-notification-adapters);

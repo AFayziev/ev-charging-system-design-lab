@@ -11,8 +11,8 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
   uncertain command outcomes, and request reconciliation.
 - Synchronous and queued charging-provider simulators expose different APIs and
   controllable faults.
-- Notification delivery uses a third-party service simulator locally and a
-  Cloudflare Email Service adapter for the hosted exercise.
+- Notification delivery captures local email in a dedicated Mailpit sink with
+  persisted attempts; external-provider integration is a separate exercise.
 - One frontend provides separate driver and operator areas.
 
 ## Architecture
@@ -83,6 +83,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 | pgAdmin | Application and identity PostgreSQL servers |
 | Keycloak Admin Console | Identity provider |
 | Mailpit (`registration-mail`) | Captured account-verification emails |
+| Mailpit (`notification-mail`) | Captured reservation emails |
 | Mongo Express | MongoDB |
 | Kafbat UI | Kafka |
 | Valkey Admin | Valkey |
@@ -202,6 +203,14 @@ dotnet test tests/EvCharging.Gateway.Tests
 
 ```sh
 dotnet test tests/EvCharging.Persistence.Tests
+```
+
+### Notification worker tests
+
+Requires Docker for delivery-state integration tests.
+
+```sh
+dotnet test tests/EvCharging.NotificationWorker.Tests
 ```
 
 ### Frontend component tests

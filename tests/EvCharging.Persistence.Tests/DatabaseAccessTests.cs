@@ -1,3 +1,4 @@
+using EvCharging.Testing;
 using Npgsql;
 using Xunit;
 
@@ -52,6 +53,8 @@ public sealed class DatabaseAccessTests(PlatformDatabaseFixture database)
     [InlineData("UPDATE charging.drivers SET email = email")]
     [InlineData("UPDATE charging.notifications SET recipient_email = recipient_email")]
     [InlineData("DELETE FROM charging.notifications")]
+    [InlineData("DELETE FROM charging.notification_delivery_attempts")]
+    [InlineData("UPDATE charging.notification_delivery_attempts SET notification_id = notification_id")]
     [InlineData("UPDATE charging.reservation_notifications SET kind = kind")]
     [InlineData("DELETE FROM charging.reservation_notifications")]
     [InlineData("SELECT * FROM api_messages.wolverine_incoming_envelopes")]
@@ -71,6 +74,8 @@ public sealed class DatabaseAccessTests(PlatformDatabaseFixture database)
     [InlineData("platform_writer", "DELETE FROM charging.reservation_notifications")]
     [InlineData("platform_writer", "TRUNCATE charging.reservation_notifications")]
     [InlineData("platform_reader", "SELECT * FROM charging.reservation_notifications")]
+    [InlineData("platform_writer", "SELECT * FROM charging.notification_delivery_attempts")]
+    [InlineData("platform_reader", "SELECT * FROM charging.notification_delivery_attempts")]
     public async Task NotificationHistory_ApiAccess_DeniedAfterMigrationAndReprovisioning(string role, string sql)
     {
         await AssertDeniedAsync(role, sql);

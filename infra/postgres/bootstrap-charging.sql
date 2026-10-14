@@ -42,3 +42,5 @@ SELECT 'REVOKE ALL ON TABLE charging.notifications FROM platform_writer, platfor
 WHERE to_regclass('charging.notifications') IS NOT NULL \gexec
 SELECT 'REVOKE ALL ON TABLE charging.reservation_notifications FROM platform_writer, platform_reader'
 WHERE to_regclass('charging.reservation_notifications') IS NOT NULL \gexec
+SELECT 'REVOKE ALL ON TABLE charging.notification_delivery_attempts FROM platform_writer, platform_reader'
+WHERE to_regclass('charging.notification_delivery_attempts') IS NOT NULL \gexec

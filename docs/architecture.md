@@ -174,8 +174,11 @@ within the relational store. Each owner controls its schema changes; application
 processes use scoped runtime credentials. Separate schemas share database capacity
 and availability. Message-storage ownership follows each API/worker host family.
 
-The notification worker owns notification records and recipient content, with
-access isolated from the API.
+The notification worker owns notification records, recipient content, and delivery
+attempts, with access isolated from the API. Attempt authorization commits before
+the outbound call; outcome evidence commits before signalling a retryable failure.
+Calls run outside database transactions under the
+[notification contract](integrations.md#4-notification-providers).
 
 [Domain policies](domain.md#5-reservations) are enforced in primary-side
 transactions. Database constraints preserve reservation/session exclusivity and

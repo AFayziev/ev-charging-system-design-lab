@@ -35,6 +35,7 @@ public class PlatformDbContext : DbContext
     public DbSet<Attempt> Attempts => Set<Attempt>();
     public DbSet<FileMetadata> Files => Set<FileMetadata>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
     public DbSet<ReservationNotification> ReservationNotifications => Set<ReservationNotification>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>

@@ -47,7 +47,6 @@ implementation progress is recorded in the plan.
 | `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
 | `EvCharging.SynchronousChargingProviderApi` | Resource | Simulator with authoritative synchronous results and command deduplication |
 | `EvCharging.QueuedChargingProviderApi` | Resource | Simulator with queued acknowledgement and no effect deduplication |
-| `EvCharging.NotificationProviderApi` | Resource | Third-party notification service simulator; inspectable synthetic outcomes and controlled faults, no real delivery |
 | `EvCharging.Contracts` | Library | Shared API and messaging contracts and canonical role types |
 | `EvCharging.Domain` | Library | Business entities, value objects, measurements, and pure business policies |
 | `EvCharging.Persistence` | Library | Charging-schema EF mappings, database access, auditing, and persistence-owned records for API/worker consumers |
