@@ -1,5 +1,6 @@
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
+using EvCharging.Api.Features.Charging;
 using EvCharging.Api.Features.Drivers;
 using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
@@ -20,6 +21,7 @@ builder.AddMessaging(
         options.UseEntityFrameworkCoreTransactions();
         options.AddApplicationHandlers();
         options.AddReservationEventRouting();
+        options.AddChargingCommandRouting();
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -35,5 +37,6 @@ app.MapHttpApiDiagnostics("api");
 app.MapStations();
 app.MapDrivers();
 app.MapReservations();
+app.MapCharging();
 
 app.Run();

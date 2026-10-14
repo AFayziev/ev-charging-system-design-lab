@@ -5,6 +5,8 @@ import {
   type HttpFailure,
 } from "@/lib/http-errors";
 
+export const connectorBusyCode = "connector_busy";
+
 export interface ReservationFailure extends HttpFailure {
   readonly recovery?: "retry" | "reservations" | "first-page";
 }

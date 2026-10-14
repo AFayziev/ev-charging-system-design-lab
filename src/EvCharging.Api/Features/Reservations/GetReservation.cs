@@ -1,5 +1,6 @@
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
+using EvCharging.Api.Features.Charging;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using FluentResults;
@@ -24,11 +25,13 @@ public sealed record ReservationResponse(
     ReservationState State,
     DateTimeOffset CreatedAt,
     DateTimeOffset? CancelledAt,
-    DateTimeOffset? ExpiredAt);
+    DateTimeOffset? ExpiredAt,
+    DateTimeOffset ArrivalDeadline,
+    StartOperationResponse? StartOperation = null);
 
 public sealed record GetReservationRequest(Guid Id) : IAuthenticatedRequest<ReservationResponse>;
 
-public sealed class GetReservationQueryHandler(PlatformReadDbContext database)
+public sealed class GetReservationQueryHandler(PlatformDbContext database)
 {
     public async Task<Result<ReservationResponse>> HandleAsync(
         GetReservationRequest request, UserIdentity identity, CancellationToken cancellationToken)
@@ -50,6 +53,7 @@ public sealed class GetReservationQueryHandler(PlatformReadDbContext database)
             return Result.Fail<ReservationResponse>(new NotFoundError<Guid>("reservation", request.Id));
         }
 
-        return Result.Ok(reservation.ToResponse());
+        var responses = await new[] { reservation }.ToResponsesAsync(database, cancellationToken);
+        return Result.Ok(responses[0]);
     }
 }

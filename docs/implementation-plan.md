@@ -56,7 +56,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M03 | Domain and seeded persistence baseline | M02 | Done |
 | M04 | Station browsing and operator edits | M03 | Done |
 | M05 | Reservations, expiry, and notifications | M04.01 | In progress |
-| M06 | Charging start/stop and operator investigation | M05.02; cancellation races require M05.03 | Planned |
+| M06 | Charging start/stop and operator investigation | M05.02; cancellation races require M05.03 | In progress |
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | Planned |
 | M08 | Live updates and cached views | M07.01 | Planned |
 | M09 | Search and station discovery | M04.01, M05.01; availability requires M07.01 | Planned |
@@ -339,17 +339,37 @@ Notification failure leaves accepted reservations intact and remains separately 
 ### M06 — Charging start/stop and operator investigation
 
 - [ ] M06.01 Deliver driver start and operation-status interactions for the
-  synchronous provider. Implement its persistent simulator state, adapter,
-  payload/unit normalization, authenticated calls, bounded HTTP resilience, and
-  controlled faults alongside API acceptance and charging-worker execution.
-  Add ownership checks, operation identity,
-  payload-mismatch checks, conditional transitions, exclusive connector claims,
-  persisted attempts/budgets, outcome queries, and scheduled reconciliation.
-  Activate persisted arrival deadlines and no-show expiry under the
-  [domain start rules](domain.md#51-start-and-expiry), with booking UI explanations
-  and safe handling of queued and uncertain starts.
-  Verify confirmed/rejected/uncertain outcomes, duplicate submissions, and lost
-  responses through the flow. Depends on M05.01 and M05.02.
+  synchronous provider, following the [domain start rules](domain.md#51-start-and-expiry)
+  and [provider contract](integrations.md#1-provider-contracts). The interactive
+  [start confirmation mockup](mockups/start-charging.html) records the UI states
+  and responsive interactions.
+  Depends on M05.01 and M05.02. The sub-items are sequenced as follows:
+  - [x] M06.01.1 Driver start UI and acceptance/status API: deliver the reservation
+    action with typed API responses and visible operation states; persist
+    session/operation intent and outgoing work atomically. Enforce ownership,
+    eligibility, connector exclusivity, and operation identity. Verify the UI/API
+    flow, duplicate submissions, payload mismatches, competing starts, unauthorized
+    access, and dependency failures. Retain pending status after navigation/reload,
+    support responsive interactions, and distinguish acceptance from confirmation.
+  - [ ] M06.01.2 Synchronous provider integration: implement persistent simulator
+    commands/sessions, command deduplication, outcome queries, and controlled
+    faults. Add the authenticated adapter with identity, payload, and unit mapping
+    and bounded timeouts. Verify matching results and retained simulator state.
+    Depends on M06.01.1.
+  - [ ] M06.01.3 Worker execution: consume accepted start work, recheck eligibility,
+    persist attempts and effect budgets, call the provider outside SQL transactions,
+    and apply matching confirmed/rejected outcomes atomically. Record ambiguous
+    outcomes as uncertain. Verify the confirmed/rejected driver flows and claim
+    handling. Depends on M06.01.2.
+  - [ ] M06.01.4 Uncertain start resolution: add safe bounded HTTP retries, outcome
+    queries, and scheduled reconciliation using persisted budgets. Display pending,
+    uncertain, and exhausted automatic work accurately. Verify lost responses,
+    eventual matching evidence, and retained execution claims without repeating
+    unsafe effects. Depends on M06.01.3.
+  - [ ] M06.01.5 No-show expiry: switch automatic expiry to accepted arrival
+    deadlines, resolve unexecuted queued starts, and update booking explanations.
+    Verify pre-attempt expiry and retained claims for
+    unresolved authorized attempts through the application. Depends on M06.01.4.
 - [ ] M06.02 Deliver driver stop with the same operation tracking and recovery;
   display confirmed stop separately from pending final usage. Verify rejected
   and uncertain stops, overruns, and recovery after worker loss.

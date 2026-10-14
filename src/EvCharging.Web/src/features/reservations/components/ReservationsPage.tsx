@@ -19,7 +19,11 @@ import {
   useSearchParams,
 } from "react-router";
 import { PageHeading } from "@/components/PageHeading";
-import { reservationsQuery, type Reservation } from "../api";
+import {
+  hasCurrentCharging,
+  reservationsQuery,
+  type Reservation,
+} from "../api";
 import type { ReservationNavigationState } from "../navigation";
 import { ReservationFailure } from "./ReservationFailure";
 import { ReservationCard } from "./ReservationCard";
@@ -55,10 +59,12 @@ export function ReservationsPage() {
         ]
       : reservations;
   const active = visibleReservations.filter(
-    (reservation) => reservation.state === "active",
+    (reservation) =>
+      reservation.state === "active" || hasCurrentCharging(reservation),
   );
   const past = visibleReservations.filter(
-    (reservation) => reservation.state !== "active",
+    (reservation) =>
+      reservation.state !== "active" && !hasCurrentCharging(reservation),
   );
 
   return (
@@ -84,15 +90,15 @@ export function ReservationsPage() {
         </Alert>
       )}
       {query.isPending && <Loader aria-label="Loading reservations" />}
-      {query.isError && (
+      {query.isError && visibleReservations.length === 0 && (
         <ReservationFailure
           error={query.error}
           retry={() => void query.refetch()}
         />
       )}
-      {(query.isSuccess || createdReservation) && (
+      {(query.data || createdReservation) && (
         <>
-          {visibleReservations.length === 0 && (
+          {query.isSuccess && visibleReservations.length === 0 && (
             <Paper withBorder p="xl" radius="sm">
               <EmptyState>
                 <EmptyState.Indicator>
@@ -123,7 +129,9 @@ export function ReservationsPage() {
               gap="sm"
             >
               <Title id="active-reservations" order={2} size="h4">
-                Active reservations
+                {active.some((reservation) => reservation.state === "consumed")
+                  ? "Current reservations and charging"
+                  : "Active reservations"}
               </Title>
               {active.map((reservation) => (
                 <ReservationCard
@@ -131,6 +139,8 @@ export function ReservationsPage() {
                   reservation={reservation}
                   highlighted={reservation.id === createdReservation?.id}
                   onCancel={setCancelling}
+                  statusUnavailable={query.isError}
+                  onRefresh={() => query.refetch()}
                 />
               ))}
             </Stack>
@@ -149,6 +159,8 @@ export function ReservationsPage() {
                   key={reservation.id}
                   reservation={reservation}
                   highlighted={reservation.id === createdReservation?.id}
+                  statusUnavailable={query.isError}
+                  onRefresh={() => query.refetch()}
                 />
               ))}
             </Stack>

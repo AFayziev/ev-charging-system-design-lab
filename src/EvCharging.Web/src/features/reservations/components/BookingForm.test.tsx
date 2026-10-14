@@ -190,6 +190,8 @@ it("shows the created booking once and clears feedback on reload", async () => {
     createdAt: "2029-01-02T10:00:00Z",
     cancelledAt: null,
     expiredAt: null,
+    arrivalDeadline: "2029-01-10T05:10:00Z",
+    startOperation: null,
   };
   get.mockImplementation(async (path: string) => ({
     data:
@@ -209,7 +211,7 @@ it("shows the created booking once and clears feedback on reload", async () => {
   await userEvent.click(
     screen.getByRole("button", { name: "Reserve connector" }),
   );
-  expect(await screen.findByRole("status")).toHaveTextContent(
+  expect(await screen.findByText("Reservation created.")).toHaveTextContent(
     "Reservation created.",
   );
   expect(
@@ -243,7 +245,7 @@ it("shows the created booking once and clears feedback on reload", async () => {
       name: "Authoritative name reservation",
     }),
   ).not.toHaveAttribute("data-highlighted", "true");
-  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(screen.queryByText("Reservation created.")).not.toBeInTheDocument();
 });
 
 it("places server validation errors on fields", async () => {

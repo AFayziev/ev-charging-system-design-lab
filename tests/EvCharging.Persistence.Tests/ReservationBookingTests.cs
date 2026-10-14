@@ -1,3 +1,4 @@
+using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
@@ -12,6 +13,43 @@ namespace EvCharging.Persistence.Tests;
 
 public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : IClassFixture<PlatformDatabaseFixture>
 {
+    [Fact]
+    public async Task Start_CompetingDrivers_DatabaseAllowsOneConnectorClaim()
+    {
+        await using var setupConnection = fixture.CreateConnection("platform_writer");
+        await using var setup = Context(setupConnection);
+        var (connector, firstDriver) = await EquipmentAsync(setup);
+        var secondDriver = Driver.Register(
+            "https://test.invalid", Guid.NewGuid().ToString(), EmailAddress.Create("other@example.test").Value);
+        var start = DateTimeOffset.UtcNow.AddHours(-3);
+        var first = Booking(connector, firstDriver, start, start.AddHours(1));
+        var second = Booking(connector, secondDriver, start.AddHours(1), start.AddHours(2));
+        setup.Reservations.AddRange(first, second);
+        await setup.SaveChangesAsync();
+
+        var outcomes = await Task.WhenAll(ClaimAsync(first.Id), ClaimAsync(second.Id));
+
+        Assert.Equal(1, outcomes.Count(value => value));
+        Assert.Equal(1, await setup.Sessions.CountAsync(value => value.ConnectorId == connector.Id));
+
+        async Task<bool> ClaimAsync(Guid reservationId)
+        {
+            await using var connection = fixture.CreateConnection("platform_writer");
+            await using var context = Context(connection);
+            var reservation = await context.Reservations.SingleAsync(value => value.Id == reservationId);
+            context.Sessions.Add(ChargingSession.AcceptStart(reservation, reservation.StartsAt).Value);
+            try
+            {
+                await context.SaveChangesAsync();
+                return true;
+            }
+            catch (DbUpdateException exception) when (exception.IsChargingClaimConflict())
+            {
+                return false;
+            }
+        }
+    }
+
     [Fact]
     public async Task LockDriver_TransientContention_RecognizesWrappedFailureForMessageRetry()
     {

@@ -1,4 +1,5 @@
 using EvCharging.Domain.Auditing;
+using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using FluentResults;
@@ -77,6 +78,33 @@ public sealed class Reservation : IAuditableEntity
     public Result ValidateStartTime(DateTimeOffset now) => StartsAt < now
         ? Result.Fail(new BookingValidationError(BookingBoundary.Start, "The start must not be in the past."))
         : Result.Ok();
+
+    public Result ValidateChargingStart(DateTimeOffset now)
+    {
+        if (State != ReservationState.Active)
+        {
+            return Result.Fail(
+                new ChargingStartError(
+                    ChargingStartError.ReservationInactiveCode,
+                    "Only active reservations can start charging."));
+        }
+
+        if (now < StartsAt)
+        {
+            return Result.Fail(
+                new ChargingStartError(
+                    ChargingStartError.TooEarlyCode,
+                    "Charging cannot start before the booked slot."));
+        }
+
+        if (now >= ArrivalDeadline || now >= EndsAt)
+        {
+            return Result.Fail(
+                new ChargingStartError(ChargingStartError.WindowEndedCode, "The arrival deadline has passed."));
+        }
+
+        return Result.Ok();
+    }
 
     public Result Cancel(DateTimeOffset now, bool hasUnresolvedStart)
     {

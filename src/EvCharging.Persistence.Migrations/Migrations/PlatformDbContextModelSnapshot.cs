@@ -24,6 +24,143 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("EvCharging.Domain.Charging.ChargingSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ChargingProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("charging_provider_id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid>("ConnectorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("connector_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal?>("FinalEnergyKWh")
+                        .HasColumnType("numeric")
+                        .HasColumnName("final_energy_k_wh");
+
+                    b.Property<int>("Lifecycle")
+                        .HasColumnType("integer")
+                        .HasColumnName("lifecycle")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<string>("ProviderSessionId")
+                        .HasColumnType("text")
+                        .HasColumnName("provider_session_id");
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ReservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reservation_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sessions");
+
+                    b.HasIndex("ConnectorId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sessions_connector_claim")
+                        .HasFilter("lifecycle IN (0, 1, 2)");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sessions_public_id");
+
+                    b.HasIndex("ReservationId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sessions_reservation_claim")
+                        .HasFilter("lifecycle <> 4");
+
+                    b.HasIndex("ChargingProviderId", "ProviderSessionId")
+                        .HasDatabaseName("ix_sessions_charging_provider_id_provider_session_id");
+
+                    b.ToTable("sessions", "charging");
+
+                    b.HasAnnotation("Audit:ResourceType", "Session");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Charging.Operation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("driver_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer")
+                        .HasColumnName("outcome")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.HasKey("Id")
+                        .HasName("pk_operations");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_operations_public_id");
+
+                    b.HasIndex("SessionId")
+                        .HasDatabaseName("ix_operations_session_id");
+
+                    b.HasIndex("DriverId", "Kind", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_operations_driver_id_kind_idempotency_key");
+
+                    b.ToTable("operations", "charging");
+
+                    b.HasAnnotation("Audit:ResourceType", "Operation");
+                });
+
             modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>
                 {
                     b.Property<Guid>("Id")
@@ -410,64 +547,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.ToTable("charging_providers", "charging");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingSession", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid?>("ChargingProviderId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("charging_provider_id");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<Guid>("ConnectorId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("connector_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<decimal?>("FinalEnergyKWh")
-                        .HasColumnType("numeric")
-                        .HasColumnName("final_energy_k_wh");
-
-                    b.Property<int>("Lifecycle")
-                        .HasColumnType("integer")
-                        .HasColumnName("lifecycle");
-
-                    b.Property<string>("ProviderSessionId")
-                        .HasColumnType("text")
-                        .HasColumnName("provider_session_id");
-
-                    b.Property<Guid>("ReservationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reservation_id");
-
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_sessions");
-
-                    b.HasIndex("ConnectorId")
-                        .HasDatabaseName("ix_sessions_connector_id");
-
-                    b.HasIndex("ReservationId")
-                        .HasDatabaseName("ix_sessions_reservation_id");
-
-                    b.HasIndex("ChargingProviderId", "ProviderSessionId")
-                        .HasDatabaseName("ix_sessions_charging_provider_id_provider_session_id");
-
-                    b.ToTable("sessions", "charging");
-                });
-
             modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
                 {
                     b.Property<Guid>("Id")
@@ -656,55 +735,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                             t.HasCheckConstraint("ck_notification_delivery_attempts_times", "isfinite(started_at) AND (completed_at IS NULL OR (isfinite(completed_at) AND completed_at >= started_at))");
                         });
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("accepted_at");
-
-                    b.Property<Guid>("DriverId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("driver_id");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("idempotency_key");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer")
-                        .HasColumnName("kind");
-
-                    b.Property<int>("Outcome")
-                        .HasColumnType("integer")
-                        .HasColumnName("outcome");
-
-                    b.Property<string>("RequestFingerprint")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("request_fingerprint");
-
-                    b.Property<Guid>("SessionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("session_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_operations");
-
-                    b.HasIndex("SessionId")
-                        .HasDatabaseName("ix_operations_session_id");
-
-                    b.HasIndex("DriverId", "Kind", "IdempotencyKey")
-                        .HasDatabaseName("ix_operations_driver_id_kind_idempotency_key");
-
-                    b.ToTable("operations", "charging");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.OperatorAssignment", b =>
@@ -896,6 +926,50 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         });
                 });
 
+            modelBuilder.Entity("EvCharging.Domain.Charging.ChargingSession", b =>
+                {
+                    b.HasOne("EvCharging.Persistence.Entities.ChargingProvider", null)
+                        .WithMany()
+                        .HasForeignKey("ChargingProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sessions_charging_providers_charging_provider_id");
+
+                    b.HasOne("EvCharging.Domain.Equipment.Connector", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sessions_connectors_connector_id");
+
+                    b.HasOne("EvCharging.Domain.Reservations.Reservation", "Reservation")
+                        .WithMany()
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sessions_reservations_reservation_id");
+
+                    b.Navigation("Reservation");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Charging.Operation", b =>
+                {
+                    b.HasOne("EvCharging.Domain.Identity.Driver", null)
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_operations_drivers_driver_id");
+
+                    b.HasOne("EvCharging.Domain.Charging.ChargingSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_operations_sessions_session_id");
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>
                 {
                     b.HasOne("EvCharging.Domain.Equipment.Station", "Station")
@@ -943,7 +1017,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Attempt", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.Operation", null)
+                    b.HasOne("EvCharging.Domain.Charging.Operation", null)
                         .WithMany()
                         .HasForeignKey("OperationId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -951,32 +1025,9 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasConstraintName("fk_attempts_operations_operation_id");
                 });
 
-            modelBuilder.Entity("EvCharging.Persistence.Entities.ChargingSession", b =>
-                {
-                    b.HasOne("EvCharging.Persistence.Entities.ChargingProvider", null)
-                        .WithMany()
-                        .HasForeignKey("ChargingProviderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_sessions_charging_providers_charging_provider_id");
-
-                    b.HasOne("EvCharging.Domain.Equipment.Connector", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sessions_connectors_connector_id");
-
-                    b.HasOne("EvCharging.Domain.Reservations.Reservation", null)
-                        .WithMany()
-                        .HasForeignKey("ReservationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_sessions_reservations_reservation_id");
-                });
-
             modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
                 {
-                    b.HasOne("EvCharging.Persistence.Entities.ChargingSession", null)
+                    b.HasOne("EvCharging.Domain.Charging.ChargingSession", null)
                         .WithMany()
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -1005,23 +1056,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasConstraintName("fk_notification_delivery_attempts_notifications_notification_id");
 
                     b.Navigation("Notification");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>
-                {
-                    b.HasOne("EvCharging.Domain.Identity.Driver", null)
-                        .WithMany()
-                        .HasForeignKey("DriverId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_operations_drivers_driver_id");
-
-                    b.HasOne("EvCharging.Persistence.Entities.ChargingSession", null)
-                        .WithMany()
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_operations_sessions_session_id");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.OperatorAssignment", b =>

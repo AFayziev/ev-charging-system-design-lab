@@ -6,6 +6,14 @@ namespace EvCharging.Persistence.Extensions;
 
 public static class ExceptionExtensions
 {
+    public static bool IsChargingClaimConflict(this DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: ChargingSessionConfiguration.ConnectorClaimIndexName
+                or ChargingSessionConfiguration.ReservationClaimIndexName
+        };
+
     public static bool IsReservationNotificationConflict(this Exception exception) => exception switch
     {
         PostgresException

@@ -6,7 +6,8 @@ import { HttpStatusCode } from "axios";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { authKeys } from "@/features/auth/api";
-import type { Reservation, ReservationList } from "../api";
+import type { Reservation, ReservationList, StartOperation } from "../api";
+import { connectorBusyCode } from "../errors";
 import { ReservationsPage } from "./ReservationsPage";
 
 const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -81,6 +82,8 @@ const reservation: Reservation = {
   createdAt: "2024-12-31T12:00:00Z",
   cancelledAt: null,
   expiredAt: null,
+  arrivalDeadline: "2026-10-11T12:40:00Z",
+  startOperation: null,
 };
 
 it("groups bookings by server state and links to their stations", async () => {
@@ -127,7 +130,7 @@ it("groups bookings by server state and links to their stations", async () => {
     "href",
     `/stations/${reservation.stationId}`,
   );
-  expect(active.getByText("Active reservation")).toBeVisible();
+  expect(active.getByText("Upcoming reservation")).toBeVisible();
   expect(active.getByText("1 Synthetic Avenue")).toBeVisible();
   expect(active.getByText("Charger 1")).toBeVisible();
   expect(active.getByText("Connector 1")).toBeVisible();
@@ -252,7 +255,7 @@ it.each([HttpStatusCode.Conflict, HttpStatusCode.InternalServerError])(
       expect(dialog.getByRole("alert")).toHaveTextContent(
         "A reservation with a pending or uncertain start cannot be cancelled.",
       );
-    expect(screen.getByText("Active reservation")).toBeVisible();
+    expect(screen.getByText("Upcoming reservation")).toBeVisible();
     expect(screen.queryByText("Cancelled")).not.toBeInTheDocument();
   },
 );
@@ -332,4 +335,340 @@ it("blocks cancellation after a failed session refresh despite a cached token, a
   expect(
     await dialog.findByRole("button", { name: "Confirm cancellation" }),
   ).toBeEnabled();
+});
+
+const pendingStart: StartOperation = {
+  id: "ae19ae7f-225a-4196-bca8-5141ed018a17",
+  sessionId: "9880d294-e32c-4d8d-9c03-05bb7a9b8327",
+  outcome: "pending",
+  lifecycle: "starting",
+  acceptedAt: "2026-10-11T12:31:00Z",
+  startedAt: null,
+};
+
+it("requires a successful session check when a failed refresh retains a cached token", async () => {
+  vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+  const user = userEvent.setup();
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  client.setQueryData(authKeys.session, {
+    signedIn: true,
+    antiforgeryToken: "stale-token",
+  });
+  get.mockImplementation(async (url: string) => {
+    if (url === "/auth/session")
+      throw failure(HttpStatusCode.ServiceUnavailable);
+    return {
+      data: {
+        reservations: [
+          { ...reservation, arrivalDeadline: "2026-10-11T12:40:00Z" },
+        ],
+        nextAfterId: null,
+      },
+    };
+  });
+  setup(client);
+  await user.click(
+    await screen.findByRole("button", { name: "Start charging" }),
+  );
+  const dialog = within(
+    await screen.findByRole("dialog", { name: "Start charging?" }),
+  );
+  expect(await dialog.findByRole("alert")).toBeVisible();
+  expect(dialog.getByRole("button", { name: "Start charging" })).toBeDisabled();
+  expect(post).not.toHaveBeenCalled();
+});
+
+it("recovers an empty cached list after a failed refresh", async () => {
+  const user = userEvent.setup();
+  get.mockResolvedValueOnce({ data: { reservations: [], nextAfterId: null } });
+  const { client } = setup();
+  expect(await screen.findByText("No reservations yet")).toBeVisible();
+  get.mockRejectedValue(failure(HttpStatusCode.ServiceUnavailable));
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ["reservations", "list"] });
+  });
+  expect(await screen.findByRole("alert")).toBeVisible();
+  get.mockResolvedValue({
+    data: { reservations: [reservation], nextAfterId: null },
+  });
+  await user.click(screen.getByRole("button", { name: "Try again" }));
+  expect(
+    await screen.findByRole("link", { name: "North Station" }),
+  ).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("requires confirmation and restores pending acceptance after a fresh page load", async () => {
+  vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+  const user = userEvent.setup();
+  let current = { ...reservation, arrivalDeadline: "2026-10-11T12:40:00Z" };
+  get.mockImplementation(async (url: string) => ({
+    data:
+      url === "/auth/session"
+        ? { signedIn: true, antiforgeryToken: "csrf-token" }
+        : { reservations: [current], nextAfterId: null },
+  }));
+  post.mockImplementation(async () => {
+    current = { ...current, startOperation: pendingStart };
+    return { data: pendingStart };
+  });
+  const view = setup();
+  await user.click(
+    await screen.findByRole("button", { name: "Start charging" }),
+  );
+  let dialog = within(
+    await screen.findByRole("dialog", { name: "Start charging?" }),
+  );
+  expect(post).not.toHaveBeenCalled();
+  await user.click(dialog.getByRole("button", { name: "Not now" }));
+  await user.click(screen.getByRole("button", { name: "Start charging" }));
+  dialog = within(
+    await screen.findByRole("dialog", { name: "Start charging?" }),
+  );
+  await user.click(dialog.getByRole("button", { name: "Start charging" }));
+  expect(await screen.findByText("Confirming start")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Cancel reservation" }),
+  ).not.toBeInTheDocument();
+  expect(post).toHaveBeenCalledTimes(1);
+  view.unmount();
+  setup();
+  expect(
+    await screen.findByRole("button", { name: "Check status" }),
+  ).toBeVisible();
+});
+
+it.each([
+  ["confirmed", "active", "Charging started", "Reservation used"],
+  ["uncertain", "starting", "Waiting for confirmation", "Start unresolved"],
+  ["rejected", "failed", "Charging could not start", "Active reservation"],
+] as const)(
+  "presents %s provider evidence without replacing it with acceptance",
+  async (outcome, lifecycle, title, badge) => {
+    vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+    get.mockResolvedValue({
+      data: {
+        reservations: [
+          {
+            ...reservation,
+            arrivalDeadline: "2026-10-11T12:40:00Z",
+            state: outcome === "confirmed" ? "consumed" : "active",
+            startOperation: { ...pendingStart, outcome, lifecycle },
+          },
+        ],
+        nextAfterId: null,
+      },
+    });
+    setup();
+    expect(await screen.findByText(title)).toBeVisible();
+    expect(screen.getByText(badge)).toBeVisible();
+    if (outcome !== "rejected") {
+      expect(
+        screen.queryByRole("button", { name: "Cancel reservation" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Start charging" }),
+      ).not.toBeInTheDocument();
+    } else
+      expect(
+        screen.getByRole("button", { name: "Try starting again" }),
+      ).toBeEnabled();
+  },
+);
+
+it.each([
+  { operation: pendingStart, action: "Check status" },
+  { operation: null, action: "Start charging" },
+])(
+  "keeps $action available during background refresh",
+  async ({ operation, action }) => {
+    vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+    const user = userEvent.setup();
+    const accepted = { ...reservation, startOperation: operation };
+    const data = { reservations: [accepted], nextAfterId: null };
+    get.mockResolvedValueOnce({ data });
+    const { client } = setup();
+    const button = await screen.findByRole("button", { name: action });
+    let finish: ((response: { data: ReservationList }) => void) | undefined;
+    get.mockReturnValueOnce(
+      new Promise<{ data: ReservationList }>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    act(() => {
+      void client.invalidateQueries({ queryKey: ["reservations", "list"] });
+    });
+    try {
+      await user.hover(button);
+      expect(button).toBeEnabled();
+    } finally {
+      await act(async () => finish?.({ data }));
+    }
+  },
+);
+
+it("retains accepted status when the status dependency fails", async () => {
+  const user = userEvent.setup();
+  const accepted = { ...reservation, startOperation: pendingStart };
+  get.mockResolvedValueOnce({
+    data: { reservations: [accepted], nextAfterId: null },
+  });
+  setup();
+  expect(await screen.findByText("Start pending")).toBeVisible();
+  let fail: ((error: Error) => void) | undefined;
+  get.mockReturnValueOnce(
+    new Promise((_resolve, reject) => {
+      fail = reject;
+    }),
+  );
+  await user.click(screen.getByRole("button", { name: "Check status" }));
+  expect(screen.getByRole("button", { name: "Check status" })).toBeDisabled();
+  await act(async () => fail?.(failure(HttpStatusCode.ServiceUnavailable)));
+  expect(
+    await screen.findByText("Status is temporarily unavailable"),
+  ).toBeVisible();
+  expect(screen.getByText("Start pending")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Start charging" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Cancel reservation" }),
+  ).not.toBeInTheDocument();
+});
+
+it("reuses the same submission identity after an ambiguous failure", async () => {
+  vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+  const user = userEvent.setup();
+  get.mockImplementation(async (url: string) => ({
+    data:
+      url === "/auth/session"
+        ? { signedIn: true, antiforgeryToken: "csrf-token" }
+        : {
+            reservations: [
+              { ...reservation, arrivalDeadline: "2026-10-11T12:40:00Z" },
+            ],
+            nextAfterId: null,
+          },
+  }));
+  post.mockRejectedValue(failure(HttpStatusCode.ServiceUnavailable));
+  setup();
+  await user.click(
+    await screen.findByRole("button", { name: "Start charging" }),
+  );
+  await user.click(
+    within(await screen.findByRole("dialog")).getByRole("button", {
+      name: "Start charging",
+    }),
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Retry start request" }),
+  );
+  await user.click(
+    within(await screen.findByRole("dialog")).getByRole("button", {
+      name: "Start charging",
+    }),
+  );
+  expect(post).toHaveBeenCalledTimes(2);
+  expect(post.mock.calls[1][1]).toEqual(post.mock.calls[0][1]);
+});
+
+it.each([
+  ["2026-10-11T12:29:00Z", "Not ready to start yet"],
+  ["2026-10-11T12:40:00Z", "Start window has ended"],
+])("disables start at %s with an explanation", async (now, explanation) => {
+  vi.setSystemTime(new Date(now));
+  get.mockResolvedValue({
+    data: {
+      reservations: [
+        { ...reservation, arrivalDeadline: "2026-10-11T12:40:00Z" },
+      ],
+      nextAfterId: null,
+    },
+  });
+  setup();
+  expect(await screen.findByText(explanation)).toBeVisible();
+  if (explanation === "Not ready to start yet") {
+    expect(screen.getByText("Upcoming reservation")).toBeVisible();
+  }
+  expect(screen.getByRole("button", { name: "Start charging" })).toBeDisabled();
+});
+
+it("shows a connector conflict as recoverable without claiming an accepted operation", async () => {
+  vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+  const user = userEvent.setup();
+  get.mockImplementation(async (url: string) => ({
+    data:
+      url === "/auth/session"
+        ? { signedIn: true, antiforgeryToken: "csrf-token" }
+        : {
+            reservations: [
+              { ...reservation, arrivalDeadline: "2026-10-11T12:40:00Z" },
+            ],
+            nextAfterId: null,
+          },
+  }));
+  const error = failure(HttpStatusCode.Conflict);
+  Object.assign(error.response, {
+    data: {
+      code: connectorBusyCode,
+      title: "Charging start conflict",
+      detail: "The connector is still in use or has an unresolved start.",
+    },
+  });
+  post.mockRejectedValue(error);
+  setup();
+  await user.click(
+    await screen.findByRole("button", { name: "Start charging" }),
+  );
+  await user.click(
+    within(await screen.findByRole("dialog")).getByRole("button", {
+      name: "Start charging",
+    }),
+  );
+  expect(await screen.findByText("Connector is still in use")).toBeVisible();
+  expect(screen.queryByText("Start pending")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Try starting again" }),
+  ).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Cancel reservation" }),
+  ).toBeEnabled();
+});
+
+it("keeps confirmation busy until submission completes and prevents repeated starts", async () => {
+  vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+  const user = userEvent.setup();
+  let current: Reservation = {
+    ...reservation,
+    arrivalDeadline: "2026-10-11T12:40:00Z",
+  };
+  get.mockImplementation(async (url: string) => ({
+    data:
+      url === "/auth/session"
+        ? { signedIn: true, antiforgeryToken: "csrf-token" }
+        : { reservations: [current], nextAfterId: null },
+  }));
+  let finish: ((response: { data: StartOperation }) => void) | undefined;
+  const submission = new Promise<{ data: StartOperation }>((resolve) => {
+    finish = resolve;
+  });
+  post.mockReturnValue(submission);
+  setup();
+  await user.click(
+    await screen.findByRole("button", { name: "Start charging" }),
+  );
+  const dialog = within(await screen.findByRole("dialog"));
+  await user.click(dialog.getByRole("button", { name: "Start charging" }));
+  expect(dialog.getByRole("button", { name: "Start charging" })).toBeDisabled();
+  expect(dialog.getByRole("button", { name: "Not now" })).toBeDisabled();
+  await user.click(dialog.getByRole("button", { name: "Start charging" }));
+  expect(post).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    current = { ...current, startOperation: pendingStart };
+    finish?.({ data: pendingStart });
+    await submission;
+  });
+  expect(await screen.findByText("Confirming start")).toBeVisible();
 });

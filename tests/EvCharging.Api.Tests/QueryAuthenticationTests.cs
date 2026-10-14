@@ -21,7 +21,7 @@ public sealed class QueryAuthenticationTests
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddDbContext<PlatformReadDbContext>(options => options.UseNpgsql());
+        builder.Services.AddDbContext<PlatformDbContext>(options => options.UseNpgsql());
         builder.UseWolverine(options =>
         {
             options.AddApplicationHandlers();

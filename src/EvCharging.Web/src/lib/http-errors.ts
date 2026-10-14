@@ -8,6 +8,13 @@ export interface HttpFailure {
 interface ProblemDetails {
   readonly title?: unknown;
   readonly detail?: unknown;
+  readonly code?: unknown;
+}
+
+export function getHttpProblemCode(error: unknown): string | undefined {
+  if (!axios.isAxiosError<ProblemDetails>(error)) return undefined;
+  const code = error.response?.data?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 interface ValidationProblemDetails {

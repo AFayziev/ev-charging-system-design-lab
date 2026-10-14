@@ -48,7 +48,7 @@ public sealed class ApiAuthenticationTests
         builder.Configuration["ApiAuthentication:Audience"] = Audience;
         builder.Configuration["ApiAuthentication:AllowLocalHttp"] = "false";
         builder.AddApiAuthentication();
-        builder.Services.AddDbContext<PlatformReadDbContext>(options => options.UseNpgsql());
+        builder.Services.AddDbContext<PlatformDbContext>(options => options.UseNpgsql());
         builder.UseWolverine(options =>
         {
             options.AddApplicationHandlers();

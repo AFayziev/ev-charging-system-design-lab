@@ -1,23 +1,39 @@
-import { Anchor, Button, Paper, Stack, Text } from "@mantine/core";
+import { Anchor, Badge, Paper, Stack, Text } from "@mantine/core";
 import { IconCalendar, IconPlug } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { StationPhoto } from "@/features/stations/components/StationPhoto";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
-import type { Reservation } from "../api";
-import { formatReservationSlot, getBrowserTimeZone } from "../time-formatting";
+import { hasCurrentCharging, type Reservation } from "../api";
+import {
+  formatReservationSlot,
+  getBrowserTimeZone,
+  formatStartDeadline,
+} from "../time-formatting";
 import { ReservationStatus } from "./ReservationStatus";
 import classes from "./Reservations.module.css";
+import { ChargingStartControls } from "./ChargingStartControls";
+import { getStartPresentation } from "../start-presentation";
 
 export function ReservationCard({
   reservation,
   highlighted = false,
   onCancel,
+  statusUnavailable = false,
+  onRefresh,
 }: {
   reservation: Reservation;
   highlighted?: boolean;
   onCancel?: (reservation: Reservation) => void;
+  statusUnavailable?: boolean;
+  onRefresh: () => Promise<unknown>;
 }) {
-  const active = reservation.state === "active";
+  const active =
+    reservation.state === "active" || hasCurrentCharging(reservation);
+  const startPresentation = getStartPresentation(
+    reservation.startOperation,
+    reservation.state === "active",
+    reservation.arrivalDeadline,
+  );
   const timeRange = formatReservationSlot(
     reservation.startsAt,
     reservation.endsAt,
@@ -69,22 +85,30 @@ export function ReservationCard({
         <Text size="xs" c="dimmed">
           Your time · {getBrowserTimeZone()}
         </Text>
-        <ReservationStatus reservation={reservation} />
-      </Stack>
-      {active && onCancel && (
-        <div className={classes.actions}>
-          <Button fullWidth disabled>
-            Start charging
-          </Button>
-          <Button
-            variant="outline"
-            color="red"
-            fullWidth
-            onClick={() => onCancel(reservation)}
+        {startPresentation?.badge ? (
+          <Badge
+            color={startPresentation.color}
+            variant="light"
+            styles={{ label: { textTransform: "none" } }}
           >
-            Cancel reservation
-          </Button>
-        </div>
+            {startPresentation.badge}
+          </Badge>
+        ) : (
+          <ReservationStatus reservation={reservation} />
+        )}
+        {reservation.state === "active" && (
+          <Text size="xs" c="dimmed">
+            Start by {formatStartDeadline(reservation.arrivalDeadline)}
+          </Text>
+        )}
+      </Stack>
+      {(active || reservation.startOperation) && (
+        <ChargingStartControls
+          reservation={reservation}
+          statusUnavailable={statusUnavailable}
+          onRefresh={onRefresh}
+          onCancel={onCancel}
+        />
       )}
     </Paper>
   );

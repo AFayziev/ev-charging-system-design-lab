@@ -14,7 +14,6 @@
 
 .card[data-highlighted="true"] {
   border-color: var(--mantine-color-teal-7);
-  background: var(--mantine-color-teal-0);
 }
 
 .photo {
@@ -87,6 +86,11 @@
   align-self: start;
 }
 
+.chargingStatus {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+
 @media (max-width: 61.99em) {
   .card,
   .card[data-active="true"] {
@@ -146,5 +150,9 @@
   .card .actions {
     grid-column: 1 / -1;
     grid-row: auto;
+  }
+
+  .chargingStatus {
+    grid-column: 1 / -1;
   }
 }

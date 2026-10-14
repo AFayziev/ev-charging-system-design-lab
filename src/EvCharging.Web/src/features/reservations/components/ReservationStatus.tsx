@@ -12,10 +12,16 @@ const statuses = {
 export function ReservationStatus({
   reservation,
 }: {
-  reservation: Pick<Reservation, "state" | "cancelledAt" | "expiredAt">;
+  reservation: Pick<
+    Reservation,
+    "state" | "startsAt" | "cancelledAt" | "expiredAt"
+  >;
 }) {
   const { state, cancelledAt, expiredAt } = reservation;
-  const status = statuses[state];
+  const status =
+    state === "active" && Date.now() < Date.parse(reservation.startsAt)
+      ? { label: "Upcoming reservation", color: "blue" }
+      : statuses[state];
   const recordedAt = state === "cancelled" ? cancelledAt : expiredAt;
 
   return (

@@ -3,5 +3,7 @@ namespace EvCharging.Persistence.Auditing;
 public enum AuditResourceType
 {
     Station,
-    Reservation
+    Reservation,
+    Session,
+    Operation
 }

@@ -113,6 +113,231 @@ and client pooling. Npgsql multi-host routing is an optional direct-connection c
 [Azure read replicas](https://learn.microsoft.com/en-us/azure/postgresql/read-replica/concepts-read-replicas),
 [Azure HA](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-high-availability)
 
+#### Read consistency routing options
+
+Current routing:
+
+- Reservation [list](../src/EvCharging.Api/Features/Reservations/ListReservations.cs)
+  and [detail](../src/EvCharging.Api/Features/Reservations/GetReservation.cs) use
+  `PlatformDbContext` through `platform-write`, with untracked entity reads.
+  Entire pages, including history, read primary.
+- Catalog queries retain `PlatformReadDbContext`; no global override is applied.
+- Both routes reach the same server locally; replica lag requires the Azure profile.
+
+The following approaches are drafts, not configured routes.
+[Architecture](architecture.md#5-read-and-write-paths) owns the consistency boundaries.
+
+**Approach 1: fixed routing by use case**
+
+One explicitly configured read context per query handler, with reservation
+list/detail reads targeting the primary through reader credentials.
+
+1. **Add a primary read context using the existing EF model.**
+
+   In `EvCharging.Persistence`:
+
+   ```csharp
+   public sealed class PlatformPrimaryReadDbContext(
+       DbContextOptions<PlatformPrimaryReadDbContext> options)
+       : PlatformDbContext(options);
+   ```
+
+   The three contexts then have clear responsibilities:
+
+   | Context | Destination | Permissions |
+   |---|---|---|
+   | `PlatformReadDbContext` | Ordinary read destination, potentially a replica | Reader |
+   | `PlatformPrimaryReadDbContext` | Primary | Reader |
+   | `PlatformDbContext` | Primary | Writer |
+
+   This extra type makes ordinary constructor injection sufficient. It avoids
+   a custom selector or middleware.
+
+2. **Provide the primary reader connection through AppHost.**
+
+   Reuse `AddConnection` and the existing reader credentials:
+
+   ```csharp
+   var primaryRead = AddConnection(
+       "platform-primary-read",
+       "platform_reader",
+       readerPassword);
+   ```
+
+   Add it to `DatabaseConnectionResources`:
+
+   ```csharp
+   /// <summary>Read-only connection to the primary for current state.</summary>
+   public required IResourceBuilder<ConnectionStringResource> PrimaryRead
+   {
+       get;
+       init;
+   }
+   ```
+
+   Reference it from the API alongside the existing connections:
+
+   ```csharp
+   .WithReference(databaseAccess.PrimaryRead)
+   ```
+
+   Today both reader connections reach the same PostgreSQL instance. When a
+   replica is introduced, the ordinary read connection can move there while
+   this connection remains on primary.
+
+3. **Register it through the existing persistence extension.**
+
+   Extend the existing data-source registration loop with:
+
+   ```csharp
+   public const string PrimaryReadRoute = "platform-primary-read";
+   ```
+
+   Then register the context:
+
+   ```csharp
+   builder.Services.AddDbContext<PlatformPrimaryReadDbContext>(
+       (services, options) =>
+           options.UseNpgsql(
+               services.GetRequiredKeyedService<NpgsqlDataSource>(
+                   PrimaryReadRoute)));
+
+   builder.EnrichNpgsqlDbContext<PlatformPrimaryReadDbContext>(
+       settings => settings.DisableRetry = true);
+   ```
+
+   It receives no audit interceptor. Database grants enforce reader permissions.
+   Retry configuration remains subject to the separately recorded review.
+
+4. **Change only the reservation query dependencies.**
+
+   ```csharp
+   public sealed class ListReservationsQueryHandler(
+       PlatformPrimaryReadDbContext database)
+   {
+       // Existing query implementation.
+   }
+
+   public sealed class GetReservationQueryHandler(
+       PlatformPrimaryReadDbContext database)
+   {
+       // Existing query implementation.
+   }
+   ```
+
+   Their queries, ownership checks, pagination and response mappings stay
+   together. The existing shared mapping accepts `PlatformDbContext`, so the
+   derived read context already fits.
+
+   Catalog queries continue using `PlatformReadDbContext`. Booking, cancellation
+   and charging-start commands use the writer context for their transactions.
+
+5. **Keep frontend behavior independent of database topology.**
+
+   Existing endpoints and query keys remain unchanged. Successful commands
+   update the TanStack cache with their returned state, then refresh the affected
+   queries. Reservation refreshes and status polling consistently reach the
+   primary through the backend configuration.
+
+   This removes the need for page-level primary mode, separate consistency cache
+   keys, or rules for switching back to a replica.
+
+**Approach 2: temporary primary routing window**
+
+Server-side primary affinity for a configurable period after a successful write,
+following [Rails' automatic database switching](https://guides.rubyonrails.org/active_record_multiple_databases.html#activating-automatic-role-switching).
+
+1. **The gateway records the window.**
+
+   After a successful mutating browser API response—`POST`, `PUT`, `PATCH` or
+   `DELETE`—a YARP response transform sets a short-lived, protected, `HttpOnly`
+   cookie. Each subsequent successful write renews it. Failed validation does
+   not start the window.
+
+   The duration belongs to validated application configuration, for example
+   `ReadRouting:PrimaryWindow`. A specific value should reflect the expected
+   replica lag.
+
+2. **The gateway selects the routing hint on subsequent requests.**
+
+   A request transform validates the cookie. While it remains valid, the gateway
+   adds an internal header indicating primary reads. It removes any
+   browser-supplied version of that header before setting its own.
+
+   The cookie naturally follows refreshes, navigation and other tabs in the same
+   browser. Gateway replicas would share Data Protection keys. YARP supports
+   both request and response transforms; ASP.NET Core provides protected payloads
+   with expiration.
+
+3. **The API selects the read connection once per request.**
+
+   Keep `PlatformReadDbContext`. Its existing scoped registration chooses the
+   data source using the routing hint:
+
+   ```csharp
+   builder.Services.AddDbContext<PlatformReadDbContext>(
+       (services, options) =>
+       {
+           var routing = services.GetRequiredService<ReadRoutingContext>();
+
+           var route = routing.UsePrimary
+               ? PrimaryReadRoute
+               : ReadRoute;
+
+           options.UseNpgsql(
+               services.GetRequiredKeyedService<NpgsqlDataSource>(route));
+       });
+   ```
+
+   `ReadRoutingContext` is a small request-scoped decision established before
+   Wolverine invokes the handler. Both data sources use **reader credentials**.
+   Commands retain their writer context.
+
+   Handlers receive one read context and contain no connection-selection branches.
+
+4. **Expiry returns ordinary reads to the replica.**
+
+   Reads do not renew the window. React keeps using the same endpoints and query
+   keys, updating its cache from command responses as usual.
+
+An illustrative five-second window behaves like this:
+
+```text
+12:00:00  Booking commits; gateway issues the routing cookie
+12:00:01  Reservation list reads primary
+12:00:03  Page refresh reads primary
+12:00:05  Window expires; ordinary reads use replica
+```
+
+**Trade-offs**
+
+| Concern | Fixed routing | Temporary window |
+|---|---|---|
+| Primary load | All reservation list/detail traffic, including history | Browser reads during the window, plus explicitly current-status queries |
+| Replica offloading | Other queries that tolerate lag | Ordinary reads outside the window |
+| Coordination | Context registration and connection wiring | Gateway cookie/transforms and API request-scoped selection |
+| Read-your-write | Reads after commit reach primary | Assumes replica catches up before the window expires |
+| Worker updates | Subsequent primary reads see committed updates | Do not renew the browser window; current-status checks need independent primary routing |
+| Lost write response | Subsequent reads still use primary | May prevent the cookie reaching the browser |
+| In-flight older reads | Can still overwrite frontend state | Can still overwrite frontend state |
+
+Both approaches retain reader permissions for queries and primary-side checks
+inside command transactions. Neither makes multiple response queries one atomic
+snapshot. Native TanStack cache updates and cancellation of superseded reads
+preserve immediate command results. Npgsql server-role routing does not track
+recent writes or prove replica freshness.
+
+Pending selection: routing approach, window duration, and designation of
+current-status queries. The Azure profile can compare primary load, lag beyond
+the window, and user-visible state regression.
+
+Sources:
+
+- [YARP transforms](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/yarp/extensibility-transforms)
+- [Time-limited Data Protection](https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/consumer-apis/limited-lifetime-payloads)
+- [Npgsql routing](https://www.npgsql.org/doc/failover-and-load-balancing.html)
+- [TanStack mutation responses](https://tanstack.com/query/latest/docs/framework/react/guides/updates-from-mutation-responses)
+
 ### 1.4 Message persistence and envelopes
 
 Each message-processing API/worker host family uses a distinct Wolverine storage

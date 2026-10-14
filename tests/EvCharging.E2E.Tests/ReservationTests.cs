@@ -20,7 +20,7 @@ using static Microsoft.Playwright.Assertions;
 namespace EvCharging.E2E.Tests;
 
 [Collection(nameof(E2ECollection))]
-public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
+public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
 {
     private PlatformDbContext? _storage;
     private Driver? _driver;
@@ -69,6 +69,9 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
                 await Storage.ReservationNotifications.Where(value => reservationIds.Contains(value.ReservationId))
                     .ExecuteDeleteAsync();
                 await Storage.Notifications.Where(value => notificationIds.Contains(value.Id)).ExecuteDeleteAsync();
+                await Storage.Operations.Where(value => value.Session != null
+                    && reservationIds.Contains(value.Session.ReservationId))
+                    .ExecuteDeleteAsync();
                 await Storage.Sessions.Where(value => reservationIds.Contains(value.ReservationId))
                     .ExecuteDeleteAsync();
                 await Storage.Reservations.Where(value => driverIds.Contains(value.DriverId)).ExecuteDeleteAsync();
@@ -356,13 +359,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
                 .ToArray();
             Storage.Reservations.AddRange(bookings);
             await Storage.SaveChangesAsync(timeout.Token);
-            Storage.Sessions.Add(new ChargingSession
-            {
-                ReservationId = bookings[0].Id,
-                ConnectorId = connector.Id,
-                Lifecycle = SessionLifecycle.Starting,
-                CreatedAt = past
-            });
+            Storage.Sessions.Add(ChargingSession.AcceptStart(bookings[0], past).Value);
             await Storage.SaveChangesAsync(timeout.Token);
             await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
             await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(3);
@@ -524,13 +521,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
 
         if (scenario == "unresolved")
         {
-            Storage.Sessions.Add(new ChargingSession
-            {
-                ReservationId = reservation.Id,
-                ConnectorId = connector.Id,
-                Lifecycle = SessionLifecycle.Starting,
-                CreatedAt = start
-            });
+            Storage.Sessions.Add(ChargingSession.AcceptStart(reservation, start).Value);
             await Storage.SaveChangesAsync();
         }
 
@@ -707,13 +698,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
                 .ToArray();
             storage.Reservations.AddRange(overdue);
             await storage.SaveChangesAsync();
-            storage.Sessions.Add(new ChargingSession
-            {
-                ReservationId = overdue[0].Id,
-                ConnectorId = connector.Id,
-                Lifecycle = SessionLifecycle.Starting,
-                CreatedAt = past
-            });
+            storage.Sessions.Add(ChargingSession.AcceptStart(overdue[0], past).Value);
             await storage.SaveChangesAsync();
             var upcoming = DateTimeOffset.UtcNow.AddHours(2);
             for (int index = 0; index < AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver; index++)

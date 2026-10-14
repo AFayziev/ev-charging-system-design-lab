@@ -2,6 +2,8 @@ import { queryOptions, replaceEqualDeep } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 export interface Reservation {
+  readonly arrivalDeadline: string;
+  readonly startOperation: StartOperation | null;
   readonly id: string;
   readonly stationId: string;
   readonly stationName: string;
@@ -19,6 +21,43 @@ export interface Reservation {
   readonly createdAt: string;
   readonly cancelledAt: string | null;
   readonly expiredAt: string | null;
+}
+
+export interface StartOperation {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly outcome: "pending" | "confirmed" | "rejected" | "uncertain";
+  readonly lifecycle:
+    "starting" | "active" | "stopping" | "completed" | "failed";
+  readonly acceptedAt: string;
+  readonly startedAt: string | null;
+}
+
+export function isStartUnresolved(operation: StartOperation | null) {
+  return operation?.outcome === "pending" || operation?.outcome === "uncertain";
+}
+
+export function hasCurrentCharging(reservation: Reservation) {
+  const operation = reservation.startOperation;
+  return (
+    isStartUnresolved(operation) ||
+    operation?.lifecycle === "active" ||
+    operation?.lifecycle === "stopping"
+  );
+}
+
+export async function startCharging(
+  reservationId: string,
+  idempotencyKey: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<StartOperation> {
+  const response = await api.post<StartOperation>(
+    `/api/reservations/${reservationId}/start`,
+    { idempotencyKey },
+    { headers: { "X-CSRF-TOKEN": token }, signal },
+  );
+  return response.data;
 }
 
 export interface ReservationList {
@@ -125,9 +164,11 @@ export const reservationsQuery = (afterId: string | null) =>
     refetchInterval: (query) => {
       if (query.state.error) return false;
       return query.state.data?.reservations.some(
-        (reservation) => reservation.state === "active",
+        (reservation) =>
+          reservation.state === "active" ||
+          isStartUnresolved(reservation.startOperation),
       )
-        ? 15_000
+        ? 10_000
         : false;
     },
   });

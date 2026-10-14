@@ -1,4 +1,8 @@
+using EvCharging.Api.Features.Charging;
+using EvCharging.Domain.Charging;
 using EvCharging.Domain.Reservations;
+using EvCharging.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Reservations;
 
@@ -26,6 +30,26 @@ internal static class ReservationResponseMappings
             reservation.State,
             reservation.CreatedAt,
             reservation.CancelledAt,
-            reservation.ExpiredAt);
+            reservation.ExpiredAt,
+            reservation.ArrivalDeadline);
+    }
+
+    public static async Task<IReadOnlyList<ReservationResponse>> ToResponsesAsync(
+        this IReadOnlyCollection<Reservation> reservations,
+        PlatformDbContext database,
+        CancellationToken cancellationToken)
+    {
+        var ids = reservations.Select(value => value.Id).ToArray();
+        var operations = await database.Operations.AsNoTracking().Include(value => value.Session)
+            .Where(value => value.Kind == ChargingCommandKind.Start && value.Session != null
+                && ids.Contains(value.Session.ReservationId))
+            .OrderByDescending(value => value.AcceptedAt)
+            .ThenByDescending(value => value.Id)
+            .ToListAsync(cancellationToken);
+        var latest = operations.GroupBy(value => value.Session!.ReservationId)
+            .ToDictionary(group => group.Key, group => group.First().ToResponse());
+        return reservations.Select(
+            value => value.ToResponse() with { StartOperation = latest.GetValueOrDefault(value.Id) })
+            .ToArray();
     }
 }

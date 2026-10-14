@@ -283,6 +283,9 @@ retain their prescribed names and signatures.
 
 ## Errors and diagnostics
 
+- Define stable error codes and other reused semantic strings as named constants
+  in their owning domain, feature, or infrastructure area. Use `nameof` for member
+  names. Public-contract tests may assert literal wire values independently.
 - Represent expected business outcomes explicitly; use exceptions for exceptional
   failures. Validate external input at the boundary.
 - Catch exceptions only to handle, translate, or add useful context. Preserve
@@ -306,6 +309,9 @@ retain their prescribed names and signatures.
 
 ## Tests and enforcement
 
+- Group domain unit tests by the model under test, using `<Model>Tests` for
+  the class and file. Keep method scenarios within that group rather than creating
+  a separate test file for each model operation.
 - Use `MethodUnderTest_Scenario_ExpectedResult` for test names, following
   [Microsoft's testing guidance](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices#naming-your-tests).
   Use the operation name for tests spanning components; keep each part concise.

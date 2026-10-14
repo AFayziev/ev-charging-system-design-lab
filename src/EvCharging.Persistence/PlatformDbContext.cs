@@ -1,3 +1,4 @@
+using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;

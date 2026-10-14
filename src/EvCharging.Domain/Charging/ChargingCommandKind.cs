@@ -1,4 +1,4 @@
-namespace EvCharging.Persistence.Entities;
+namespace EvCharging.Domain.Charging;
 
 public enum ChargingCommandKind
 {

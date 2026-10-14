@@ -12,7 +12,7 @@ public sealed record ListReservationsRequest(Guid? AfterId = null, int Limit = C
     : IAuthenticatedRequest<ReservationListResponse>;
 public sealed record ReservationListResponse(IReadOnlyList<ReservationResponse> Reservations, Guid? NextAfterId);
 
-public sealed class ListReservationsQueryHandler(PlatformReadDbContext database)
+public sealed class ListReservationsQueryHandler(PlatformDbContext database)
 {
     public async Task<Result<ReservationListResponse>> HandleAsync(
         ListReservationsRequest request, UserIdentity identity, CancellationToken cancellationToken)
@@ -56,7 +56,7 @@ public sealed class ListReservationsQueryHandler(PlatformReadDbContext database)
             (reservation.CreatedAt == anchor.CreatedAt && reservation.Id.CompareTo(anchor.Id) < 0)));
     }
 
-    private static async Task<ReservationListResponse> GetPageAsync(
+    private async Task<ReservationListResponse> GetPageAsync(
         IQueryable<Reservation> pageQuery, int limit, CancellationToken cancellationToken)
     {
         var reservations = await pageQuery
@@ -68,7 +68,7 @@ public sealed class ListReservationsQueryHandler(PlatformReadDbContext database)
         var nextAfterId = CursorPagination.TrimPage(reservations, limit, reservation => reservation.PublicId);
 
         return new ReservationListResponse(
-            reservations.Select(reservation => reservation.ToResponse()).ToArray(),
+            await reservations.ToResponsesAsync(database, cancellationToken),
             nextAfterId);
     }
 }

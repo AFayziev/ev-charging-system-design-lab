@@ -11,8 +11,8 @@ export function SignInErrorPage() {
         description="Your account is not ready to use."
       />
       <Alert color="red" icon={<IconAlertCircle size={20} />}>
-        Your account could not be prepared. Registration requires a verified email.
-        If you have completed verification, try signing in again.
+        Your account could not be prepared. Registration requires a verified
+        email. If you have completed verification, try signing in again.
       </Alert>
       <Button component="a" href={getSignInUrl("/stations")}>
         Try signing in again

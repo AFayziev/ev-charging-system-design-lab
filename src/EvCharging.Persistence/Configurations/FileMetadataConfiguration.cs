@@ -1,3 +1,4 @@
+using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
