@@ -218,6 +218,14 @@ interactive OIDC flow.
 
 ### 1.8 Notification adapters
 
+Reservation emails use Handlebars.Net for embedded plain-text and HTML
+[templates](../src/EvCharging.NotificationWorker/Templates/). Email styling follows
+the browser application's
+[theme](../src/EvCharging.Web/src/app/bootstrap.tsx) and
+[semantic colours](../src/EvCharging.Web/src/app/global.css), using inline styles
+for email-client compatibility.
+Email timestamps use explicit UTC labels.
+
 NotificationWorker selects `Simulator` (local default) or `Cloudflare` through
 configuration. Missing provider configuration fails explicitly without switching
 providers. Delivery semantics are defined in

@@ -34,6 +34,8 @@ public class PlatformDbContext : DbContext
     public DbSet<Operation> Operations => Set<Operation>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
     public DbSet<FileMetadata> Files => Set<FileMetadata>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<ReservationNotification> ReservationNotifications => Set<ReservationNotification>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
         optionsBuilder.UseSnakeCaseNamingConvention()

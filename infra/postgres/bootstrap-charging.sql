@@ -36,3 +36,9 @@ WHERE to_regclass('charging.ef_migrations_history') IS NOT NULL \gexec
 -- Audit history remains append-only after reprovisioning.
 SELECT 'REVOKE UPDATE, DELETE ON TABLE charging.audit_entries FROM platform_writer'
 WHERE to_regclass('charging.audit_entries') IS NOT NULL \gexec
+
+-- Frozen notification content belongs exclusively to the notification worker.
+SELECT 'REVOKE ALL ON TABLE charging.notifications FROM platform_writer, platform_reader'
+WHERE to_regclass('charging.notifications') IS NOT NULL \gexec
+SELECT 'REVOKE ALL ON TABLE charging.reservation_notifications FROM platform_writer, platform_reader'
+WHERE to_regclass('charging.reservation_notifications') IS NOT NULL \gexec

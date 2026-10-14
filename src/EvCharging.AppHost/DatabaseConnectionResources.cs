@@ -20,6 +20,9 @@ internal sealed class DatabaseConnectionResources
     /// <summary>Runtime connection for ChargingWorker message storage and reservation processing.</summary>
     public required IResourceBuilder<ConnectionStringResource> ChargingMessaging { get; init; }
 
+    /// <summary>Runtime connection for NotificationWorker message storage and notification preparation.</summary>
+    public required IResourceBuilder<ConnectionStringResource> NotificationMessaging { get; init; }
+
     /// <summary>One-shot job that provisions database roles, schemas, and grants before migrations.</summary>
     public required IResourceBuilder<ContainerResource> Provisioning { get; init; }
 }

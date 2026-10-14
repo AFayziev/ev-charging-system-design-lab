@@ -6,6 +6,17 @@ namespace EvCharging.Persistence.Extensions;
 
 public static class ExceptionExtensions
 {
+    public static bool IsReservationNotificationConflict(this Exception exception) => exception switch
+    {
+        PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: ReservationNotificationConfiguration.ReservationKindIndexName
+        } => true,
+        DbUpdateException { InnerException: { } cause } => cause.IsReservationNotificationConflict(),
+        _ => false
+    };
+
     public static bool IsDriverIdentityConflict(this DbUpdateException exception) =>
         exception.InnerException is PostgresException
         {

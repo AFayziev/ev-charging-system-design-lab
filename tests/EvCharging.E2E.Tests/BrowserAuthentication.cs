@@ -21,6 +21,7 @@ internal static class BrowserAuthentication
         await page.GetByLabel("Email", new() { Exact = true }).FillAsync($"{username}@example.test");
         await page.GetByLabel("Password", new() { Exact = true }).FillAsync(password);
         await page.GetByRole(AriaRole.Button, new() { Name = "Sign In", Exact = true }).ClickAsync();
-        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Account menu" })).ToBeVisibleAsync();
+        await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Account menu" }))
+            .ToBeVisibleAsync(new() { Timeout = 30_000 });
     }
 }

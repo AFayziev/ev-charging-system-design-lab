@@ -537,6 +537,61 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.ToTable("file_metadata", "charging");
                 });
 
+            modelBuilder.Entity("EvCharging.Persistence.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<string>("HtmlBody")
+                        .HasColumnType("text")
+                        .HasColumnName("html_body");
+
+                    b.Property<DateTimeOffset>("PreparedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("prepared_at");
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("recipient_email");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("subject");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notifications");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_notifications_public_id");
+
+                    b.ToTable("notifications", "charging", t =>
+                        {
+                            t.HasCheckConstraint("ck_notifications_content", "length(recipient_email) > 0 AND length(subject) > 0 AND length(body) > 0");
+
+                            t.HasCheckConstraint("ck_notifications_html_body", "html_body IS NULL OR length(html_body) > 0");
+
+                            t.HasCheckConstraint("ck_notifications_times", "isfinite(prepared_at)");
+                        });
+                });
+
             modelBuilder.Entity("EvCharging.Persistence.Entities.Operation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -739,6 +794,42 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.ToTable("provider_stations", "charging");
                 });
 
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ReservationNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("NotificationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("notification_id");
+
+                    b.Property<Guid>("ReservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reservation_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_reservation_notifications");
+
+                    b.HasIndex("NotificationId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_reservation_notifications_notification_id");
+
+                    b.HasIndex("ReservationId", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("ix_reservation_notifications_reservation_id_kind");
+
+                    b.ToTable("reservation_notifications", "charging", t =>
+                        {
+                            t.HasCheckConstraint("ck_reservation_notifications_kind", "kind IN (0, 1, 2)");
+                        });
+                });
+
             modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>
                 {
                     b.HasOne("EvCharging.Domain.Equipment.Station", "Station")
@@ -921,6 +1012,23 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_provider_stations_stations_station_id");
+                });
+
+            modelBuilder.Entity("EvCharging.Persistence.Entities.ReservationNotification", b =>
+                {
+                    b.HasOne("EvCharging.Persistence.Entities.Notification", null)
+                        .WithOne()
+                        .HasForeignKey("EvCharging.Persistence.Entities.ReservationNotification", "NotificationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reservation_notifications_notifications_notification_id");
+
+                    b.HasOne("EvCharging.Domain.Reservations.Reservation", null)
+                        .WithMany()
+                        .HasForeignKey("ReservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_reservation_notifications_reservations_reservation_id");
                 });
 
             modelBuilder.Entity("EvCharging.Domain.Equipment.Charger", b =>

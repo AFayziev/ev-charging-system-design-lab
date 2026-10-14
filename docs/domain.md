@@ -181,6 +181,12 @@ claim is separate from booking overlap: a consumed booking retains its original
 interval even if its session finishes early. Later nonoverlapping bookings can be
 accepted, but their start can be blocked by an overrun.
 
+### 5.3 Notifications
+
+Reservation creation, cancellation, and expiry each produce one logical notification.
+Delayed notifications describe the original event even if the reservation has since
+changed. Once prepared, a notification's recipient and content remain fixed.
+
 ## 6. State model
 
 Four dimensions remain separate:

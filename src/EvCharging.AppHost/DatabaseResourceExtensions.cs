@@ -11,6 +11,7 @@ internal static class DatabaseResourceExtensions
         var authenticationPassword = builder.AddPersistentSecret("gateway-auth-password");
         var authenticationMigratorPassword = builder.AddPersistentSecret("gateway-auth-migration-password");
         var chargingMessagingPassword = builder.AddPersistentSecret("charging-messaging-password");
+        var notificationMessagingPassword = builder.AddPersistentSecret("notification-messaging-password");
 
         var write = AddConnection("platform-write", "platform_writer", writerPassword);
         var read = AddConnection("platform-read", "platform_reader", readerPassword);
@@ -19,6 +20,8 @@ internal static class DatabaseResourceExtensions
         var authenticationMigration = AddConnection(
             "gateway-auth-migration-db", "gateway_auth_migrator", authenticationMigratorPassword);
         var chargingMessaging = AddConnection("charging-messaging", "charging_messaging", chargingMessagingPassword);
+        var notificationMessaging = AddConnection(
+            "notification-messaging", "notification_messaging", notificationMessagingPassword);
 
         var endpoint = database.Resource.Parent.GetEndpoint("tcp");
         var provisioning = builder.AddDockerfile("database-provisioning", "../../infra/postgres")
@@ -36,6 +39,7 @@ internal static class DatabaseResourceExtensions
             .WithEnvironment("PLATFORM_READ_PASSWORD", readerPassword)
             .WithEnvironment("PLATFORM_MIGRATION_PASSWORD", migratorPassword)
             .WithEnvironment("CHARGING_MESSAGING_PASSWORD", chargingMessagingPassword)
+            .WithEnvironment("NOTIFICATION_MESSAGING_PASSWORD", notificationMessagingPassword)
             .WaitFor(database);
 
         if (builder.ExecutionContext.IsRunMode)
@@ -51,6 +55,7 @@ internal static class DatabaseResourceExtensions
             Authentication = authentication,
             AuthenticationMigration = authenticationMigration,
             ChargingMessaging = chargingMessaging,
+            NotificationMessaging = notificationMessaging,
             Provisioning = provisioning
         };
 

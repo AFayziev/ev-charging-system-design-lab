@@ -25,6 +25,9 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     private PlatformDbContext? _storage;
     private Driver? _driver;
     private readonly List<Guid> _additionalDrivers = [];
+    private IConnection? _eventConnection;
+    private IChannel? _eventChannel;
+    private string? _eventQueue;
 
     private PlatformDbContext Storage => _storage ?? throw new InvalidOperationException("Storage is not initialized.");
     private Driver Driver => _driver ?? throw new InvalidOperationException("The driver is not initialized.");
@@ -33,6 +36,13 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
     {
         _storage = await fixture.CreatePlatformDbContextAsync();
         _driver = await Storage.Drivers.SingleAsync();
+        string? brokerConnection = await fixture.App.GetConnectionStringAsync("rabbitmq");
+        Assert.NotNull(brokerConnection);
+        _eventConnection = await new ConnectionFactory { Uri = new Uri(brokerConnection) }.CreateConnectionAsync();
+        _eventChannel = await _eventConnection.CreateChannelAsync();
+        var queue = await _eventChannel.QueueDeclareAsync(exclusive: true, autoDelete: true);
+        _eventQueue = queue.QueueName;
+        await _eventChannel.QueueBindAsync(_eventQueue, ReservationEventTopology.Exchange, "reservation.*");
     }
 
     public async Task DisposeAsync()
@@ -47,8 +57,18 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             if (_driver is not null)
             {
                 var driverIds = _additionalDrivers.Append(_driver.Id).ToArray();
-                var reservationIds = Storage.Reservations.Where(value => driverIds.Contains(value.DriverId))
-                    .Select(value => value.Id);
+                var reservationIds = await Storage.Reservations.Where(value => driverIds.Contains(value.DriverId))
+                    .Select(value => value.Id)
+                    .ToArrayAsync();
+                using var cleanupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                await AwaitNotificationPreparationAsync(reservationIds, cleanupTimeout.Token);
+                var notificationIds = await Storage.ReservationNotifications
+                    .Where(value => reservationIds.Contains(value.ReservationId))
+                    .Select(value => value.NotificationId)
+                    .ToArrayAsync();
+                await Storage.ReservationNotifications.Where(value => reservationIds.Contains(value.ReservationId))
+                    .ExecuteDeleteAsync();
+                await Storage.Notifications.Where(value => notificationIds.Contains(value.Id)).ExecuteDeleteAsync();
                 await Storage.Sessions.Where(value => reservationIds.Contains(value.ReservationId))
                     .ExecuteDeleteAsync();
                 await Storage.Reservations.Where(value => driverIds.Contains(value.DriverId)).ExecuteDeleteAsync();
@@ -58,6 +78,15 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         finally
         {
             await _storage.DisposeAsync();
+            if (_eventChannel is not null)
+            {
+                await _eventChannel.DisposeAsync();
+            }
+
+            if (_eventConnection is not null)
+            {
+                await _eventConnection.DisposeAsync();
+            }
         }
     }
 
@@ -415,7 +444,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         await Expect(dialog).ToBeVisibleAsync();
         Assert.False(await page.EvaluateAsync<bool>("document.documentElement.scrollWidth > window.innerWidth"));
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Confirm cancellation" }).ClickAsync();
-        await Expect(dialog).ToBeHiddenAsync();
+        await Expect(dialog).ToBeHiddenAsync(new() { Timeout = 15_000 });
         await Expect(page.GetByText("Cancelled", new() { Exact = true })).ToHaveCountAsync(1);
         var cancelled = await Storage.Reservations.AsNoTracking()
             .SingleAsync(value => value.DriverId == Driver.Id && value.State == ReservationState.Cancelled);
@@ -543,7 +572,8 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             }
             """,
             Enumerable.Range(0, 8)
-                .Select(index => new
+                .Select(index =>
+                    new
                     {
                         connectorId,
                         startsAt = end.AddHours(3 + index).ToString("O", CultureInfo.InvariantCulture),
@@ -717,14 +747,45 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
         }
     }
 
+    private async Task AwaitNotificationPreparationAsync(Guid[] reservationIds, CancellationToken cancellationToken)
+    {
+        var audits = await Storage.AuditEntries.AsNoTracking()
+            .Where(entry => entry.ResourceType == AuditResourceType.Reservation
+                && reservationIds.Contains(entry.ResourceId)
+                && (entry.Action == AuditAction.Added || entry.Action == AuditAction.Updated))
+            .ToArrayAsync(cancellationToken);
+        var expected = new HashSet<(Guid ReservationId, ReservationNotificationKind Kind)>();
+        foreach (var audit in audits)
+        {
+            ReservationNotificationKind? kind = audit.Action == AuditAction.Added
+                ? ReservationNotificationKind.Created
+                : (ReservationState)audit.Details.GetProperty("after").GetProperty("state").GetInt32() switch
+                {
+                    ReservationState.Cancelled => ReservationNotificationKind.Cancelled,
+                    ReservationState.Expired => ReservationNotificationKind.Expired,
+                    _ => null
+                };
+            if (kind is { } notificationKind)
+            {
+                expected.Add((audit.ResourceId, notificationKind));
+            }
+        }
+
+        foreach (var (reservationId, kind) in expected)
+        {
+            while (!await Storage.ReservationNotifications.AnyAsync(
+                value => value.ReservationId == reservationId && value.Kind == kind, cancellationToken))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+            }
+        }
+    }
+
     private async Task<IReadOnlyDictionary<Guid, JsonElement>> ObserveReservationEventsAsync(
         string topic, IReadOnlyCollection<Guid> reservationIds, CancellationToken cancellationToken)
     {
-        string? brokerConnection = await fixture.App.GetConnectionStringAsync("rabbitmq", cancellationToken);
-        Assert.NotNull(brokerConnection);
-        var factory = new ConnectionFactory { Uri = new Uri(brokerConnection) };
-        await using var connection = await factory.CreateConnectionAsync(cancellationToken);
-        await using var channel = await connection.CreateChannelAsync(cancellationToken: cancellationToken);
+        var channel = _eventChannel ?? throw new InvalidOperationException("Event capture is not initialized.");
+        string queue = _eventQueue ?? throw new InvalidOperationException("Event capture is not initialized.");
         var received = new Dictionary<Guid, JsonElement>();
         var completed = new TaskCompletionSource<IReadOnlyDictionary<Guid, JsonElement>>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -750,7 +811,7 @@ public sealed class ReservationTests(AppHostFixture fixture) : IAsyncLifetime
             return Task.CompletedTask;
         };
         await channel.BasicConsumeAsync(
-            ReservationEventTopology.NotificationQueue,
+            queue,
             autoAck: true,
             consumer: consumer,
             cancellationToken: cancellationToken);

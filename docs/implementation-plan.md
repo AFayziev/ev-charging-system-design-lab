@@ -311,7 +311,7 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   without changing accepted reservations. Depends on M05.01–M05.03.
   - [x] Complete reservation lifecycle events and transactional publication paths.
   - [x] Add topic routing and an independent notification subscription.
-  - [ ] Add recipient data, notification records, and durable send jobs.
+  - [x] Add recipient data, notification records, and durable send jobs.
   - [ ] Implement simulator delivery and persisted attempts with safe failure handling.
   - [ ] Add the configuration-selected Cloudflare adapter.
   - [ ] Review the complete flow and verify notification isolation and outcomes.

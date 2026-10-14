@@ -21,6 +21,8 @@ var apiMessageMigrations = builder.AddMessageStorageMigration(
     "api", databaseAccess.Migration, databaseAccess.Provisioning);
 var chargingMessageMigrations = builder.AddMessageStorageMigration(
     "charging", databaseAccess.Migration, databaseAccess.Provisioning);
+var notificationMessageMigrations = builder.AddMessageStorageMigration(
+    "notification", databaseAccess.Migration, databaseAccess.Provisioning);
 
 var gatewayOidcSecret = builder.AddPersistentSecret("gateway-oidc-secret");
 var identity = builder.AddIdentityProvider(gatewayOidcSecret);
@@ -170,10 +172,15 @@ var media = builder.AddProject<Projects.EvCharging_MediaWorker>("media-worker")
 
 var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("notification-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithReference(databaseAccess.NotificationMessaging, "messaging")
+    .WaitForCompletion(notificationMessageMigrations)
+    .WaitForCompletion(platformMigrations)
+    .WithReference(broker)
+    .WaitFor(broker)
     .WithReference(notificationProviderApi)
     .WaitFor(notificationProviderApi);
 
-foreach (var worker in new[] { charging, observation, search, cache, media, notification })
+foreach (var worker in new[] { charging, observation, search, cache, media })
 {
     worker.WithReference(databaseAccess.Write)
         .WaitForCompletion(platformMigrations)

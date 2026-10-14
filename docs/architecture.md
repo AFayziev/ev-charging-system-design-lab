@@ -174,6 +174,9 @@ within the relational store. Each owner controls its schema changes; application
 processes use scoped runtime credentials. Separate schemas share database capacity
 and availability. Message-storage ownership follows each API/worker host family.
 
+The notification worker owns notification records and recipient content, with
+access isolated from the API.
+
 [Domain policies](domain.md#5-reservations) are enforced in primary-side
 transactions. Database constraints preserve reservation/session exclusivity and
 permitted transitions across API instances. Operation identity prevents duplicate
@@ -336,6 +339,11 @@ commits the reservation with its accepted deadline, audit, and outbox event. The
 API returns the committed result; subscribers update discovery and notifications
 asynchronously.
 Cancellation, start acceptance, and expiry use conditional primary-side transitions.
+
+Notification preparation and durable delivery work share one transaction.
+Delivery runs independently of reservation processing, with inspectable failures,
+under the [notification rules](domain.md#53-notifications) and
+the [notification integration contract](integrations.md#4-notification-providers).
 
 Admission coordinates outstanding-booking counts and driver overlap checks across
 concurrent requests. It excludes allocations eligible for expiry from the quota

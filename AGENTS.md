@@ -117,6 +117,10 @@ For externally referenced resources:
 
 ## Verification scope
 
+After each piece of .NET work, run the [backend checks](README.md#backend-checks)
+to remove unused imports, apply `dotnet format`, and verify formatting and the build
+before reporting completion.
+
 Match verification to the changed behavior and affected boundaries:
 
 - For styling or text changes, inspect the affected UI in the browser.

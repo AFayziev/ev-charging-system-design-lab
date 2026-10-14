@@ -97,7 +97,10 @@ Provider acceptance is recorded separately from confirmed recipient delivery;
 unavailable delivery evidence remains unknown.
 An ambiguous send does not authorize blind retry. Adapter policies define permitted
 retries and available outcome queries; broker redelivery is not an exactly-once
-delivery guarantee. There is no automatic switch to another provider after failure.
+delivery guarantee. There is no automatic provider fallback after failure.
+Each permitted delivery attempt uses the provider configured when that attempt
+executes. Changing the configured provider does not establish that an uncertain
+earlier send is safe to repeat.
 Notification failure does not change a reservation or completed charging session.
 
 The simulator is the local default. There is no claim of provider-side deduplication

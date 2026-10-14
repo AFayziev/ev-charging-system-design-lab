@@ -47,6 +47,10 @@ public sealed class AppHostFixture : IAsyncLifetime
         var api = builder.Resources.OfType<ProjectResource>().Single(resource => resource.Name == "api");
         var charging = builder.Resources.OfType<ProjectResource>()
             .Single(resource => resource.Name == "charging-worker");
+        var notifications = builder.Resources.OfType<ProjectResource>()
+            .Single(resource => resource.Name == "notification-worker");
+        builder.CreateResourceBuilder(notifications)
+            .WithEnvironment("NotificationPreparation__MaximumConcurrentPreparations", "4");
         builder.CreateResourceBuilder(charging)
             .WithEnvironment("ReservationExpiry__SweepInterval", "00:05:00")
             .WithEnvironment("ReservationExpiry__SweepBatchSize", "2")
