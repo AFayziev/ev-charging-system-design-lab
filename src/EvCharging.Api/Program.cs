@@ -5,8 +5,8 @@ using EvCharging.Api.Features.Drivers;
 using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
+using EvCharging.Messaging;
 using EvCharging.Persistence.Extensions;
-using EvCharging.ServiceDefaults.Messaging;
 using Wolverine.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);

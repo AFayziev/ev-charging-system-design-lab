@@ -131,16 +131,10 @@ gateway.WithEnvironment("BrowserAuthentication__PublicOrigin", gatewayPublicOrig
     .WithEnvironment("BrowserAuthentication__ClientSecret", gatewayOidcSecret)
     .WithEnvironment("BrowserAuthentication__AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false");
 
-var synchronousChargingProviderApi = builder.AddProject<Projects.EvCharging_SynchronousChargingProviderApi>(
-    "synchronous-charging-provider-api", launchProfileName: null)
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
-    .WithHttpEndpoint()
-    .WithHttpHealthCheck("/health");
-var queuedChargingProviderApi = builder.AddProject<Projects.EvCharging_QueuedChargingProviderApi>(
-    "queued-charging-provider-api", launchProfileName: null)
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
-    .WithHttpEndpoint()
-    .WithHttpHealthCheck("/health");
+var synchronousChargingProviderApi = builder.AddExternalService(
+    "synchronous-charging-provider-api", builder.AddParameter("synchronous-provider-url"));
+var queuedChargingProviderApi = builder.AddExternalService(
+    "queued-charging-provider-api", builder.AddParameter("queued-provider-url"));
 var notificationMail = builder.AddMailPit("notification-mail").WithDataVolume("notification-mail-data");
 
 var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
@@ -150,9 +144,7 @@ var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-
     .WithReference(gateway)
     .WithReference(synchronousChargingProviderApi)
     .WithReference(queuedChargingProviderApi)
-    .WaitFor(gateway)
-    .WaitFor(synchronousChargingProviderApi)
-    .WaitFor(queuedChargingProviderApi);
+    .WaitFor(gateway);
 
 var observation = builder.AddProject<Projects.EvCharging_ObservationWorker>("observation-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
@@ -201,8 +193,6 @@ search.WithReference(searchIndex).WaitFor(searchIndex);
 media.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
     .WithReference(documents)
     .WaitFor(documents);
-synchronousChargingProviderApi.WithReference(gateway).WaitFor(gateway);
-queuedChargingProviderApi.WithReference(gateway).WaitFor(gateway);
 
 builder.Build().Run();
 

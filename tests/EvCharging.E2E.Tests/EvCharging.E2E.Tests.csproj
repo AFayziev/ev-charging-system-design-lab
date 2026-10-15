@@ -10,7 +10,9 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <ProjectReference Include="../../src/EvCharging.Gateway/EvCharging.Gateway.csproj" />
+    <ProjectReference Include="../../src/EvCharging.Messaging/EvCharging.Messaging.csproj" />
     <ProjectReference Include="../../src/EvCharging.Persistence/EvCharging.Persistence.csproj" />
+    <ProjectReference Include="../../simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj" />
     <ProjectReference Include="../../src/EvCharging.AppHost/EvCharging.AppHost.csproj" />
   </ItemGroup>
 </Project>

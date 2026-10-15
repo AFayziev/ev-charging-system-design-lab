@@ -1,6 +1,6 @@
+using EvCharging.Messaging;
 using EvCharging.NotificationWorker.Delivery;
 using EvCharging.Persistence.Extensions;
-using EvCharging.ServiceDefaults.Messaging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Wolverine;

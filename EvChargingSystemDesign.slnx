@@ -8,6 +8,7 @@
   <Folder Name="/src/">
     <Project Path="src/EvCharging.Api/EvCharging.Api.csproj" />
     <Project Path="src/EvCharging.AppHost/EvCharging.AppHost.csproj" />
+    <Project Path="src/EvCharging.Messaging/EvCharging.Messaging.csproj" />
     <Project Path="src/EvCharging.MediaWorker/EvCharging.MediaWorker.csproj" />
     <Project Path="src/EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
     <Project Path="src/EvCharging.Contracts/EvCharging.Contracts.csproj" />
@@ -20,9 +21,12 @@
     <Project Path="src/EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />
     <Project Path="src/EvCharging.SearchIndexWorker/EvCharging.SearchIndexWorker.csproj" />
     <Project Path="src/EvCharging.CacheWorker/EvCharging.CacheWorker.csproj" />
-    <Project Path="src/EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
     <Project Path="src/EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
-    <Project Path="src/EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
+  </Folder>
+  <Folder Name="/simulators/">
+    <Project Path="simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj" />
+    <Project Path="simulators/EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
+    <Project Path="simulators/EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EvCharging.Api.Tests/EvCharging.Api.Tests.csproj" />

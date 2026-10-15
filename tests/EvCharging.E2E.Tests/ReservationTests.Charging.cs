@@ -4,7 +4,7 @@ using Aspire.Hosting.Testing;
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
-using EvCharging.ServiceDefaults.Messaging;
+using EvCharging.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using RabbitMQ.Client;

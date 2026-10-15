@@ -6,6 +6,7 @@
     <PackageReference Include="WolverineFx.EntityFrameworkCore" />
     <ProjectReference Include="../EvCharging.Persistence/EvCharging.Persistence.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <ProjectReference Include="../EvCharging.Messaging/EvCharging.Messaging.csproj" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>

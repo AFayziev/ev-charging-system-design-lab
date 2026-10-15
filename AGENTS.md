@@ -29,12 +29,15 @@ Apply its review criteria before considering the implementation complete.
 
 ## Projects
 
-Projects live under `src/`. Responsibilities describe the intended host boundaries;
+Platform projects live under `src/`; external provider simulators and their AppHost
+live under `simulators/`. Both inherit repository build, package, analyzer, and
+formatting rules. Responsibilities describe the intended host boundaries;
 implementation progress is recorded in the plan.
 
 | Project | Type | Responsibility |
 |---|---|---|
 | `EvCharging.AppHost` | Orchestrator | Aspire resource graph, endpoints, references, environment, and startup dependencies |
+| `EvCharging.Providers.AppHost` | Orchestrator | Independent provider simulator resources, endpoints, and startup dependencies |
 | `EvCharging.Gateway` | Resource | YARP/BFF, browser sessions, authentication, and browser/service/callback routing to runtime-balanced API services |
 | `EvCharging.Gateway.Migrations` | Resource | EF migrations, model snapshot, design-time tooling, and one-shot authentication-schema migrations using schema-owning credentials |
 | `EvCharging.Web` | Resource | Shared React/TypeScript browser application for drivers and backoffice operators |
@@ -52,6 +55,7 @@ implementation progress is recorded in the plan.
 | `EvCharging.Persistence` | Library | Charging-schema EF mappings, database access, auditing, and persistence-owned records for API/worker consumers |
 | `EvCharging.Persistence.Migrations` | Resource | Charging-schema EF migrations, message-store provisioning, design-time tooling, sample-data seeding/reset, and one-shot migrations using schema-owning credentials |
 | `EvCharging.ServiceDefaults` | Library | Shared discovery, HTTP resilience, OpenTelemetry, and health checks |
+| `EvCharging.Messaging` | Library | Platform Wolverine configuration and message routing topologies; excluded from provider simulators |
 
 Projects dedicated to handling incoming HTTP/gRPC requests use the `Api` suffix.
 Queue, stream, and scheduled-job processors use `Worker`. The proxy/BFF host uses
@@ -201,8 +205,10 @@ accent.
   incompatibility.
 - Use conventional .NET extension methods for reusable resource registration and
   wiring. Keep resource references and the application graph explicit in AppHost.
-- Run the topology through Aspire CLI, not `dotnet run`. Target
-  `src/EvCharging.AppHost/EvCharging.AppHost.csproj` explicitly. Agents use detached
+- Run the topology through Aspire CLI, not `dotnet run`. Target the platform
+  `src/EvCharging.AppHost/EvCharging.AppHost.csproj` or simulator
+  `simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj`
+  explicitly. Agents use detached
   `aspire start --non-interactive`; the README contains the human foreground command.
 - Use `--isolated` for git worktrees. Use `aspire wait <resource>` for readiness and
   `aspire describe` for endpoints; avoid port guessing and HTTP polling loops.
@@ -211,7 +217,8 @@ accent.
   to resolve a build failure.
 - Connect HTTP dependencies through `WithReference` and discovery-aware clients
   or YARP destinations. Use logical service names rather than fixed localhost URLs.
-  The resource graph is defined in [AppHost](src/EvCharging.AppHost/AppHost.cs);
+  Resource graphs are defined in the [platform AppHost](src/EvCharging.AppHost/AppHost.cs)
+  and [provider AppHost](simulators/EvCharging.Providers.AppHost/AppHost.cs);
   profile definitions are in the [lab reference](docs/lab.md).
 - Route application HTTP calls to platform APIs through the gateway, including
   worker submissions and provider callbacks. Only the gateway references platform

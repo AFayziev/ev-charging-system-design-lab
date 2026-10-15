@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Sdk Name="Aspire.AppHost.Sdk" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+    <AspireCliInvocationMode>DnxPinned</AspireCliInvocationMode>
+    <UserSecretsId>evcharging-providers-apphost-local</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" />
+    <ProjectReference Include="../EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
+    <ProjectReference Include="../EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
+  </ItemGroup>
+</Project>

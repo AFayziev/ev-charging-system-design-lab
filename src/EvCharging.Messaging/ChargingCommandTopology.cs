@@ -2,7 +2,7 @@ using EvCharging.Contracts.Charging;
 using Wolverine;
 using Wolverine.RabbitMQ;
 
-namespace EvCharging.ServiceDefaults.Messaging;
+namespace EvCharging.Messaging;
 
 public static class ChargingCommandTopology
 {

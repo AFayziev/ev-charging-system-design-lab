@@ -12,8 +12,5 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
-    <PackageReference Include="WolverineFx.RabbitMQ" />
-    <PackageReference Include="WolverineFx.RuntimeCompilation" />
-    <ProjectReference Include="../EvCharging.Contracts/EvCharging.Contracts.csproj" />
   </ItemGroup>
 </Project>

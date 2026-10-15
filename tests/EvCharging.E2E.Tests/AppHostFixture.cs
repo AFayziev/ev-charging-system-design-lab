@@ -18,6 +18,7 @@ public sealed class AppHostFixture : IAsyncLifetime
         4, TimeSpan.FromHours(3), TimeSpan.FromDays(20), TimeSpan.FromMinutes(10));
 
     private DistributedApplication? _app;
+    private DistributedApplication? _providers;
 
     public DistributedApplication App =>
         _app ?? throw new InvalidOperationException("The application has not started.");
@@ -40,10 +41,41 @@ public sealed class AppHostFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        try
+        {
+            await StartProvidersAsync(timeout.Token);
+            await StartPlatformAsync(timeout.Token);
+        }
+        catch
+        {
+            await DisposeAsync();
+            throw;
+        }
+    }
+
+    private async Task StartProvidersAsync(CancellationToken cancellationToken)
+    {
+        var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_Providers_AppHost>(
+            ["--environment=Development"], cancellationToken);
+        _providers = await builder.BuildAsync(cancellationToken);
+        await _providers.StartAsync(cancellationToken);
+        await _providers.ResourceNotifications.WaitForResourceHealthyAsync(
+            "synchronous-charging-provider-api", cancellationToken);
+        await _providers.ResourceNotifications.WaitForResourceHealthyAsync(
+            "queued-charging-provider-api", cancellationToken);
+    }
+
+    private async Task StartPlatformAsync(CancellationToken cancellationToken)
+    {
+        var providers = _providers ?? throw new InvalidOperationException("The providers have not started.");
+        var synchronousUrl = providers.GetEndpoint("synchronous-charging-provider-api", "http");
+        var queuedUrl = providers.GetEndpoint("queued-charging-provider-api", "http");
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_AppHost>(
             ["--environment=Development", "--Parameters:api-instances=2",
-                "--Parameters:gateway-instances=2"],
-            timeout.Token);
+                "--Parameters:gateway-instances=2",
+                $"--Parameters:synchronous-provider-url={synchronousUrl}",
+                $"--Parameters:queued-provider-url={queuedUrl}"],
+            cancellationToken);
         var api = builder.Resources.OfType<ProjectResource>().Single(resource => resource.Name == "api");
         var charging = builder.Resources.OfType<ProjectResource>()
             .Single(resource => resource.Name == "charging-worker");
@@ -82,26 +114,29 @@ public sealed class AppHostFixture : IAsyncLifetime
             }
         }
 
-        _app = await builder.BuildAsync(timeout.Token);
-        try
-        {
-            await App.StartAsync(timeout.Token);
-            await App.ResourceNotifications.WaitForResourceHealthyAsync("gateway", timeout.Token);
-            await App.ResourceNotifications.WaitForResourceHealthyAsync("frontend", timeout.Token);
-        }
-        catch
-        {
-            await DisposeAsync();
-            throw;
-        }
+        _app = await builder.BuildAsync(cancellationToken);
+        await App.StartAsync(cancellationToken);
+        await App.ResourceNotifications.WaitForResourceHealthyAsync("gateway", cancellationToken);
+        await App.ResourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
     }
 
     public async Task DisposeAsync()
     {
-        if (_app is not null)
+        try
         {
-            await _app.DisposeAsync();
-            _app = null;
+            if (_app is not null)
+            {
+                await _app.DisposeAsync();
+                _app = null;
+            }
+        }
+        finally
+        {
+            if (_providers is not null)
+            {
+                await _providers.DisposeAsync();
+                _providers = null;
+            }
         }
     }
 }

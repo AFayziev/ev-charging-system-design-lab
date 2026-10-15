@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="WolverineFx.RabbitMQ" />
+    <PackageReference Include="WolverineFx.RuntimeCompilation" />
+    <ProjectReference Include="../EvCharging.Contracts/EvCharging.Contracts.csproj" />
+  </ItemGroup>
+</Project>

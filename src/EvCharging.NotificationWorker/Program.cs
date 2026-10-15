@@ -1,9 +1,9 @@
+using EvCharging.Messaging;
 using EvCharging.NotificationWorker.Configuration;
 using EvCharging.NotificationWorker.Delivery;
 using EvCharging.NotificationWorker.Handlers;
 using EvCharging.NotificationWorker.Persistence;
 using EvCharging.Persistence.Extensions;
-using EvCharging.ServiceDefaults.Messaging;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.RabbitMQ;
 

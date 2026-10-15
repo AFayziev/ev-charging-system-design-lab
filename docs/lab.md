@@ -40,6 +40,12 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 
 ### 1.2 Application wiring
 
+The platform and provider simulators run in independent Aspire AppHosts, each
+with its own resource lifecycle and dashboard. The platform references provider
+HTTP endpoints as parameterized external services. Simulator processes share
+generic service defaults but do not reference platform business or messaging
+assemblies. [Local startup](../README.md#local-development) configures the boundary.
+
 Local host endpoints remain available for diagnostics. Service references define
 application routing; they do not enforce network isolation.
 
@@ -481,6 +487,29 @@ Runtime settings are defined by [gateway diagnostics options](../src/EvCharging.
 [frontend initialization](../src/EvCharging.Web/src/lib/diagnostics/sentry.ts) applies collection controls and
 [Vite build configuration](../src/EvCharging.Web/vite.config.ts) controls private source-map upload.
 The build and startup release identifiers must refer to the same deployed build.
+
+### 1.10 Synchronous charging provider
+
+The simulator implements the [provider contract](integrations.md#1-provider-contracts)
+with these choices:
+
+| Area | Choice |
+|---|---|
+| Persistence | Dedicated PostgreSQL database and credentials on the lab server; provider-owned EF model and migrations, independent of platform persistence |
+| Authentication | Keycloak client-credentials service account for the charging worker, with a separate provider audience |
+| Transport | HTTP/JSON start and command/session lookup endpoints; typed `HttpClient` through `IHttpClientFactory`, with bounded timeouts |
+| Idempotency | Platform operation public ID as the stable provider key across attempts; retain and compare the original effect payload |
+| Atomicity | Command result, simulated session and connector claim commit in one provider transaction |
+| Fault controls | Authenticated, deterministic, command-scoped scenarios recorded by the provider; apply-then-lose-response faults interrupt the response after commit |
+
+Testing treats the provider as a black box:
+
+- Call only documented HTTP command, query and fault-control endpoints. No direct
+  database access, internal handler calls, or assertions about storage records.
+- Verify deduplication, payload conflicts, competing starts, rejection, lost-response
+  resolution, and retained outcomes through API queries after simulator restart.
+- Adapter checks use the same contract; a small set of platform E2E journeys
+  verifies the complete boundary without repeating every provider scenario.
 
 ## 2. Experiments and verification
 

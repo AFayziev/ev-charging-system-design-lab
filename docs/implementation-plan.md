@@ -127,8 +127,8 @@ monorepo baseline.
 
 Acceptance:
 
-- One documented AppHost command starts every resource in the local baseline,
-  including the frontend, application stubs, and external simulator API stubs.
+- Documented AppHost commands start the platform and independent provider
+  simulators, including the frontend, application stubs, and simulator API stubs.
 - All required resources reach their expected healthy state within bounded waits,
   and management tools establish authenticated backend connectivity.
 - The browser loads the SPA from the frontend host without traversing YARP;

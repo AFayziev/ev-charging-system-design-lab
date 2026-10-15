@@ -47,6 +47,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 | [Node.js](https://nodejs.org/en/about/previous-releases) | 24 LTS with npm |
 | [Docker](https://docs.docker.com/get-started/get-docker/) | CLI 25+ and a running Linux container engine |
 | [Git](https://git-scm.com/downloads) | Repository checkout and version control |
+| [PowerShell](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) | 7+ for the combined development launcher; independent Aspire commands also work |
 
 - Windows Docker requires
   [WSL 2 or Hyper-V with virtualization](https://docs.docker.com/desktop/setup/install/windows-install/).
@@ -57,20 +58,68 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 ## Local development
 
 1. Start Docker Engine with Linux container support.
-2. Start the lab:
+2. Start the lab from the repository root:
+
+   ```powershell
+   pwsh -File tools/dev.ps1
+   ```
+
+3. Open the displayed `frontend` URL. Each AppHost has its own dashboard.
+4. Press Enter or `Ctrl+C` to stop AppHosts started by the launcher; pre-existing
+   AppHosts remain running. Named data volumes persist.
+
+The launcher discovers the simulators' dynamic URLs and supplies them to the
+platform for that run. It reuses running AppHosts when their provider URLs match.
+If a running platform has stale provider URLs, stop its AppHost and rerun the launcher.
+
+```powershell
+pwsh -File tools/dev.ps1 -Detach    # Leave newly started AppHosts running.
+pwsh -File tools/dev.ps1 -Isolated  # Start with Aspire's isolated ports and secrets.
+```
+
+`-Isolated` applies to newly started AppHosts; existing sessions are reused. Use
+isolated startup in Git worktrees. Detached sessions are stopped with the
+[individual AppHost commands](#detached-execution).
+
+- During local development, Vite serves the UI and proxies `/api`, `/auth`, and
+  `/diagnostics` requests to the gateway. These browser requests use the frontend's
+  scheme, hostname, and port; the gateway and API run at separate service endpoints.
+- Development replica diagnostics: `/api/diagnostics/instance` identifies the API
+  instance; the `X-Gateway-Instance` response header identifies the gateway instance.
+- HTTP backend hosts expose `/health` and `/alive` at their own service endpoints.
+- [Routing and execution profiles](docs/lab.md#12-application-wiring).
+
+### Independent AppHost startup
+
+1. Start the provider simulators in a separate terminal:
+
+   ```sh
+   aspire run --apphost simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj
+   ```
+
+2. Copy the simulator HTTP endpoints from its dashboard or `aspire describe`
+   into platform configuration:
+
+   ```sh
+   dotnet user-secrets set "Parameters:synchronous-provider-url" "<synchronous HTTP endpoint>" --project src/EvCharging.AppHost
+   dotnet user-secrets set "Parameters:queued-provider-url" "<queued HTTP endpoint>" --project src/EvCharging.AppHost
+   ```
+
+   Refresh these values when the simulator endpoints change. Environment variables
+   `Parameters__synchronous-provider-url` and `Parameters__queued-provider-url`
+   can supply the same settings in automated runs.
+
+3. Start the platform in another terminal:
 
    ```sh
    aspire run --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http
    ```
 
-3. Open the dashboard's `frontend` HTTP endpoint.
-4. Stop with `Ctrl+C`; named data volumes persist.
+4. Open the platform dashboard's `frontend` HTTP endpoint.
+5. Stop each AppHost with `Ctrl+C`; named data volumes persist.
 
-- Starts application hosts, simulators, and dependency containers.
-- Frontend and API share the browser origin.
-- Replica identity: `/api/diagnostics/instance` and `X-Gateway-Instance`.
-- Backend health: `/health` and `/alive`.
-- [Routing and execution profiles](docs/lab.md#12-application-wiring).
+- Each AppHost manages its own resources and dashboard. Platform startup does not
+  start the provider simulators.
 
 ### Management tools
 
@@ -109,6 +158,11 @@ values come from the Keycloak resource environment. Restart does not reimport
 an existing realm. Account-email changes are a separate delivery task.
 
 ### Detached execution
+
+Start the provider AppHost first, configure its endpoints as above, then start
+the platform. The commands below target the platform; use
+`simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj` as
+`--apphost` to start, inspect, or stop the simulators independently.
 
 1. Start:
 
