@@ -8,7 +8,7 @@
   },
   "clientScopes": [
     {
-      "name": "synchronous-provider",
+      "name": "wattharbor",
       "protocol": "openid-connect",
       "protocolMappers": [
         {
@@ -16,7 +16,7 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "config": {
-            "included.custom.audience": "synchronous-charging-provider",
+            "included.custom.audience": "wattharbor-provider",
             "access.token.claim": "true"
           }
         },
@@ -45,7 +45,7 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
       "fullScopeAllowed": true,
-      "defaultClientScopes": ["synchronous-provider"]
+      "defaultClientScopes": ["wattharbor"]
     },
     {
       "clientId": "simulation-control",
@@ -57,7 +57,7 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
       "fullScopeAllowed": true,
-      "defaultClientScopes": ["synchronous-provider"]
+      "defaultClientScopes": ["wattharbor"]
     }
   ],
   "users": [

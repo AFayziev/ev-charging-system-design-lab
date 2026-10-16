@@ -28,7 +28,8 @@ import {
 import { BackLink } from "@/components/BackLink";
 import { PageHeading } from "@/components/PageHeading";
 import { getHttpStatus } from "@/lib/http-errors";
-import { getSignInUrl, sessionQuery } from "@/features/auth/api";
+import { getSignInUrl } from "@/features/auth/api";
+import { useUserSession } from "@/features/auth/useUserSession";
 import { PlatformRole } from "@/features/auth/PlatformRole";
 import { BookingForm } from "@/features/reservations/components/BookingForm";
 import { stationDetailQuery } from "../api";
@@ -43,11 +44,10 @@ import classes from "./Stations.module.css";
 export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
   const { stationId = "" } = useParams();
   const query = useQuery(stationDetailQuery(stationId));
-  const session = useQuery(sessionQuery);
+  const session = useUserSession();
   const location = useLocation();
   const [search, setSearch] = useSearchParams();
-  const canBook =
-    session.isSuccess && session.data.user?.roles.includes(PlatformRole.Driver);
+  const canBook = session.user?.roles.includes(PlatformRole.Driver) === true;
   const connectorId =
     search.get("connectorId") ??
     query.data?.chargers.flatMap((charger) => charger.connectors)[0]?.id ??
@@ -200,17 +200,17 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
                   <Title order={2} size="h4">
                     Book a connector
                   </Title>
-                  {session.isPending && (
+                  {session.query.isPending && (
                     <Loader size="sm" aria-label="Loading booking account" />
                   )}
-                  {session.isError && (
+                  {session.query.isError && (
                     <Text size="sm" c="dimmed">
                       Booking is unavailable while your account cannot be
                       checked.
                     </Text>
                   )}
-                  {session.isSuccess &&
-                    (session.data.signedIn ? (
+                  {session.query.isSuccess &&
+                    (session.signedIn ? (
                       <Text size="sm" c="dimmed">
                         Reservations require a driver account.
                       </Text>

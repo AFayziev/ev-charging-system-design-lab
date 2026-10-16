@@ -2,7 +2,6 @@ using EvCharging.Messaging;
 using EvCharging.NotificationWorker.Delivery;
 using EvCharging.Persistence.Extensions;
 using Microsoft.Extensions.Options;
-using Npgsql;
 using Wolverine;
 using Wolverine.ErrorHandling;
 using Wolverine.RabbitMQ;
@@ -17,7 +16,7 @@ internal sealed class NotificationMessagingExtension(
     public void Configure(WolverineOptions options)
     {
         options.Policies.OnException(ExceptionExtensions.IsReservationNotificationConflict).RetryOnce();
-        options.Policies.OnException(IsDeliveryConflict).RetryOnce();
+        options.Policies.OnException(ExceptionExtensions.IsNotificationDeliveryConflict).RetryOnce();
         var notCaptured = options.Policies.OnException<NotificationNotCapturedException>();
         if (delivery.Value.RetryDelays.Length > 0)
         {
@@ -30,21 +29,11 @@ internal sealed class NotificationMessagingExtension(
         options.Policies
             .OnException(exception => exception is not OperationCanceledException
                 && !exception.IsTransientDatabaseFailure() && !exception.IsReservationNotificationConflict()
-                && !IsDeliveryConflict(exception) && exception is not NotificationNotCapturedException)
+                && !exception.IsNotificationDeliveryConflict() && exception is not NotificationNotCapturedException)
             .MoveToErrorQueue();
         options.ListenToRabbitQueue(ReservationEventTopology.NotificationQueue)
             .MaximumParallelMessages(preparation.Value.MaximumConcurrentPreparations);
         options.ListenToRabbitQueue("notification-send")
             .MaximumParallelMessages(delivery.Value.MaximumConcurrentSends);
     }
-
-    private static bool IsDeliveryConflict(Exception exception) =>
-        exception is Microsoft.EntityFrameworkCore.DbUpdateException
-        {
-            InnerException: PostgresException
-            {
-                SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: "ix_notification_delivery_attempts_notification_id_number"
-            }
-        };
 }

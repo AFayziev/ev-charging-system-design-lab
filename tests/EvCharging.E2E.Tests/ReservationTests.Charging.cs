@@ -1,13 +1,10 @@
 using System.Text.Json;
 using Aspire.Hosting.ApplicationModel;
-using Aspire.Hosting.Testing;
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
-using EvCharging.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
-using RabbitMQ.Client;
 using Xunit;
 using static Microsoft.Playwright.Assertions;
 
@@ -19,6 +16,7 @@ public sealed partial class ReservationTests
     [Trait("Category", "Api")]
     public async Task Start_CompetingKeys_AcceptsOneLogicalStart()
     {
+        await PauseChargingAsync();
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
@@ -68,7 +66,7 @@ public sealed partial class ReservationTests
 
     [Fact]
     [Trait("Category", "Api")]
-    public async Task Start_BrokerOutage_CommitsIntentAndDeliversQueuedStart()
+    public async Task Start_BrokerOutage_CommitsIntentAndDeliversStart()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         using var playwright = await Playwright.CreateAsync();
@@ -76,6 +74,7 @@ public sealed partial class ReservationTests
         var page = await browser.NewPageAsync();
         await fixture.LoginAsync(page, "driver");
         var reservation = await CurrentBookingAsync();
+        await PrepareProviderEquipmentAsync(reservation, enabled: true);
         var stopped = await fixture.App.ResourceCommands.ExecuteCommandAsync(
             "rabbitmq", KnownResourceCommands.StopCommand, timeout.Token);
         Assert.True(stopped.Success, stopped.Message);
@@ -101,32 +100,14 @@ public sealed partial class ReservationTests
             await fixture.App.ResourceNotifications.WaitForResourceHealthyAsync("rabbitmq", timeout.Token);
         }
 
-        string? brokerConnection = await fixture.App.GetConnectionStringAsync("rabbitmq", timeout.Token);
-        Assert.NotNull(brokerConnection);
-        await using var connection = await new ConnectionFactory { Uri = new Uri(brokerConnection) }
-            .CreateConnectionAsync(timeout.Token);
-        await using var channel = await connection.CreateChannelAsync(cancellationToken: timeout.Token);
-        while (true)
-        {
-            var message = await channel.BasicGetAsync(ChargingCommandTopology.StartQueue, autoAck: true, timeout.Token);
-            if (message is not null)
-            {
-                using var body = JsonDocument.Parse(message.Body);
-                if (body.RootElement.GetProperty("operationId").GetGuid() == operationId)
-                {
-                    break;
-                }
-            }
-
-            await Task.Delay(TimeSpan.FromMilliseconds(100), timeout.Token);
-        }
-
+        await AwaitStartOutcomeAsync(operationId, CommandOutcome.Confirmed, timeout.Token);
     }
 
     [Fact]
     [Trait("Category", "Api")]
     public async Task Start_DuplicateRequests_PersistOneIntentAndRejectMismatchedPayload()
     {
+        await PauseChargingAsync();
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
@@ -161,6 +142,7 @@ public sealed partial class ReservationTests
     [Trait("Category", "Api")]
     public async Task Start_CompetingCancellation_AllowsOnlyOneTransition()
     {
+        await PauseChargingAsync();
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
@@ -215,6 +197,7 @@ public sealed partial class ReservationTests
     [Trait("Category", "Browser")]
     public async Task Start_BrowserConfirmation_RestoresPendingAfterReloadAndNavigation()
     {
+        await PauseChargingAsync();
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var browserTimeZone = Environment.GetEnvironmentVariable("TZ");
@@ -250,6 +233,80 @@ public sealed partial class ReservationTests
         Storage.Reservations.Add(reservation);
         await Storage.SaveChangesAsync();
         return reservation;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [Trait("Category", "Browser")]
+    public async Task Start_ProviderOutcome_DisplaysConfirmedOrRejectedDriverResult(bool enabled)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+        var reservation = await CurrentBookingAsync();
+        await PrepareProviderEquipmentAsync(reservation, enabled);
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        await fixture.LoginAsync(page, "driver");
+        await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
+        await page.GetByRole(AriaRole.Button, new() { Name = "Start charging", Exact = true }).ClickAsync();
+        var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Start charging?" });
+        await dialog.GetByRole(AriaRole.Button, new() { Name = "Start charging", Exact = true }).ClickAsync();
+        await Expect(dialog).ToBeHiddenAsync();
+        var operation = await Storage.Operations.SingleAsync(value => value.Session!.ReservationId == reservation.Id);
+        await AwaitStartOutcomeAsync(
+            operation.Id,
+            enabled ? CommandOutcome.Confirmed : CommandOutcome.Rejected,
+            timeout.Token);
+        await page.ReloadAsync();
+        await Expect(page.GetByText(enabled ? "Charging started" : "Charging could not start", new() { Exact = true }))
+            .ToBeVisibleAsync();
+        if (enabled)
+        {
+            await Expect(page.GetByText("Reservation used", new() { Exact = true })).ToBeVisibleAsync();
+            await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Start charging", Exact = true }))
+                .ToHaveCountAsync(0);
+        }
+        else
+        {
+            await Expect(page.GetByRole(AriaRole.Button, new() { Name = "Try starting again", Exact = true }))
+                .ToBeVisibleAsync();
+        }
+
+        await CaptureStartAsync(page, enabled ? "confirmed" : "rejected");
+    }
+
+    private async Task PauseChargingAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        _chargingPaused = true;
+        await WorkerCommandAsync(KnownResourceCommands.StopCommand, timeout.Token);
+    }
+
+    private async Task PrepareProviderEquipmentAsync(Reservation reservation, bool enabled)
+    {
+        var connector = await Storage.ProviderConnectors.Include(value => value.ProviderCharger!)
+            .ThenInclude(value => value.ProviderStation)
+            .SingleAsync(value => value.ConnectorId == reservation.ConnectorId);
+        var charger = connector.ProviderCharger ?? throw new InvalidOperationException("Provider charger is required.");
+        var station = charger.ProviderStation ?? throw new InvalidOperationException("Provider station is required.");
+        connector.ExternalId = Guid.NewGuid().ToString();
+        await Storage.SaveChangesAsync();
+        await fixture.PrepareWattHarborConnectorAsync(
+            station.ExternalId,
+            charger.ExternalId,
+            connector.ExternalId,
+            enabled);
+    }
+
+    private async Task AwaitStartOutcomeAsync(Guid id, CommandOutcome outcome, CancellationToken cancellationToken)
+    {
+        while (!await Storage.Operations.AsNoTracking().AnyAsync(
+            value => value.Id == id && value.Outcome == outcome,
+            cancellationToken))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+        }
     }
 
     private static Task<JsonElement> SubmitStartAsync(IPage page, Guid reservationId, Guid key) =>

@@ -6,6 +6,16 @@ namespace EvCharging.Persistence.Extensions;
 
 public static class ExceptionExtensions
 {
+    public static bool IsNotificationDeliveryConflict(this Exception exception) =>
+        exception is DbUpdateException
+        {
+            InnerException: PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: NotificationDeliveryAttemptConfiguration.NotificationNumberIndexName
+            }
+        };
+
     public static bool IsChargingClaimConflict(this DbUpdateException exception) =>
         exception.InnerException is PostgresException
         {

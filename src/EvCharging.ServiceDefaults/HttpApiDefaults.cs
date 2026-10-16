@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
@@ -23,10 +22,6 @@ public static class HttpApiDefaultsExtensions
             document.Servers = [new OpenApiServer { Url = openApiBasePath }];
             return Task.CompletedTask;
         }));
-        builder.Services.AddRequestTimeouts(options => options.DefaultPolicy = new RequestTimeoutPolicy
-        {
-            Timeout = TimeSpan.FromSeconds(10)
-        });
         return builder;
     }
 
@@ -39,7 +34,6 @@ public static class HttpApiDefaultsExtensions
         });
         app.UseStatusCodePages();
         app.UseRouting();
-        app.UseRequestTimeouts();
         return app;
     }
 

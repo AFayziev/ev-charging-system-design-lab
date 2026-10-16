@@ -1,10 +1,11 @@
 import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CanceledError, HttpStatusCode } from "axios";
+import { authKeys } from "@/features/auth/api";
 import { StationEditPage } from "./StationEditPage";
 import { stationKeys } from "../api";
 
@@ -90,6 +91,29 @@ it("waits for the writer fetch when revisiting a cached editor", async () => {
       expect.any(Object),
     ),
   );
+});
+
+it("blocks saving with cached credentials after a session refresh fails", async () => {
+  const client = renderEditor();
+  const name = await screen.findByLabelText("Station name", { exact: false });
+  await userEvent.clear(name);
+  await userEvent.type(name, "Retained draft");
+  const save = screen.getByRole("button", { name: "Save changes" });
+  expect(save).toBeEnabled();
+
+  get.mockImplementation(async (url: string) => {
+    if (url === "/auth/session")
+      throw failure(HttpStatusCode.ServiceUnavailable);
+    return { data: station };
+  });
+  await act(() =>
+    client.invalidateQueries({ queryKey: authKeys.session, exact: true }),
+  );
+
+  expect(name).toHaveValue("Retained draft");
+  await waitFor(() => expect(save).toBeDisabled());
+  await userEvent.click(save);
+  expect(put).not.toHaveBeenCalled();
 });
 
 it.each([

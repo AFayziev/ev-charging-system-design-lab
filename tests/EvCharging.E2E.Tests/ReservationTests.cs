@@ -28,6 +28,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
     private IConnection? _eventConnection;
     private IChannel? _eventChannel;
     private string? _eventQueue;
+    private bool _chargingPaused;
 
     private PlatformDbContext Storage => _storage ?? throw new InvalidOperationException("Storage is not initialized.");
     private Driver Driver => _driver ?? throw new InvalidOperationException("The driver is not initialized.");
@@ -69,6 +70,11 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
                 await Storage.ReservationNotifications.Where(value => reservationIds.Contains(value.ReservationId))
                     .ExecuteDeleteAsync();
                 await Storage.Notifications.Where(value => notificationIds.Contains(value.Id)).ExecuteDeleteAsync();
+                var operationIds = await Storage.Operations.Where(value => value.Session != null
+                    && reservationIds.Contains(value.Session.ReservationId))
+                    .Select(value => value.Id)
+                    .ToArrayAsync();
+                await Storage.Attempts.Where(value => operationIds.Contains(value.OperationId)).ExecuteDeleteAsync();
                 await Storage.Operations.Where(value => value.Session != null
                     && reservationIds.Contains(value.Session.ReservationId))
                     .ExecuteDeleteAsync();
@@ -80,6 +86,12 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
         }
         finally
         {
+            if (_chargingPaused)
+            {
+                using var restoreTimeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+                await WorkerCommandAsync(KnownResourceCommands.StartCommand, restoreTimeout.Token);
+            }
+
             await _storage.DisposeAsync();
             if (_eventChannel is not null)
             {

@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
@@ -20,6 +23,7 @@ public sealed class AppHostFixture : IAsyncLifetime
     private DistributedApplication? _app;
     private DistributedApplication? _providers;
     private string? _providerClientSecret;
+    private string? _simulationClientSecret;
 
     public DistributedApplication App =>
         _app ?? throw new InvalidOperationException("The application has not started.");
@@ -62,30 +66,66 @@ public sealed class AppHostFixture : IAsyncLifetime
         _providers = await builder.BuildAsync(cancellationToken);
         await _providers.StartAsync(cancellationToken);
         await _providers.ResourceNotifications.WaitForResourceHealthyAsync(
-            "synchronous-charging-provider-api", cancellationToken);
+            "wattharbor-provider-api", cancellationToken);
         await _providers.ResourceNotifications.WaitForResourceHealthyAsync(
-            "queued-charging-provider-api", cancellationToken);
+            "amptrail-provider-api", cancellationToken);
         _providerClientSecret = await builder.Resources.OfType<ParameterResource>()
             .Single(parameter => parameter.Name == "charging-client-secret")
             .GetValueAsync(cancellationToken);
+        _simulationClientSecret = await builder.Resources.OfType<ParameterResource>()
+            .Single(parameter => parameter.Name == "simulation-client-secret")
+            .GetValueAsync(cancellationToken);
     }
+
+    public async Task PrepareWattHarborConnectorAsync(
+        string stationId, string chargerId, string connectorId, bool enabled)
+    {
+        var providers = _providers ?? throw new InvalidOperationException("The providers have not started.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var identity = providers.CreateHttpClient("provider-identity", "http");
+        using var tokenResponse = await identity.PostAsync(
+            "/realms/providers/protocol/openid-connect/token",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "client_credentials",
+                ["client_id"] = "simulation-control",
+                ["client_secret"] = _simulationClientSecret
+                    ?? throw new InvalidOperationException("Simulation credentials are required.")
+            }),
+            timeout.Token);
+        tokenResponse.EnsureSuccessStatusCode();
+        var token = await tokenResponse.Content.ReadFromJsonAsync<ProviderToken>(timeout.Token)
+            ?? throw new InvalidOperationException("Missing simulation token.");
+        using var controls = providers.CreateHttpClient("wattharbor-provider-api", "http");
+        controls.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+        using var response = await controls.PutAsJsonAsync(
+            $"/simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}",
+            new ProviderEquipment(22m, enabled),
+            timeout.Token);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private sealed record ProviderEquipment(decimal PowerKw, bool Enabled);
+    private sealed record ProviderToken([property: JsonPropertyName("access_token")] string AccessToken);
 
     private async Task StartPlatformAsync(CancellationToken cancellationToken)
     {
         var providers = _providers ?? throw new InvalidOperationException("The providers have not started.");
-        var synchronousUrl = providers.GetEndpoint("synchronous-charging-provider-api", "http");
-        var queuedUrl = providers.GetEndpoint("queued-charging-provider-api", "http");
+        var wattHarborUrl = providers.GetEndpoint("wattharbor-provider-api", "http");
+        var ampTrailUrl = providers.GetEndpoint("amptrail-provider-api", "http");
         var tokenEndpoint = new Uri(
             providers.GetEndpoint("provider-identity", "http"),
             "/realms/providers/protocol/openid-connect/token");
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_AppHost>(
             ["--environment=Development", "--Parameters:api-instances=2",
                 "--Parameters:gateway-instances=2",
-                $"--Parameters:synchronous-provider-token-endpoint={tokenEndpoint}",
-                $"--Parameters:synchronous-provider-url={synchronousUrl}",
-                $"--Parameters:queued-provider-url={queuedUrl}"],
+                "--ChargingProviders:WattHarborIntegrationKey=driver-wattharbor",
+                "--ChargingProviders:AmpTrailIntegrationKey=driver-amptrail",
+                $"--Parameters:wattharbor-provider-token-endpoint={tokenEndpoint}",
+                $"--Parameters:wattharbor-provider-url={wattHarborUrl}",
+                $"--Parameters:amptrail-provider-url={ampTrailUrl}"],
             cancellationToken);
-        builder.Configuration["Parameters:synchronous-provider-client-secret"] = _providerClientSecret
+        builder.Configuration["Parameters:wattharbor-provider-client-secret"] = _providerClientSecret
             ?? throw new InvalidOperationException("The provider charging-client secret is required.");
         var api = builder.Resources.OfType<ProjectResource>().Single(resource => resource.Name == "api");
         var charging = builder.Resources.OfType<ProjectResource>()
@@ -95,6 +135,8 @@ public sealed class AppHostFixture : IAsyncLifetime
         builder.CreateResourceBuilder(notifications)
             .WithEnvironment("NotificationPreparation__MaximumConcurrentPreparations", "4");
         builder.CreateResourceBuilder(charging)
+            .WithEnvironment("ChargingExecution__MaximumEffectAttempts", "3")
+            .WithEnvironment("ChargingExecution__MaximumConcurrentStarts", "2")
             .WithEnvironment("ReservationExpiry__SweepInterval", "00:05:00")
             .WithEnvironment("ReservationExpiry__SweepBatchSize", "2")
             .WithEnvironment("ReservationExpiry__MaximumConcurrentChecks", "2");

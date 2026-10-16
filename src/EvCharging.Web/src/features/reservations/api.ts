@@ -31,6 +31,12 @@ export interface StartOperation {
     "starting" | "active" | "stopping" | "completed" | "failed";
   readonly acceptedAt: string;
   readonly startedAt: string | null;
+  readonly failureReason: "chargingServiceUnavailable" | null;
+}
+
+export interface ChargingStartCheck {
+  readonly operation: StartOperation;
+  readonly outcome: "resolved" | "unresolved" | "unavailable";
 }
 
 export function isStartUnresolved(operation: StartOperation | null) {
@@ -172,3 +178,17 @@ export const reservationsQuery = (afterId: string | null) =>
         : false;
     },
   });
+
+export async function checkChargingStart(
+  reservationId: string,
+  operationId: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<ChargingStartCheck> {
+  const response = await api.post<ChargingStartCheck>(
+    `/api/reservations/${reservationId}/start/${operationId}/check`,
+    undefined,
+    { headers: { "X-CSRF-TOKEN": token }, signal },
+  );
+  return response.data;
+}

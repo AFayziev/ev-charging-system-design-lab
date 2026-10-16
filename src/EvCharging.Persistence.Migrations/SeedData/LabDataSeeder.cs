@@ -11,6 +11,8 @@ public static class LabDataSeeder
     public static async Task SeedAsync(
         PlatformDbContext context,
         string identityIssuer,
+        string wattHarborIntegrationKey,
+        string ampTrailIntegrationKey,
         CancellationToken cancellationToken)
     {
         using var realm = JsonDocument.Parse(
@@ -50,7 +52,8 @@ public static class LabDataSeeder
         var assignedStationIds = new List<Guid>();
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "Synchronous Charging Provider",
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "north",
             "North Station",
             "1 Synthetic Avenue, Demo North Quarter, London",
@@ -65,7 +68,8 @@ public static class LabDataSeeder
             cancellationToken));
         await SeedStationAsync(
             context,
-            "Queued Charging Provider",
+            "AmpTrail",
+            ampTrailIntegrationKey,
             "south",
             "South Station",
             "2 Synthetic Avenue, Demo South Quarter, London",
@@ -81,7 +85,8 @@ public static class LabDataSeeder
 
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "Synchronous Charging Provider",
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "canal",
             "Demo Canal Yard",
             "14 Mock Canal Lane, Demo Wharf, London",
@@ -96,7 +101,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "Queued Charging Provider",
+            "AmpTrail",
+            ampTrailIntegrationKey,
             "market",
             "Demo Market Square",
             "8 Example Market Road, Demo North Quarter, London",
@@ -111,7 +117,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "Synchronous Charging Provider",
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "library",
             "Demo Library Court",
             "27 Imaginary Library Street, Demo Wharf, London",
@@ -126,7 +133,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "Queued Charging Provider",
+            "AmpTrail",
+            ampTrailIntegrationKey,
             "riverside",
             "Demo Riverside Hub",
             "42 Mock River Walk, Demo South Quarter, London",
@@ -141,7 +149,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "Synchronous Charging Provider",
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "garden",
             "Demo Garden Mews",
             "6 Sample Garden Mews, Demo South Quarter, London",
@@ -156,7 +165,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "Queued Charging Provider",
+            "AmpTrail",
+            ampTrailIntegrationKey,
             "exchange",
             "Demo Exchange Park",
             "19 Fictional Exchange Way, Demo North Quarter, London",
@@ -193,6 +203,7 @@ public static class LabDataSeeder
     private static async Task<Guid> SeedStationAsync(
         PlatformDbContext context,
         string providerName,
+        string integrationKey,
         string externalStationId,
         string name,
         string address,
@@ -207,13 +218,21 @@ public static class LabDataSeeder
         CancellationToken cancellationToken)
     {
         var provider = await context.ChargingProviders.SingleOrDefaultAsync(
-            value => value.Name == providerName, cancellationToken);
+            value => value.IntegrationKey == integrationKey, cancellationToken);
+        // Reuse the seeded mapping independently of the provider's display name.
+        provider ??= await context.ProviderStations
+            .Where(value => value.ExternalId == externalStationId && value.Station!.Name == name)
+            .Select(value => value.ChargingProvider)
+            .SingleOrDefaultAsync(cancellationToken);
         if (provider is null)
         {
-            provider = new() { Name = providerName };
+            provider = new() { Name = providerName, IntegrationKey = integrationKey };
             context.ChargingProviders.Add(provider);
-            await context.SaveChangesAsync(cancellationToken);
         }
+
+        provider.IntegrationKey = integrationKey;
+        provider.Name = providerName;
+        await context.SaveChangesAsync(cancellationToken);
 
         var existing = await context.ProviderStations.SingleOrDefaultAsync(
             value => value.ChargingProviderId == provider.Id && value.ExternalId == externalStationId,

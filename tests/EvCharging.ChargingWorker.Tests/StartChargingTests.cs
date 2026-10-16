@@ -1,0 +1,496 @@
+using System.Data;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using EvCharging.ChargingWorker.Configuration;
+using EvCharging.ChargingWorker.Handlers;
+using EvCharging.ChargingWorker.Providers;
+using EvCharging.Contracts.Charging;
+using EvCharging.Domain.Charging;
+using EvCharging.Domain.Equipment;
+using EvCharging.Domain.Identity;
+using EvCharging.Domain.Reservations;
+using EvCharging.Persistence;
+using EvCharging.Persistence.Auditing;
+using EvCharging.Persistence.Entities;
+using EvCharging.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
+using Xunit;
+
+namespace EvCharging.ChargingWorker.Tests;
+
+public sealed class StartChargingTests(PlatformDatabaseFixture fixture) : IClassFixture<PlatformDatabaseFixture>
+{
+    private const string IntegrationKey = "worker-test";
+    private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
+
+    [Fact]
+    public async Task Start_UnconfiguredProvider_DoesNotAuthorizeAnEffect()
+    {
+        var operation = await PrepareAsync(integrationKey: null);
+        using var transport = new ProviderTransport(_ => throw new InvalidOperationException("No call expected."));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteAsync(operation.Id, transport));
+
+        await using var database = Database();
+        var saved = await database.Operations.AsNoTracking().SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(0, saved.AuthorizedAttemptCount);
+        Assert.Equal(CommandOutcome.Pending, saved.Outcome);
+        Assert.False(await database.Attempts.AnyAsync(value => value.OperationId == operation.Id));
+        Assert.Equal(0, transport.Calls);
+    }
+
+    [Fact]
+    public async Task Start_ConcurrentDeliveries_CommitsOneAuthorizationBeforeHttpAndOneOutcome()
+    {
+        var operation = await PrepareAsync();
+        using var transport = new ProviderTransport(async request =>
+        {
+            await using var observed = Database();
+            var attempt = await observed.Attempts.SingleAsync(value => value.OperationId == operation.Id);
+            var saved = await observed.Operations.SingleAsync(value => value.Id == operation.Id);
+            Assert.Equal(1, saved.AuthorizedAttemptCount);
+            Assert.Equal(3, saved.EffectAttemptLimit);
+            Assert.Null(attempt.FinishedAt);
+            Assert.Equal(operation.PublicId.ToString(), request.Headers.GetValues("Idempotency-Key").Single());
+            var body = await request.Content!.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(attempt.SessionPublicId, body.GetProperty("externalSessionId").GetGuid());
+            Assert.Equal(attempt.ProviderConnectorId, body.GetProperty("connectorId").GetString());
+            return Applied(operation.PublicId);
+        });
+
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => ExecuteAsync(operation.Id, transport)));
+
+        Assert.Equal(1, transport.Calls);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Confirmed, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Active, saved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Consumed, saved.Session.Reservation!.State);
+        var attempt = await database.Attempts.SingleAsync(value => value.OperationId == operation.Id);
+        Assert.Equal(CommandOutcome.Confirmed, attempt.Outcome);
+        Assert.Equal(IntegrationKey, attempt.IntegrationKey);
+        Assert.Equal(attempt.ProviderSessionId.ToString(), saved.Session.ProviderSessionId);
+        Assert.Equal(attempt.ProviderAppliedAt, saved.Session.StartedAt);
+        Assert.Equal(
+            3,
+            await database.AuditEntries.CountAsync(value =>
+                value.Action == AuditAction.Updated && (value.ResourceId == saved.Id
+                    || value.ResourceId == saved.Session.Id || value.ResourceId == saved.Session.ReservationId)));
+    }
+
+    [Theory]
+    [InlineData("transport")]
+    [InlineData("unmatched")]
+    [InlineData("interrupted")]
+    [InlineData("server-error")]
+    public async Task Start_AmbiguousOrInterruptedEffect_RetainsClaimAndNeverRepeatsOnRedelivery(string failure)
+    {
+        var operation = await PrepareAsync();
+        using var cancellation = new CancellationTokenSource();
+        using var transport = new ProviderTransport(_ =>
+        {
+            if (failure == "interrupted")
+            {
+                cancellation.Cancel();
+                throw new OperationCanceledException(cancellation.Token);
+            }
+
+            if (failure == "transport")
+            {
+                throw new HttpRequestException("The response was lost.");
+            }
+
+            if (failure == "server-error")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+            }
+
+            return Task.FromResult(Applied(Guid.NewGuid()));
+        });
+        if (failure == "interrupted")
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                ExecuteAsync(operation.Id, transport, cancellation.Token));
+        }
+        else
+        {
+            await ExecuteAsync(operation.Id, transport);
+        }
+
+        _clock.Advance(TimeSpan.FromHours(2));
+        await ExecuteAsync(operation.Id, transport);
+        Assert.Equal(1, transport.Calls);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(failure == "interrupted" ? CommandOutcome.Pending : CommandOutcome.Uncertain, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Starting, saved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Active, saved.Session.Reservation!.State);
+        var attempt = await database.Attempts.SingleAsync(value => value.OperationId == operation.Id);
+        Assert.Equal(1, saved.AuthorizedAttemptCount);
+        Assert.Equal(failure == "interrupted", attempt.FinishedAt is null);
+        if (failure == "unmatched")
+        {
+            Assert.NotNull(attempt.ResponseBody);
+            Assert.Equal(200, attempt.ResponseStatusCode);
+        }
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Conflict)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task Start_RejectedEffect_ReleasesClaimAndAllowsAnotherLogicalStart(HttpStatusCode status)
+    {
+        var operation = await PrepareAsync();
+        using var transport = new ProviderTransport(_ => Task
+            .FromResult(new HttpResponseMessage(status)
+            {
+                Content = status == HttpStatusCode.Conflict ? JsonContent.Create(
+                    new
+                    {
+                        status = (int)status,
+                        code = "connector_unavailable",
+                        commandId = Guid.NewGuid(),
+                        externalOperationId = operation.PublicId
+                    },
+                    mediaType: new("application/problem+json")) : new StringContent("")
+            }));
+        await ExecuteAsync(operation.Id, transport);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Rejected, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Failed, saved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Active, saved.Session.Reservation!.State);
+        var attempt = await database.Attempts.SingleAsync(value => value.OperationId == operation.Id);
+        if (status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            Assert.Null(attempt.ProviderCommandId);
+            Assert.Null(attempt.FailureCode);
+            Assert.Equal((int)status, attempt.ResponseStatusCode);
+        }
+        else
+        {
+            Assert.NotNull(attempt.ProviderCommandId);
+            Assert.Equal("connector_unavailable", attempt.FailureCode);
+        }
+
+        await ExecuteAsync(operation.Id, transport);
+        Assert.Equal(1, transport.Calls);
+        var next = Operation.AcceptStart(
+            ChargingSession.AcceptStart(saved.Session.Reservation, _clock.GetUtcNow()).Value, Guid.NewGuid());
+        await using (var acceptance = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(fixture.GetDataSource("platform_writer")).Options))
+        {
+            acceptance.Attach(saved.Session.Reservation);
+            acceptance.Operations.Add(next);
+            await acceptance.SaveChangesAsync();
+        }
+
+        using var applied = new ProviderTransport(_ => Task.FromResult(Applied(next.PublicId)));
+        await ExecuteAsync(next.Id, applied);
+        Assert.Equal(1, applied.Calls);
+        Assert.Equal(
+            CommandOutcome.Confirmed,
+            (await database.Operations.AsNoTracking().SingleAsync(value => value.Id == next.Id)).Outcome);
+    }
+
+    [Fact]
+    public async Task Start_DeadlinePassedBeforeAuthorization_RejectsWithoutEffectOrInlineExpiry()
+    {
+        var operation = await PrepareAsync();
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        using var transport = new ProviderTransport(_ => throw new InvalidOperationException("No call expected."));
+        await ExecuteAsync(operation.Id, transport);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Rejected, saved.Outcome);
+        Assert.Equal(0, saved.AuthorizedAttemptCount);
+        Assert.False(await database.Attempts.AnyAsync(value => value.OperationId == operation.Id));
+        Assert.Equal(SessionLifecycle.Failed, saved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Active, saved.Session.Reservation!.State);
+        Assert.Equal(0, transport.Calls);
+    }
+
+    [Fact]
+    public async Task Start_OutcomeCommitInterrupted_RollsBackOutcomeAndAuditsWithoutRepeatingEffect()
+    {
+        var operation = await PrepareAsync();
+        using var transport = new ProviderTransport(_ => Task.FromResult(Applied(operation.PublicId)));
+        await using (var database = Database(new InterruptOutcomeSave()))
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteAsync(operation.Id, transport, database));
+        }
+
+        await ExecuteAsync(operation.Id, transport);
+        Assert.Equal(1, transport.Calls);
+        await using var observed = Database();
+        var saved = await observed.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Pending, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Starting, saved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Active, saved.Session.Reservation!.State);
+        Assert.Null((await observed.Attempts.SingleAsync(value => value.OperationId == operation.Id)).FinishedAt);
+        Assert.False(await observed.AuditEntries.AnyAsync(value => value.Action == AuditAction.Updated
+            && (value.ResourceId == saved.Id || value.ResourceId == saved.Session.Id
+                || value.ResourceId == saved.Session.ReservationId)));
+    }
+
+    [Theory]
+    [InlineData("command", CommandOutcome.Confirmed, ChargingStartCheckOutcome.Resolved)]
+    [InlineData("rejected", CommandOutcome.Rejected, ChargingStartCheckOutcome.Resolved)]
+    [InlineData("session", CommandOutcome.Confirmed, ChargingStartCheckOutcome.Resolved)]
+    [InlineData("mismatched-session", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unavailable)]
+    [InlineData("missing", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unresolved)]
+    [InlineData("unauthorized", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unavailable)]
+    [InlineData("forbidden", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unavailable)]
+    public async Task CheckStart_QueriesExistingEffect_ResolvesOnlyMatchingEvidence(
+        string evidence, CommandOutcome expected, ChargingStartCheckOutcome checkOutcome)
+    {
+        var operation = await PrepareAsync();
+        using var lostResponse = new ProviderTransport(_ => throw new HttpRequestException("Response was lost."));
+        await ExecuteAsync(operation.Id, lostResponse);
+        await using var database = Database();
+        var attempt = await database.Attempts.AsNoTracking().SingleAsync(value => value.OperationId == operation.Id);
+        var providerSessionId = Guid.NewGuid();
+        using var transport = new ProviderTransport(request =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            bool command = request.RequestUri!.AbsolutePath.Contains("commands/", StringComparison.Ordinal);
+            Assert.EndsWith(
+                (command ? attempt.OperationPublicId : attempt.SessionPublicId).ToString(),
+                request.RequestUri.AbsolutePath,
+                StringComparison.Ordinal);
+            var rejected = new
+            {
+                id = Guid.NewGuid(),
+                externalOperationId = operation.PublicId,
+                outcome = "rejected",
+                sessionId = (Guid?)null,
+                appliedAt = (DateTimeOffset?)null,
+                rejection = "connector_unavailable"
+            };
+            var session = new
+            {
+                id = providerSessionId,
+                externalSessionId = attempt.SessionPublicId,
+                stationId = attempt.ProviderStationId,
+                chargerId = attempt.ProviderChargerId,
+                connectorId = evidence == "session" ? attempt.ProviderConnectorId : "different",
+                startedAt = _clock.GetUtcNow(),
+                powerKw = 22m,
+                state = "charging"
+            };
+            var response = evidence switch
+            {
+                "command" => Applied(operation.PublicId),
+                "rejected" => new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(rejected) },
+                "unauthorized" => new HttpResponseMessage(HttpStatusCode.Unauthorized),
+                "forbidden" => new HttpResponseMessage(HttpStatusCode.Forbidden),
+                "session" or "mismatched-session" when !command =>
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(session) },
+                _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+            };
+            return Task.FromResult(response);
+        });
+        using var host = CreateProviderHost(database, transport);
+        var handler = new CheckChargingStartCommandHandler(
+            database,
+            host.Services.GetRequiredService<ChargingProviderClientFactory>(),
+            NullLogger<CheckChargingStartCommandHandler>.Instance);
+        var result = await handler.HandleAsync(new(operation.Id), CancellationToken.None);
+        Assert.Equal(checkOutcome, result.Outcome);
+        var saved = await database.Operations.AsNoTracking().Include(value => value.Session!)
+            .ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(expected, saved.Outcome);
+        Assert.Equal(
+            expected == CommandOutcome.Confirmed ? ReservationState.Consumed : ReservationState.Active,
+            saved.Session!.Reservation!.State);
+        var lifecycle = expected switch
+        {
+            CommandOutcome.Confirmed => SessionLifecycle.Active,
+            CommandOutcome.Rejected => SessionLifecycle.Failed,
+            _ => SessionLifecycle.Starting
+        };
+        Assert.Equal(lifecycle, saved.Session.Lifecycle);
+        Assert.Equal(1, saved.AuthorizedAttemptCount);
+        Assert.Equal(1, await database.Attempts.CountAsync(value => value.OperationId == operation.Id));
+        int calls = transport.Calls;
+        if (checkOutcome == ChargingStartCheckOutcome.Resolved)
+        {
+            await handler.HandleAsync(new(operation.Id), CancellationToken.None);
+            Assert.Equal(calls, transport.Calls);
+        }
+    }
+
+    private async Task ExecuteAsync(
+        Guid operationId, ProviderTransport transport, CancellationToken cancellationToken = default)
+    {
+        await using var database = Database();
+        await ExecuteAsync(operationId, transport, database, cancellationToken);
+    }
+
+    private async Task ExecuteAsync(
+        Guid operationId,
+        ProviderTransport transport,
+        PlatformDbContext database,
+        CancellationToken cancellationToken = default)
+    {
+        using var host = CreateProviderHost(database, transport);
+        var handler = new StartChargingCommandHandler(
+            database,
+            host.Services.GetRequiredService<ChargingProviderClientFactory>(),
+            _clock,
+            Options.Create(new ChargingExecutionOptions { MaximumEffectAttempts = 3, MaximumConcurrentStarts = 2 }),
+            NullLogger<StartChargingCommandHandler>.Instance);
+        await handler.HandleAsync(new(operationId), cancellationToken);
+    }
+
+    private static IHost CreateProviderHost(PlatformDbContext database, ProviderTransport transport)
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Configuration[$"{ChargingProviderIntegrationOptions.SectionName}:{IntegrationKey}:Client"] =
+            ChargingProviderClientType.WattHarbor.ToString();
+        builder.Services.AddOptions<ChargingProviderIntegrationOptions>(IntegrationKey)
+            .Configure(value => value.Client = ChargingProviderClientType.WattHarbor);
+        builder.Services.AddHttpClient(
+            ChargingProviderClientFactory.HttpClientName(IntegrationKey),
+            client => client.BaseAddress = new("https://provider.test/"))
+            .ConfigurePrimaryHttpMessageHandler(() => new ConnectionBoundaryHandler(database, transport));
+        builder.Services.AddSingleton<ChargingProviderClientFactory>();
+        return builder.Build();
+    }
+
+    private PlatformDbContext Database(params IInterceptor[] additional)
+    {
+        var writer = new AuditEntryWriter(new ServiceActor(), _clock);
+        var options = new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(fixture.GetDataSource("charging_messaging"))
+            .AddInterceptors(new AuditSaveChangesInterceptor(writer))
+            .AddInterceptors(additional).Options;
+        return new(options);
+    }
+
+    private async Task<Operation> PrepareAsync(string? integrationKey = IntegrationKey)
+    {
+        await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(fixture.GetDataSource("platform_writer")).Options);
+        var station = new Station { Name = "Test", Address = "Test", TimeZoneId = "UTC", AccessInstructions = "Test" };
+        var charger = new Charger { Station = station, Name = "Test" };
+        var connector = new Connector { Charger = charger, ConnectorType = "Type2", PowerSupply = "AC" };
+        var driver = Driver.Register(
+            "https://test.invalid",
+            Guid.NewGuid().ToString(),
+            EmailAddress.Create("driver@example.test").Value);
+        database.Connectors.Add(connector);
+        database.Drivers.Add(driver);
+        await database.SaveChangesAsync();
+        var now = _clock.GetUtcNow();
+        var reservation = Reservation.Book(
+            connector,
+            driver,
+            now,
+            now.AddHours(1),
+            now,
+            new(2, TimeSpan.FromHours(2), TimeSpan.FromDays(1), TimeSpan.FromMinutes(10))).Value;
+        var operation = Operation.AcceptStart(ChargingSession.AcceptStart(reservation, now).Value, Guid.NewGuid());
+        database.Operations.Add(operation);
+        var provider = new ChargingProvider
+        {
+            Name = $"Edited display {Guid.NewGuid()}",
+            IntegrationKey = integrationKey
+        };
+        var providerStation = new ProviderStation
+        {
+            ChargingProvider = provider,
+            Station = station,
+            ExternalId = Guid.NewGuid().ToString()
+        };
+        var providerCharger = new ProviderCharger
+        {
+            ProviderStation = providerStation,
+            Charger = charger,
+            ExternalId = "charger"
+        };
+        database.ProviderConnectors.Add(new()
+        {
+            ProviderCharger = providerCharger,
+            Connector = connector,
+            ExternalId = "connector"
+        });
+        await database.SaveChangesAsync();
+        return operation;
+    }
+
+    private HttpResponseMessage Applied(Guid externalOperationId) => new(HttpStatusCode.OK)
+    {
+        Content = JsonContent.Create(
+            new
+            {
+                id = Guid.NewGuid(),
+                externalOperationId,
+                outcome = "applied",
+                sessionId = Guid.NewGuid(),
+                appliedAt = _clock.GetUtcNow(),
+                rejection = (string?)null
+            })
+    };
+
+    private sealed class ProviderTransport(
+        Func<HttpRequestMessage, Task<HttpResponseMessage>> respond) : HttpMessageHandler
+    {
+        private int _calls;
+        public int Calls => _calls;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _calls);
+            return respond(request);
+        }
+    }
+
+    private sealed class ConnectionBoundaryHandler(PlatformDbContext database, ProviderTransport transport)
+        : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Assert.Null(database.Database.CurrentTransaction);
+            Assert.Equal(ConnectionState.Closed, database.Database.GetDbConnection().State);
+            using var invoker = new HttpMessageInvoker(transport, disposeHandler: false);
+            return await invoker.SendAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class ServiceActor : IAuditActorAccessor
+    {
+        public AuditActor GetActor() => AuditActor.Service("charging-worker");
+    }
+
+    private sealed class InterruptOutcomeSave : SaveChangesInterceptor
+    {
+        public override ValueTask<int> SavedChangesAsync(
+            SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context?.ChangeTracker.Entries<Operation>()
+                .Any(value => value.Entity.Outcome == CommandOutcome.Confirmed) == true)
+            {
+                throw new InvalidOperationException("Interrupted before transaction commit.");
+            }
+
+            return ValueTask.FromResult(result);
+        }
+    }
+}

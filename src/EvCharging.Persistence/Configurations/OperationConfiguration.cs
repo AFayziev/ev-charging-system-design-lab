@@ -11,6 +11,11 @@ internal sealed class OperationConfiguration : IEntityTypeConfiguration<Operatio
     public void Configure(EntityTypeBuilder<Operation> entity)
     {
         entity.ToTable("operations");
+        entity.ToTable(table => table.HasCheckConstraint(
+            "ck_operations_effect_budget",
+            "authorized_attempt_count >= 0 AND (effect_attempt_limit IS NULL AND authorized_attempt_count = 0 "
+                + "OR effect_attempt_limit IS NOT NULL AND effect_attempt_limit > 0 "
+                + "AND authorized_attempt_count <= effect_attempt_limit)"));
         entity.HasPublicId(operation => operation.PublicId);
         entity.HasAuditResourceType(AuditResourceType.Operation);
         entity.Property(operation => operation.SessionId).IsAudited();

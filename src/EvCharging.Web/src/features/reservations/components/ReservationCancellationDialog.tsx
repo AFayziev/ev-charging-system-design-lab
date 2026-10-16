@@ -1,6 +1,6 @@
 import { Button, Group, Loader, Modal, Stack, Text } from "@mantine/core";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { sessionQuery } from "@/features/auth/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useUserSession } from "@/features/auth/useUserSession";
 import {
   cancelReservation,
   reservationKeys,
@@ -20,7 +20,7 @@ export function ReservationCancellationDialog({
   onClose: () => void;
 }) {
   const client = useQueryClient();
-  const session = useQuery(sessionQuery);
+  const session = useUserSession();
   const cancellation = useMutation({
     mutationFn: (token: string) => cancelReservation(reservation.id, token),
     retry: false,
@@ -46,10 +46,6 @@ export function ReservationCancellationDialog({
       void client.invalidateQueries({ queryKey: reservationKeys.lists });
     },
   });
-  const canConfirm =
-    session.isSuccess &&
-    session.data.signedIn &&
-    !!session.data.antiforgeryToken;
 
   return (
     <Modal
@@ -76,11 +72,11 @@ export function ReservationCancellationDialog({
         <Text size="sm">
           This time slot will be available to other drivers.
         </Text>
-        {session.isPending && <Loader aria-label="Loading session" />}
-        {session.isError && (
+        {session.query.isPending && <Loader aria-label="Loading session" />}
+        {session.query.isError && (
           <ReservationFailure
-            error={session.error}
-            retry={() => void session.refetch()}
+            error={session.query.error}
+            retry={() => void session.query.refetch()}
           />
         )}
         {cancellation.isError && (
@@ -97,14 +93,10 @@ export function ReservationCancellationDialog({
           <Button
             color="red"
             loading={cancellation.isPending}
-            disabled={!canConfirm}
+            disabled={!session.antiforgeryToken}
             onClick={() => {
-              if (
-                canConfirm &&
-                !cancellation.isPending &&
-                session.data?.antiforgeryToken
-              )
-                cancellation.mutate(session.data.antiforgeryToken);
+              if (!cancellation.isPending && session.antiforgeryToken)
+                cancellation.mutate(session.antiforgeryToken);
             }}
           >
             Confirm cancellation

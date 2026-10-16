@@ -40,4 +40,40 @@ public sealed class ChargingSession : IAuditableEntity
             CreatedAt = now.ToUniversalTime()
         });
     }
+
+    public Result ConfirmStart(Guid providerId, string providerSessionId, DateTimeOffset startedAt)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(providerId, Guid.Empty);
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerSessionId);
+        if (Lifecycle != SessionLifecycle.Starting)
+        {
+            return Result.Fail(new ChargingStartError(
+                ChargingStartError.SessionNotStartingCode, "Only a starting session can be confirmed."));
+        }
+
+        var reservation = Reservation ?? throw new InvalidOperationException("Reservation must be loaded.");
+        var consumption = reservation.Consume();
+        if (consumption.IsFailed)
+        {
+            return consumption;
+        }
+
+        ChargingProviderId = providerId;
+        ProviderSessionId = providerSessionId;
+        StartedAt = startedAt.ToUniversalTime();
+        Lifecycle = SessionLifecycle.Active;
+        return Result.Ok();
+    }
+
+    public Result RejectStart()
+    {
+        if (Lifecycle != SessionLifecycle.Starting)
+        {
+            return Result.Fail(new ChargingStartError(
+                ChargingStartError.SessionNotStartingCode, "Only a starting session can be rejected."));
+        }
+
+        Lifecycle = SessionLifecycle.Failed;
+        return Result.Ok();
+    }
 }

@@ -1,38 +1,44 @@
 # External Integration Contracts
 
-`SynchronousChargingProviderApi` and `QueuedChargingProviderApi` simulate external
-charging systems with different command contracts. Local notification delivery uses
+WattHarbor and AmpTrail are fictional external charging systems with distinct API
+contracts, implemented by the lab's provider hosts. Local notification delivery uses
 a mail sink through an outbound adapter. OCPP/OCPI implementation is outside scope.
 Canonical meanings are defined in [domain](domain.md); processing and persistence
 are defined in [architecture](architecture.md).
 
 ## 1. Provider contracts
 
-| Capability | Synchronous provider | Queued provider |
+| Capability | WattHarbor (synchronous) | AmpTrail (queued) |
 |---|---|---|
 | Response | Authoritative success or rejection with Problem Details | Queued acknowledgement; applied/rejected result obtained asynchronously |
 | Provider command idempotency | Same key and payload return existing command/result without another effect | No effect deduplication; repeated submissions can create additional effects |
 | Queries | Command outcome and matching provider session | Command outcome and matching provider session |
 | Measurement units | kW and cumulative session kWh | W and cumulative session Wh |
-| Payload format | Synchronous provider schema | Distinct queued provider schema |
+| Payload format | WattHarbor schema | AmpTrail schema |
 
-Both preserve platform correlation references in command/session records.
+Both preserve caller-owned operation and session identifiers in command/session records.
 Queries support provider command/session identity and the platform correlation
-reference, including when a lost response prevents the platform learning the
+identifier, including when a lost response prevents the platform learning the
 provider command ID. Results distinguish queued, applied, and definitively rejected
 requests. A rejection establishes that the request cannot execute later.
 
-Adapters map identities, acknowledgement stages, state, timestamps, and units.
+Each integration implements a specific external system's API contract. Synchronous or
+queued describes command behavior; it does not identify a shared API surface.
+A provider binding selects its concrete client and connection settings independently
+of the provider's display name. Clients map identities, acknowledgement stages,
+state, timestamps, and units.
 Unknown fields/statuses remain inspectable rather than becoming success.
-Provider state and identity survive simulator restart.
+Provider state and identity survive provider restart.
 
-### 1.1 Synchronous provider HTTP API
+### 1.1 WattHarbor HTTP API
 
 Calls use bearer tokens for the provider audience. Charging clients can submit
 commands and read outcomes; simulation controls require the separate control role.
 Equipment addresses are provider-owned strings. Command and session identifiers
-are opaque UUIDs; correlation references are the platform's public operation and
-session identifiers.
+are opaque UUIDs. `ExternalOperationId` and `ExternalSessionId` identify the calling
+system's operation and session; the platform supplies its public identifiers.
+The `Idempotency-Key` header supplies `ExternalOperationId` for a start, and the
+request body supplies `ExternalSessionId`. Provider-generated IDs remain separate.
 Request and response schemas are defined by the provider's generated OpenAPI document.
 
 #### Public provider API
@@ -41,9 +47,9 @@ Request and response schemas are defined by the provider's generated OpenAPI doc
 |---|---|
 | `POST /commands/start` | Submit a charging start command |
 | `GET /commands/{id}` | Look up a provider command by its returned identifier |
-| `GET /commands/by-reference/{reference}` | Resolve a command when its response or provider identifier was lost |
+| `GET /commands/by-external-operation/{externalOperationId}` | Resolve a command by the caller's operation ID |
 | `GET /sessions/{id}` | Read the matching provider session |
-| `GET /sessions/by-reference/{reference}` | Resolve a session by its platform reference |
+| `GET /sessions/by-external-session/{externalSessionId}` | Resolve a session by the caller's session ID |
 | `GET /stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Read equipment availability and rated power |
 
 A successful start establishes that charging was applied. Rejected starts return
@@ -51,14 +57,17 @@ Problem Details; command lookups expose the recorded outcome, including rejectio
 
 | Condition | HTTP status | Error or outcome |
 |---|---|---|
+| Authentication or authorization denied | 401 / 403 | Request rejected before command creation or execution; no provider command ID |
 | Unknown, disabled or occupied equipment | 409 | Definitive rejection: `connector_unavailable` |
-| Session reference already used by another start | 409 | Definitive rejection: `session_reference_conflict` |
+| External session ID already used by another start | 409 | Definitive rejection: `external_session_id_conflict` |
 | Idempotency key reused with a different payload | 409 | `idempotency_conflict`; original command unchanged |
 
-- Applied and rejected results are retained. Identical replays return the original
-  success or rejection even after equipment availability changes.
+- Applied commands and business rejections are retained. Identical replays return
+  the original success or business rejection even after equipment availability changes.
 - Recognized rejection codes establish that the command cannot execute later.
   Transport failures and unrecognized errors require outcome lookup.
+- An authentication or authorization denial establishes non-execution of the
+  denied request, not other requests for the same command.
 - A missing lookup does not establish that an in-flight request cannot commit later.
 
 #### Internal simulation API
@@ -69,29 +78,29 @@ Problem Details; command lookups expose the recorded outcome, including rejectio
 
 ## 2. Command safety
 
-The synchronous provider permits bounded retry with the same provider idempotency
-key. The queued provider requires reconciliation after a queued acknowledgement or
+WattHarbor permits bounded retry with the same provider idempotency
+key. AmpTrail requires reconciliation after a queued acknowledgement or
 ambiguous response.
 A snapshot with no active session does not establish safe repetition: a queued
 request might execute later.
 
-Another queued-provider effect request requires definitive rejection evidence and
+Another AmpTrail effect request requires definitive rejection evidence and
 the [domain eligibility rules](domain.md#5-reservations). Queries can repeat within
 their separate budget.
 
-HTTP effect retries are explicit per adapter; transport timeouts and generic
+HTTP effect retries are explicit per integration; transport timeouts and generic
 resilience defaults do not supply rejection evidence. Persistence of a platform
 operation or acknowledgement of a broker message does not deduplicate an external
 effect.
 
 ## 3. Observations and recovery
 
-Adapters map platform chargers and connectors to provider addresses. A provider
+Clients map platform chargers and connectors to provider addresses. A provider
 may require an EVSE identifier in addition to its charger and connector identifiers.
-That address component belongs to the adapter mapping, not the platform equipment hierarchy.
+That address component belongs to the integration mapping, not the platform equipment hierarchy.
 Distinct platform connectors must map to independently usable provider capacity.
 
-Each simulator provides:
+Each lab provider provides:
 
 - Source event IDs unique within that provider.
 - Monotonic sequences scoped to its connector.
@@ -101,7 +110,7 @@ Each simulator provides:
 - Event identity, sequence continuity, sessions, and command outcomes retained
   across restart.
 
-Provider identity namespaces connector sequences and external IDs. Adapters apply the
+Provider identity namespaces connector sequences and external IDs. Clients apply the
 [domain ordering and measurement rules](domain.md#8-time-identity-and-ordering).
 
 Provider callbacks target the platform gateway, which routes them to authenticated

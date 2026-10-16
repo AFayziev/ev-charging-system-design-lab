@@ -3,12 +3,19 @@ using FluentResults;
 
 namespace EvCharging.ChargingWorker.Providers;
 
-internal sealed class ProviderRejectedError(Guid commandId, Guid reference, string code)
-    : Error("The provider definitively rejected the charging start.")
+internal sealed class ProviderRejectedError(
+    Guid? commandId,
+    Guid externalOperationId,
+    string? code,
+    HttpStatusCode? statusCode = null,
+    string? responseBody = null)
+    : Error("The provider definitively did not apply the charging start.")
 {
-    public Guid CommandId { get; } = commandId;
-    public Guid Reference { get; } = reference;
-    public string Code { get; } = code;
+    public Guid? CommandId { get; } = commandId;
+    public Guid ExternalOperationId { get; } = externalOperationId;
+    public string? Code { get; } = code;
+    public HttpStatusCode? StatusCode { get; } = statusCode;
+    public string? ResponseBody { get; } = responseBody;
 }
 
 internal sealed class ProviderResponseError(HttpStatusCode statusCode, string responseBody, string? code = null)

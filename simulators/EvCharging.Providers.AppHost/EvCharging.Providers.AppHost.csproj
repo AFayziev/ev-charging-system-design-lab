@@ -8,10 +8,11 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="MessagePack" />
     <PackageReference Include="Aspire.Hosting.Keycloak" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
-    <ProjectReference Include="../EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
-    <ProjectReference Include="../EvCharging.SynchronousChargingProviderApi.Migrations/EvCharging.SynchronousChargingProviderApi.Migrations.csproj" />
-    <ProjectReference Include="../EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
+    <ProjectReference Include="../EvCharging.WattHarborProviderApi/EvCharging.WattHarborProviderApi.csproj" />
+    <ProjectReference Include="../EvCharging.WattHarborProviderApi.Migrations/EvCharging.WattHarborProviderApi.Migrations.csproj" />
+    <ProjectReference Include="../EvCharging.AmpTrailProviderApi/EvCharging.AmpTrailProviderApi.csproj" />
   </ItemGroup>
 </Project>

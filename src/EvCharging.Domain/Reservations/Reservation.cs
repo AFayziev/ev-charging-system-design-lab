@@ -124,6 +124,18 @@ public sealed class Reservation : IAuditableEntity
         return Result.Ok();
     }
 
+    public Result Consume()
+    {
+        if (State != ReservationState.Active)
+        {
+            return Result.Fail(new ChargingStartError(
+                ChargingStartError.ReservationInactiveCode, "Only an active reservation can be consumed."));
+        }
+
+        State = ReservationState.Consumed;
+        return Result.Ok();
+    }
+
     public ReservationExpiryOutcome ExpireAtSlotEnd(DateTimeOffset now, bool hasUnresolvedStart)
     {
         if (State != ReservationState.Active)

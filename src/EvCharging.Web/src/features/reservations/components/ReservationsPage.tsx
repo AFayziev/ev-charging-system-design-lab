@@ -90,7 +90,7 @@ export function ReservationsPage() {
         </Alert>
       )}
       {query.isPending && <Loader aria-label="Loading reservations" />}
-      {query.isError && visibleReservations.length === 0 && (
+      {query.isError && (
         <ReservationFailure
           error={query.error}
           retry={() => void query.refetch()}

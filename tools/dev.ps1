@@ -19,7 +19,13 @@ function Invoke-Aspire {
     # Keep Aspire's local AppHost selection inside its owning directory.
     Push-Location ($AppHost ? (Split-Path -Parent $AppHost) : $repository)
     $previousConsoleEncoding = [Console]::OutputEncoding
+    $ideEnvironment = @{}
     try {
+        # Detached hosts belong to this launcher, not an inherited VS Code debug session.
+        foreach ($name in @('ASPIRE_EXTENSION_ENDPOINT', 'DEBUG_SESSION_PORT')) {
+            $ideEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+            Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+        }
         # PowerShell uses the console output encoding to decode native stdout.
         [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
         $command = $Arguments[0]
@@ -30,6 +36,14 @@ function Invoke-Aspire {
         }
     }
     finally {
+        foreach ($name in $ideEnvironment.Keys) {
+            if ($null -eq $ideEnvironment[$name]) {
+                Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+            }
+            else {
+                [Environment]::SetEnvironmentVariable($name, $ideEnvironment[$name], 'Process')
+            }
+        }
         [Console]::OutputEncoding = $previousConsoleEncoding
         Pop-Location
     }
@@ -78,13 +92,13 @@ function Start-AppHost {
     Invoke-Aspire -AppHost $AppHost -Arguments $arguments | Out-Host
 }
 
-function Get-ProviderAuthentication {
+function Get-WattHarborAuthentication {
     $description = Invoke-Aspire -AppHost $providers -Arguments @(
-        'describe', 'synchronous-charging-provider-api', '--apphost', $providers, '--format', 'Json'
+        'describe', 'wattharbor-provider-api', '--apphost', $providers, '--format', 'Json'
     ) | Out-String | ConvertFrom-Json -AsHashtable
     $authority = $description.resources[0].environment['ProviderAuthentication__Authority']
     if (-not $authority) {
-        throw 'The synchronous provider authentication authority is unavailable.'
+        throw 'The WattHarbor authentication authority is unavailable.'
     }
     $metadata = Invoke-RestMethod "$($authority.TrimEnd('/'))/.well-known/openid-configuration" -TimeoutSec 10
     $secretJson = & dotnet user-secrets list --project $providers --json
@@ -130,32 +144,32 @@ try {
     }
 
     $providerEndpoints = @{}
-    foreach ($kind in @('synchronous', 'queued')) {
-        $resource = "$kind-charging-provider-api"
+    foreach ($provider in @('wattharbor', 'amptrail')) {
+        $resource = "$provider-provider-api"
         Invoke-Aspire -AppHost $providers -Arguments @(
             'wait', $resource, '--apphost', $providers, '--timeout', '120'
         ) | Out-Host
-        $providerEndpoints[$kind] = Get-ResourceOrigin $providers $resource
+        $providerEndpoints[$provider] = Get-ResourceOrigin $providers $resource
     }
 
     $platformHost = Get-RunningAppHost $platform
     if ($platformHost) {
-        foreach ($kind in $providerEndpoints.Keys) {
-            $configured = Get-ResourceOrigin $platform "$kind-charging-provider-api"
-            if ($configured -ne $providerEndpoints[$kind]) {
+        foreach ($provider in $providerEndpoints.Keys) {
+            $configured = Get-ResourceOrigin $platform "$provider-provider-api"
+            if ($configured -ne $providerEndpoints[$provider]) {
                 throw 'The running platform uses different provider URLs. Stop its AppHost and rerun tools/dev.ps1.'
             }
         }
         Write-Host 'Reusing the platform AppHost.'
     }
     else {
-        $providerAuthentication = Get-ProviderAuthentication
+        $providerAuthentication = Get-WattHarborAuthentication
         $platformParameters = @{
-            'Parameters__synchronous-provider-token-endpoint' = $providerAuthentication.TokenEndpoint
-            'Parameters__synchronous-provider-client-secret' = $providerAuthentication.ClientSecret
+            'Parameters__wattharbor-provider-token-endpoint' = $providerAuthentication.TokenEndpoint
+            'Parameters__wattharbor-provider-client-secret' = $providerAuthentication.ClientSecret
         }
-        foreach ($kind in $providerEndpoints.Keys) {
-            $platformParameters["Parameters__$kind-provider-url"] = $providerEndpoints[$kind]
+        foreach ($provider in $providerEndpoints.Keys) {
+            $platformParameters["Parameters__$provider-provider-url"] = $providerEndpoints[$provider]
         }
         foreach ($name in $platformParameters.Keys) {
             $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')

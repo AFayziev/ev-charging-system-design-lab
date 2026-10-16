@@ -1,13 +1,13 @@
 namespace EvCharging.ChargingWorker.Providers;
 
-internal enum ProviderSessionState
+public enum ProviderSessionState
 {
     Charging
 }
 
-internal sealed record ProviderSessionResult(
+public sealed record ProviderSessionResult(
     Guid Id,
-    Guid Reference,
+    Guid ExternalSessionId,
     ProviderEquipmentAddress Equipment,
     DateTimeOffset StartedAt,
     decimal PowerKw,

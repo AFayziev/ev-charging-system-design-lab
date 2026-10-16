@@ -47,7 +47,7 @@ retain their prescribed names and signatures.
   separate handlers.
 - Organize workers by responsibility: message handlers under `Handlers`, with
   related handlers grouped by area as their number grows. Keep hosted services
-  and provider adapters in their own responsibility-based directories. Add
+  and provider integrations in their own responsibility-based directories. Add
   directories when needed; do not impose the API feature-slice layout on workers.
 - Keep small feature slices in a file named after the use case, grouping its
   request/response types, child contract types, exclusive errors, and command/query
@@ -297,6 +297,8 @@ retain their prescribed names and signatures.
 - Define stable error codes and other reused semantic strings as named constants
   in their owning domain, feature, or infrastructure area. Use `nameof` for member
   names. Public-contract tests may assert literal wire values independently.
+- For HTTP errors, use custom codes only for distinctions the HTTP status cannot
+  convey. Do not duplicate standard statuses with custom error codes.
 - Represent expected business outcomes explicitly; use exceptions for exceptional
   failures. Validate external input at the boundary.
 - Catch exceptions only to handle, translate, or add useful context. Preserve

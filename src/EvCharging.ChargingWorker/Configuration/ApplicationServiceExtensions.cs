@@ -7,6 +7,10 @@ internal static class ApplicationServiceExtensions
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddSingleton(TimeProvider.System);
+        services.AddOptions<ChargingExecutionOptions>()
+            .BindConfiguration("ChargingExecution")
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services.AddOptions<MessagingFailureOptions>()
             .BindConfiguration("MessagingFailures")
             .Validate(

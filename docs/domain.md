@@ -7,7 +7,7 @@ lab. [Architecture](architecture.md) describes system boundaries;
 [integrations](integrations.md) defines third-party contracts; [lab profiles](lab.md)
 supply configurable experiment timings.
 
-Provider-specific names remain in source payloads and map to these terms at adapter
+Provider-specific names remain in source payloads and map to these terms at integration
 boundaries. APIs, messages, tests, and frontend labels preserve the same meanings.
 
 ## 2. Actors and permissions

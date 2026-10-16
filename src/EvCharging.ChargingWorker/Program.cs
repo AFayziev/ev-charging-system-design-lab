@@ -1,7 +1,8 @@
 using EvCharging.ChargingWorker.Configuration;
 using EvCharging.ChargingWorker.Handlers;
 using EvCharging.ChargingWorker.Persistence;
-using EvCharging.ChargingWorker.Providers.Synchronous;
+using EvCharging.ChargingWorker.Providers;
+using EvCharging.Contracts.Charging;
 using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Messaging;
 using EvCharging.Persistence.Extensions;
@@ -11,7 +12,7 @@ using Wolverine.RabbitMQ;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
-builder.AddSynchronousChargingProvider();
+builder.AddChargingProviders();
 builder.AddPlatformPersistence();
 int maximumConcurrentChecks = builder.Configuration.GetValue<int>("ReservationExpiry:MaximumConcurrentChecks");
 var retryDelays = builder.Configuration.GetSection("MessagingFailures:TransientDatabaseRetryDelays")
@@ -21,10 +22,14 @@ builder.AddMessaging(
     {
         options.AddMessageStorage(builder.Configuration, "charging");
         options.UseEntityFrameworkCoreTransactions();
+        options.CodeGeneration.AlwaysUseServiceLocationFor<ChargingProviderClientFactory>();
         options.AddReservationEventRouting();
+        options.AddChargingCommandRouting();
         options.Policies.LogMessageStarting(LogLevel.Information);
         options.Policies.ForMessagesOfType<ReservationCreated>().Audit(message => message.ReservationId);
         options.Policies.ForMessagesOfType<ExpireReservation>().Audit(message => message.ReservationId);
+        options.Policies.ForMessagesOfType<StartCharging>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<CheckChargingStart>().Audit(message => message.OperationId);
         options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure).ScheduleRetry(retryDelays);
         options.Policies
             .OnException(
@@ -36,12 +41,16 @@ builder.AddMessaging(
         options.LocalQueueFor<SweepOverdueReservations>().Sequential();
         options.ListenToRabbitQueue(ReservationEventTopology.ChargingQueue)
             .MaximumParallelMessages(maximumConcurrentChecks);
+        options.ListenToRabbitQueue(ChargingCommandTopology.StartQueue)
+            .MaximumParallelMessages(builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentStarts"));
+        options.ListenToRabbitQueue(ChargingCommandTopology.StatusCheckQueue)
+            .MaximumParallelMessages(builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentStarts"));
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddHttpClient("gateway", client => client.BaseAddress = new("https+http://gateway/api/"));
 builder.Services.AddHttpClient(
-    "queued-charging-provider-api",
-    client => client.BaseAddress = new("https+http://queued-charging-provider-api/"));
+    "amptrail-provider-api",
+    client => client.BaseAddress = new("https+http://amptrail-provider-api/"));
 
 using var host = builder.Build();
 

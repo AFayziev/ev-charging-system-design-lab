@@ -16,7 +16,7 @@ import { HttpStatusCode } from "axios";
 import { Link, useParams } from "react-router";
 import { BackLink } from "@/components/BackLink";
 import { PageHeading } from "@/components/PageHeading";
-import { sessionQuery } from "@/features/auth/api";
+import { useUserSession } from "@/features/auth/useUserSession";
 import { getHttpStatus, getFormValidationErrors } from "@/lib/http-errors";
 import {
   getStationEditFailure,
@@ -76,7 +76,7 @@ function StationEditForm({
   loadFailure: StationEditorLoadFailure | null;
 }) {
   const client = useQueryClient();
-  const session = useQuery(sessionQuery);
+  const session = useUserSession();
   const [confirmed, setConfirmed] = useState(initial);
   const form = useForm<StationEdit>({
     mode: "uncontrolled",
@@ -100,7 +100,7 @@ function StationEditForm({
   };
   const mutation = useMutation({
     mutationFn: (edit: StationEdit) =>
-      updateStation(initial.id, edit, session.data?.antiforgeryToken ?? ""),
+      updateStation(initial.id, edit, session.antiforgeryToken ?? ""),
     retry: false,
     onSuccess: (saved) => {
       setConfirmed(saved);
@@ -136,9 +136,7 @@ function StationEditForm({
     : null;
   const visibleFailure = loadFailure ?? failure;
   const saveDisabled =
-    !session.data?.antiforgeryToken ||
-    reloading ||
-    loadFailure?.blocksSave === true;
+    !session.antiforgeryToken || reloading || loadFailure?.blocksSave === true;
   const loadCurrent = async () => {
     const result = await reload();
     if (result.isSuccess && result.data) {

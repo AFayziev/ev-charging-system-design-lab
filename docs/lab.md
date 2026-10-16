@@ -488,9 +488,9 @@ Runtime settings are defined by [gateway diagnostics options](../src/EvCharging.
 [Vite build configuration](../src/EvCharging.Web/vite.config.ts) controls private source-map upload.
 The build and startup release identifiers must refer to the same deployed build.
 
-### 1.10 Synchronous charging provider
+### 1.10 WattHarbor charging provider
 
-The simulator implements the [provider contract](integrations.md#1-provider-contracts)
+WattHarbor implements the [provider contract](integrations.md#1-provider-contracts)
 with these choices:
 
 | Area | Choice |
@@ -513,7 +513,7 @@ Testing treats the provider as a black box:
   No direct database access, internal handler calls or storage assertions.
 - Verify deduplication, payload conflicts, competing starts, rejection, lost-response
   resolution and outcome lookups through that public contract.
-- Adapter checks use the same contract; a small set of platform E2E journeys
+- Client checks use the same contract; a small set of platform E2E journeys
   verifies the complete boundary without repeating every provider scenario.
 
 ## 2. Experiments and verification
@@ -536,7 +536,7 @@ the Azure database profile covers replication and managed pooling. Local applica
 replicas share a host failure boundary and do not demonstrate multi-zone availability.
 
 MongoDB, Valkey, Elasticsearch, RabbitMQ, and Kafka need no cloud subscriptions.
-The synchronous and queued charging providers are controlled simulators.
+WattHarbor and AmpTrail are controlled lab providers.
 Notification email is captured locally in Mailpit without real delivery.
 Hosted notification delivery depends on [provider selection](#18-notification-adapters).
 Local S3 storage does not demonstrate hosted CDN or R2 signing behavior;
@@ -556,8 +556,8 @@ recipient restrictions depend on the provider selected for the external exercise
 
 | Fixture | Exercise |
 |---|---|
-| North Station, synchronous charging provider | Assigned operator access and authoritative command outcomes |
-| South Station, queued charging provider | Unassigned operator denial and uncertain command outcomes |
+| North Station, WattHarbor | Assigned operator access and authoritative command outcomes |
+| South Station, AmpTrail | Unassigned operator denial and uncertain command outcomes |
 | Fictional catalogue with varied equipment counts | Public browsing and concurrent sessions without sharing one charging outlet |
 | Driver and operator from the Keycloak realm fixtures | Identity-linked ownership and station assignments |
 
@@ -575,7 +575,6 @@ These are overridable experiment settings, not production availability targets.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| API request timeout | 10 seconds | Cooperative deadline for inbound API requests |
 | Telemetry interval | 2 seconds | Normal simulator cadence |
 | Freshness limit | 10 seconds | Greater source-observation age is stale |
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |

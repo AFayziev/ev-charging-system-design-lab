@@ -12,7 +12,7 @@ including concurrency, dependency failures, and uncertain external effects.
 | [README](README.md) | Entry point: system and feature overview, prerequisites, local setup, and development commands | Detailed design and canonical rules belong in their owning references; delivery status belongs in the plan |
 | [Architecture](docs/architecture.md) | Intended technical design in technology-neutral terms: component responsibilities, data ownership, transaction and consistency boundaries, processing flows, and failure/recovery boundaries | Business eligibility and lifecycle rules belong in Domain; product/package selections and experiments belong in Lab; delivery stages belong in Plan |
 | [Domain](docs/domain.md) | Intended system behavior: canonical vocabulary, actors and permissions, business invariants, booking policies, lifecycle transitions, time semantics, and evidence required to establish outcomes | Implementation progress and temporary delivery stages belong in Plan; persistence/framework mechanisms belong in Architecture, Lab, or Backend guidelines |
-| [Integrations](docs/integrations.md) | External contracts and adapter obligations: provider guarantees, acknowledgements versus confirmed effects, retry/deduplication safety, observations, unit/identity mapping, and simulator behavior | Platform business rules belong in Domain; internal processing and storage ownership belong in Architecture; provider wiring and experiment settings belong in Lab |
+| [Integrations](docs/integrations.md) | External contracts and integration obligations: provider guarantees, acknowledgements versus confirmed effects, retry/deduplication safety, observations, unit/identity mapping, and lab-provider behavior | Platform business rules belong in Domain; internal processing and storage ownership belong in Architecture; provider wiring and experiment settings belong in Lab |
 | [Lab](docs/lab.md) | Concrete lab design: selected technologies, implementation constraints, execution profiles, configurable experiment values, controlled faults, and verification tools/signals | Business-rule semantics belong in Domain; reusable coding/persistence practices belong in Backend guidelines; application logic, source configuration, and framework defaults stay in source |
 | [Plan](docs/implementation-plan.md) | Delivery tracking: stable task IDs, milestone status, dependencies, staged scope, pending work, and acceptance criteria | Link to owning design references instead of restating rules or design; verification evidence belongs in task reports or PR descriptions |
 | [Backend guidelines](docs/backend-guidelines.md) | Reusable implementation and review rules: code organization, C# style, domain/persistence boundaries, validation, identifiers, transactions, errors, testing, and enforcement | System-specific business behavior belongs in Domain; component design belongs in Architecture; technology selections and experiment values belong in Lab; CLI commands belong in README |
@@ -29,7 +29,7 @@ Apply its review criteria before considering the implementation complete.
 
 ## Projects
 
-Platform projects live under `src/`; external provider simulators and their AppHost
+Platform projects live under `src/`; external lab providers and their AppHost
 live under `simulators/`. Both inherit repository build, package, analyzer, and
 formatting rules. Responsibilities describe the intended host boundaries;
 implementation progress is recorded in the plan.
@@ -37,7 +37,7 @@ implementation progress is recorded in the plan.
 | Project | Type | Responsibility |
 |---|---|---|
 | `EvCharging.AppHost` | Orchestrator | Aspire resource graph, endpoints, references, environment, and startup dependencies |
-| `EvCharging.Providers.AppHost` | Orchestrator | Independent provider simulator resources, endpoints, and startup dependencies |
+| `EvCharging.Providers.AppHost` | Orchestrator | Independent lab provider resources, endpoints, and startup dependencies |
 | `EvCharging.Gateway` | Resource | YARP/BFF, browser sessions, authentication, and browser/service/callback routing to runtime-balanced API services |
 | `EvCharging.Gateway.Migrations` | Resource | EF migrations, model snapshot, design-time tooling, and one-shot authentication-schema migrations using schema-owning credentials |
 | `EvCharging.Web` | Resource | Shared React/TypeScript browser application for drivers and backoffice operators |
@@ -48,9 +48,9 @@ implementation progress is recorded in the plan.
 | `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, warming, and recovery |
 | `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, diagnostic bundles, and upload/orphan cleanup |
 | `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
-| `EvCharging.SynchronousChargingProviderApi` | Resource | Simulator with authoritative synchronous results and command deduplication |
-| `EvCharging.SynchronousChargingProviderApi.Migrations` | Resource | Provider-owned EF migrations and one-shot database initialization |
-| `EvCharging.QueuedChargingProviderApi` | Resource | Simulator with queued acknowledgement and no effect deduplication |
+| `EvCharging.WattHarborProviderApi` | Resource | WattHarbor lab provider with authoritative synchronous results and command deduplication |
+| `EvCharging.WattHarborProviderApi.Migrations` | Resource | Provider-owned EF migrations and one-shot database initialization |
+| `EvCharging.AmpTrailProviderApi` | Resource | AmpTrail lab provider with queued acknowledgement and no effect deduplication |
 | `EvCharging.Contracts` | Library | Shared API and messaging contracts and canonical role types |
 | `EvCharging.Domain` | Library | Business entities, value objects, measurements, and pure business policies |
 | `EvCharging.Persistence` | Library | Charging-schema EF mappings, database access, auditing, and persistence-owned records for API/worker consumers |
@@ -225,7 +225,7 @@ accent.
   worker submissions and provider callbacks. Only the gateway references platform
   API destinations. External provider calls and orchestration health checks use
   their own endpoints.
-- Keep `AddServiceDefaults` on every application/simulator host and propagate
+- Keep `AddServiceDefaults` on every application or lab provider host and propagate
   the AppHost environment to child hosts. Workers have no HTTP listeners.
 - Default HTTP retries exclude unsafe methods. Provider effect retries require
   an explicit policy permitted by the integration contract; queued acknowledgements

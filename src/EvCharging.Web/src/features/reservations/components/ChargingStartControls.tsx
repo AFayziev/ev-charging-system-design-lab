@@ -5,11 +5,11 @@ import {
   IconClock,
   IconHelpCircle,
   IconPlug,
-  IconWifiOff,
 } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HttpStatusCode } from "axios";
 import { useState } from "react";
+import { useUserSession } from "@/features/auth/useUserSession";
 import {
   getHttpFailure,
   getHttpProblemCode,
@@ -17,10 +17,12 @@ import {
 } from "@/lib/http-errors";
 import {
   isStartUnresolved,
+  checkChargingStart,
   reservationKeys,
   startCharging,
   type Reservation,
   type ReservationList,
+  type StartOperation,
 } from "../api";
 import { getStartPresentation } from "../start-presentation";
 import { connectorBusyCode } from "../errors";
@@ -43,10 +45,48 @@ export function ChargingStartControls({
   onCancel?: (reservation: Reservation) => void;
 }) {
   const client = useQueryClient();
+  // Refresh on demand rather than fetch a session for every reservation card.
+  const session = useUserSession({ enabled: false });
   const [opened, setOpened] = useState(false);
-  const statusCheck = useMutation({ mutationFn: onRefresh, retry: false });
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const operation = reservation.startOperation;
+  const updateOperation = (saved: StartOperation) => {
+    client.setQueriesData<ReservationList>(
+      { queryKey: reservationKeys.lists },
+      (previous) =>
+        previous && {
+          ...previous,
+          reservations: previous.reservations.map((value) =>
+            value.id === reservation.id
+              ? { ...value, startOperation: saved }
+              : value,
+          ),
+        },
+    );
+  };
+  const statusCheck = useMutation({
+    retry: false,
+    onMutate: () => client.cancelQueries({ queryKey: reservationKeys.lists }),
+    mutationFn: async () => {
+      if (!isStartUnresolved(operation) || !operation) {
+        return null;
+      }
+      const refreshed = await session.query.refetch({
+        throwOnError: true,
+        cancelRefetch: false,
+      });
+      const token =
+        refreshed.isSuccess && refreshed.data.signedIn
+          ? refreshed.data.antiforgeryToken
+          : null;
+      if (!token) return null;
+      return checkChargingStart(reservation.id, operation.id, token);
+    },
+    onSuccess: (saved) => {
+      if (saved) updateOperation(saved.operation);
+      void onRefresh();
+    },
+  });
   const [unconfirmedAgainst, setUnconfirmedAgainst] = useState<string | null>();
   const ambiguous =
     unconfirmedAgainst !== undefined &&
@@ -58,18 +98,7 @@ export function ChargingStartControls({
     onSuccess: (operation) => {
       setUnconfirmedAgainst(undefined);
       setOpened(false);
-      client.setQueriesData<ReservationList>(
-        { queryKey: reservationKeys.lists },
-        (previous) =>
-          previous && {
-            ...previous,
-            reservations: previous.reservations.map((value) =>
-              value.id === reservation.id
-                ? { ...value, startOperation: operation }
-                : value,
-            ),
-          },
-      );
+      updateOperation(operation);
       void onRefresh();
     },
     onError: (error) => {
@@ -87,6 +116,10 @@ export function ChargingStartControls({
     isStartUnresolved(operation) ||
     (operation?.outcome === "confirmed" && operation.lifecycle !== "failed");
   const now = Date.now();
+  const check =
+    statusCheck.data?.operation.id === operation?.id
+      ? statusCheck.data
+      : undefined;
   const early = now < Date.parse(reservation.startsAt);
   const late = now >= Date.parse(reservation.arrivalDeadline);
   const active = reservation.state === "active";
@@ -131,7 +164,7 @@ export function ChargingStartControls({
                 : "Start charging"}
           </Button>
         )}
-        {(blocked || ambiguous || statusUnavailable) && (
+        {isStartUnresolved(operation) && (
           <Button
             color="blue"
             variant="light"
@@ -139,7 +172,7 @@ export function ChargingStartControls({
             loading={statusCheck.isPending}
             onClick={() => statusCheck.mutate()}
           >
-            {statusUnavailable ? "Try status again" : "Check status"}
+            Check status
           </Button>
         )}
         {active && !blocked && !ambiguous && !statusUnavailable && onCancel && (
@@ -155,28 +188,54 @@ export function ChargingStartControls({
         )}
       </div>
       <Stack gap="xs" className={classes.chargingStatus}>
-        {outcomeContent && (
+        {statusCheck.isPending && (
           <Alert
-            color={outcomeContent.color}
-            title={outcomeContent.title}
-            icon={<outcomeContent.icon size={20} aria-hidden />}
+            color="blue"
+            title="Checking with the station"
+            icon={<IconClock size={20} aria-hidden />}
             role="status"
           >
-            {outcomeContent.text}
+            We are checking whether charging started. Please wait.
           </Alert>
         )}
-        {statusUnavailable && (
+        {isStartUnresolved(operation) &&
+          check &&
+          !statusCheck.isPending &&
+          check.outcome === "unresolved" && (
+            <Alert
+              color="orange"
+              title="Start is still unresolved"
+              icon={<IconHelpCircle size={20} aria-hidden />}
+              role="status"
+            >
+              The station has not provided a definite result. Charging may still
+              have started. Do not submit another start.
+            </Alert>
+          )}
+        {isStartUnresolved(operation) && statusCheck.isError && (
           <Alert
             color="red"
-            title="Status is temporarily unavailable"
-            icon={<IconWifiOff size={20} aria-hidden />}
+            title={getHttpFailure(statusCheck.error).title}
+            icon={<IconAlertCircle size={20} aria-hidden />}
             role="alert"
           >
-            {isStartUnresolved(operation)
-              ? "Your start request was accepted, but we cannot check its outcome right now. Please do not start again."
-              : "We cannot check for updates from the station right now. Please try again."}
+            {getHttpFailure(statusCheck.error).message}
           </Alert>
         )}
+        {outcomeContent &&
+          !statusCheck.isPending &&
+          (!isStartUnresolved(operation) ||
+            !check ||
+            check.outcome === "resolved") && (
+            <Alert
+              color={outcomeContent.color}
+              title={outcomeContent.title}
+              icon={<outcomeContent.icon size={20} aria-hidden />}
+              role="status"
+            >
+              {outcomeContent.text}
+            </Alert>
+          )}
         {ambiguous && !blocked && (
           <Alert
             color="orange"
@@ -184,8 +243,8 @@ export function ChargingStartControls({
             icon={<IconHelpCircle size={20} aria-hidden />}
             role="alert"
           >
-            We could not confirm your start request. Check its status or try
-            again.
+            We could not confirm your start request. You can safely retry this
+            request.
           </Alert>
         )}
         {!blocked && !ambiguous && failure && (

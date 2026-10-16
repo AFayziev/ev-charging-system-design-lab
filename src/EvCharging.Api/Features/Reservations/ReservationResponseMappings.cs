@@ -45,9 +45,26 @@ internal static class ReservationResponseMappings
                 && ids.Contains(value.Session.ReservationId))
             .OrderByDescending(value => value.AcceptedAt)
             .ThenByDescending(value => value.Id)
+            .Select(
+                value => new
+                {
+                    Operation = value,
+                    ResponseStatusCode = database.Attempts
+                        .Where(attempt => attempt.OperationId == value.Id)
+                        .OrderByDescending(attempt => attempt.Number)
+                        .Select(attempt => attempt.ResponseStatusCode)
+                        .FirstOrDefault()
+                })
             .ToListAsync(cancellationToken);
-        var latest = operations.GroupBy(value => value.Session!.ReservationId)
-            .ToDictionary(group => group.Key, group => group.First().ToResponse());
+        var latest = operations.GroupBy(value => value.Operation.Session!.ReservationId)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var latestOperation = group.First();
+                    return latestOperation.Operation.ToResponse(
+                        latestOperation.ResponseStatusCode);
+                });
         return reservations.Select(
             value => value.ToResponse() with { StartOperation = latest.GetValueOrDefault(value.Id) })
             .ToArray();

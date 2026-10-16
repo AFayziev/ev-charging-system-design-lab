@@ -1,8 +1,12 @@
+using System.ComponentModel.DataAnnotations;
 using EvCharging.AppHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 var builder = DistributedApplication.CreateBuilder(args);
+var chargingProviders = new ChargingProviderOptions();
+builder.Configuration.GetRequiredSection(ChargingProviderOptions.SectionName).Bind(chargingProviders);
+Validator.ValidateObject(chargingProviders, new ValidationContext(chargingProviders), validateAllProperties: true);
 
 var database = builder.AddPlatformDatabase();
 var databaseAccess = builder.AddDatabaseAccess(database);
@@ -116,7 +120,9 @@ var identityAuthority = ReferenceExpression.Create($"{identityPublicOrigin}/real
 const string IdentityMetadataAddress = "http://keycloak/realms/evcharging/.well-known/openid-configuration";
 
 platformMigrations.WithEnvironment("LabData__Enabled", "true")
-    .WithEnvironment("LabData__IdentityIssuer", identityAuthority);
+    .WithEnvironment("LabData__IdentityIssuer", identityAuthority)
+    .WithEnvironment("LabData__WattHarborIntegrationKey", chargingProviders.WattHarborIntegrationKey)
+    .WithEnvironment("LabData__AmpTrailIntegrationKey", chargingProviders.AmpTrailIntegrationKey);
 
 if (builder.ExecutionContext.IsRunMode)
 {
@@ -125,6 +131,8 @@ if (builder.ExecutionContext.IsRunMode)
         .WithEnvironment("LabData__Enabled", "true")
         .WithEnvironment("LabData__Reset", "true")
         .WithEnvironment("LabData__IdentityIssuer", identityAuthority)
+        .WithEnvironment("LabData__WattHarborIntegrationKey", chargingProviders.WattHarborIntegrationKey)
+        .WithEnvironment("LabData__AmpTrailIntegrationKey", chargingProviders.AmpTrailIntegrationKey)
         .WithReference(databaseAccess.Migration)
         .WaitForCompletion(platformMigrations)
         .WithExplicitStart()
@@ -146,27 +154,35 @@ gateway.WithEnvironment("BrowserAuthentication__PublicOrigin", gatewayPublicOrig
     .WithEnvironment("BrowserAuthentication__ClientSecret", gatewayOidcSecret)
     .WithEnvironment("BrowserAuthentication__AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false");
 
-var synchronousChargingProviderApi = builder.AddExternalService(
-    "synchronous-charging-provider-api", builder.AddParameter("synchronous-provider-url"));
-var queuedChargingProviderApi = builder.AddExternalService(
-    "queued-charging-provider-api", builder.AddParameter("queued-provider-url"));
+var wattHarborApi = builder.AddExternalService(
+    "wattharbor-provider-api", builder.AddParameter("wattharbor-provider-url"));
+var ampTrailApi = builder.AddExternalService(
+    "amptrail-provider-api", builder.AddParameter("amptrail-provider-url"));
 var notificationMail = builder.AddMailPit("notification-mail").WithDataVolume("notification-mail-data");
-var synchronousProviderTokenEndpoint = builder.AddParameter("synchronous-provider-token-endpoint");
-var synchronousProviderClientSecret = builder.AddParameter("synchronous-provider-client-secret", secret: true);
+var wattHarborTokenEndpoint = builder.AddParameter("wattharbor-provider-token-endpoint");
+var wattHarborClientSecret = builder.AddParameter("wattharbor-provider-client-secret", secret: true);
+string wattHarborIntegrationPrefix
+    = $"ChargingProviders__Integrations__{chargingProviders.WattHarborIntegrationKey}__";
 
 var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithEnvironment(
-        "SynchronousChargingProvider__TokenEndpoint", synchronousProviderTokenEndpoint)
+        $"{wattHarborIntegrationPrefix}TokenEndpoint", wattHarborTokenEndpoint)
     .WithEnvironment(
-        "SynchronousChargingProvider__ClientSecret", synchronousProviderClientSecret)
+        $"{wattHarborIntegrationPrefix}ClientSecret", wattHarborClientSecret)
     .WithEnvironment(
-        "SynchronousChargingProvider__AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false")
+        $"{wattHarborIntegrationPrefix}AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false")
+    .WithEnvironment($"{wattHarborIntegrationPrefix}Client", "WattHarbor")
+    .WithEnvironment(
+        $"{wattHarborIntegrationPrefix}BaseAddress",
+        $"https+http://{wattHarborApi.Resource.Name}/")
+    .WithEnvironment($"{wattHarborIntegrationPrefix}ClientId", "charging-worker")
+    .WithEnvironment($"{wattHarborIntegrationPrefix}RequestTimeout", "00:00:03")
     .WithReference(databaseAccess.ChargingMessaging, "messaging")
     .WaitForCompletion(chargingMessageMigrations)
     .WithReference(gateway)
-    .WithReference(synchronousChargingProviderApi)
-    .WithReference(queuedChargingProviderApi)
+    .WithReference(wattHarborApi)
+    .WithReference(ampTrailApi)
     .WaitFor(gateway);
 
 var observation = builder.AddProject<Projects.EvCharging_ObservationWorker>("observation-worker")

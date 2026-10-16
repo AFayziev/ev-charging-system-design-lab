@@ -9,7 +9,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
   session progress, and download session summaries.
 - Operator users maintain station information and media, monitor sessions, investigate
   uncertain command outcomes, and request reconciliation.
-- Synchronous and queued charging-provider simulators expose different APIs and
+- WattHarbor and AmpTrail lab providers expose different APIs and
   controllable faults.
 - Notification delivery captures local email in a dedicated Mailpit sink with
   persisted attempts; external-provider integration is a separate exercise.
@@ -25,7 +25,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 - MongoDB document storage, Valkey caching, Elasticsearch, and rebuildable read models.
 - RabbitMQ work queues and publish/subscribe, Kafka observation streams, and
   Wolverine inbox/outbox and durable scheduling.
-- External provider adapters, telemetry processing, and reconciliation.
+- External provider integrations, telemetry processing, and reconciliation.
 - Cloudflare R2 object storage, media processing, generated documents, and
   Cloudflare CDN delivery.
 - Observability, fault injection, bounded load testing, and failure recovery.
@@ -68,8 +68,9 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 4. Press Enter or `Ctrl+C` to stop AppHosts started by the launcher; pre-existing
    AppHosts remain running. Named data volumes persist.
 
-The launcher discovers the simulators' dynamic URLs and supplies them to the
+The launcher discovers the lab providers' dynamic URLs and supplies them to the
 platform for that run. It reuses running AppHosts when their provider URLs match.
+It starts CLI-managed sessions, including when run from a VS Code terminal.
 If a running platform has stale provider URLs, stop its AppHost and rerun the launcher.
 
 ```powershell
@@ -93,25 +94,25 @@ isolated startup in Git worktrees. Detached sessions are stopped with the
 
 ### Independent AppHost startup
 
-1. Start the provider simulators in a separate terminal:
+1. Start the lab providers in a separate terminal:
 
    ```sh
    aspire run --apphost simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj
    ```
 
-2. Copy the simulator HTTP endpoints from its dashboard or `aspire describe`
+2. Copy the provider HTTP endpoints from its dashboard or `aspire describe`
    into platform configuration. Supply the provider's OAuth token endpoint and
    charging-client secret as well:
 
    ```sh
-   dotnet user-secrets set "Parameters:synchronous-provider-url" "<synchronous HTTP endpoint>" --project src/EvCharging.AppHost
-   dotnet user-secrets set "Parameters:queued-provider-url" "<queued HTTP endpoint>" --project src/EvCharging.AppHost
-   dotnet user-secrets set "Parameters:synchronous-provider-token-endpoint" "<provider OAuth token endpoint>" --project src/EvCharging.AppHost
-   dotnet user-secrets set "Parameters:synchronous-provider-client-secret" "<charging-client secret>" --project src/EvCharging.AppHost
+   dotnet user-secrets set "Parameters:wattharbor-provider-url" "<WattHarbor HTTP endpoint>" --project src/EvCharging.AppHost
+   dotnet user-secrets set "Parameters:amptrail-provider-url" "<AmpTrail HTTP endpoint>" --project src/EvCharging.AppHost
+   dotnet user-secrets set "Parameters:wattharbor-provider-token-endpoint" "<provider OAuth token endpoint>" --project src/EvCharging.AppHost
+   dotnet user-secrets set "Parameters:wattharbor-provider-client-secret" "<charging-client secret>" --project src/EvCharging.AppHost
    ```
 
-   Refresh these values when the simulator endpoints change. Environment variables
-   `Parameters__synchronous-provider-url` and `Parameters__queued-provider-url`
+   Refresh these values when the provider endpoints change. Environment variables
+   `Parameters__wattharbor-provider-url` and `Parameters__amptrail-provider-url`
    can supply the same settings in automated runs.
 
    The provider's discovery document identifies its token endpoint; the charging
@@ -129,8 +130,8 @@ isolated startup in Git worktrees. Detached sessions are stopped with the
 5. Stop each AppHost with `Ctrl+C`; named data volumes persist.
 
 - Each AppHost manages its own resources and dashboard. Platform startup does not
-  start the provider simulators.
-- The provider AppHost owns the synchronous simulator's PostgreSQL database and
+  start the lab providers.
+- The provider AppHost owns the WattHarbor lab provider's PostgreSQL database and
   Keycloak instance. Its client credentials are generated into that AppHost's
   user secrets. The imported [provider realm](infra/keycloak/providers/providers-realm.json)
   separates charging access from simulation controls. Realm imports apply on first
@@ -177,7 +178,7 @@ an existing realm. Account-email changes are a separate delivery task.
 Start the provider AppHost first, configure its endpoints as above, then start
 the platform. The commands below target the platform; use
 `simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj` as
-`--apphost` to start, inspect, or stop the simulators independently.
+`--apphost` to start, inspect, or stop the lab providers independently.
 
 1. Start:
 
@@ -258,7 +259,7 @@ dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.
 
 ### Provider contract tests
 
-The provider suite starts only the simulator AppHost and checks its documented
+The provider suite starts only the provider AppHost and checks its documented
 HTTP API using isolated storage. It requires a running Docker Linux engine.
 
 ```sh

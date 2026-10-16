@@ -10,6 +10,12 @@ internal static class ApplicationServiceExtensions
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
+        services.AddOptions<ChargingStatusCheckOptions>()
+            .BindConfiguration("ChargingStatusChecks")
+            .Validate(
+                options => options.Timeout > TimeSpan.Zero,
+                "The status-check timeout must be positive.")
+            .ValidateOnStart();
         services.AddOptions<ReservationPolicyOptions>()
             .BindConfiguration("ReservationPolicy")
             .Validate(
@@ -38,6 +44,7 @@ internal static class ApplicationServiceExtensions
         // Framework authorization and bound options require their native DI activation.
         options.CodeGeneration.AlwaysUseServiceLocationFor<IAuthorizationService>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptionsSnapshot<ReservationPolicyOptions>>();
+        options.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<ChargingStatusCheckOptions>>();
 
         return options;
     }

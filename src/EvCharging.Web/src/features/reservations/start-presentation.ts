@@ -26,7 +26,7 @@ export function getStartPresentation(
         color: "orange",
         badge: "Start unresolved",
         title: "Waiting for confirmation",
-        text: "Charging may have started. We are checking with the station. Please do not submit another start.",
+        text: "We could not confirm whether charging started. Please check the charger before taking further action. Do not submit another start.",
         icon: IconHelpCircle,
       };
     case "pending":
@@ -37,15 +37,21 @@ export function getStartPresentation(
         text: "Your request was accepted. Waiting for the station to confirm charging has started.",
         icon: IconClock,
       };
-    case "rejected":
+    case "rejected": {
+      const reason =
+        operation.failureReason === "chargingServiceUnavailable"
+          ? "Charging did not start because we could not connect to the charging service."
+          : "Charging did not start.";
+      const availability = canRetry
+        ? `Your reservation is still available until ${formatStartDeadline(arrivalDeadline)}.`
+        : "The start window has ended.";
       return {
         color: "red",
         title: "Charging could not start",
-        text: canRetry
-          ? `The station rejected the start. Your reservation is still available until ${formatStartDeadline(arrivalDeadline)}.`
-          : "The station rejected the start. The start window has ended.",
+        text: `${reason} ${availability}`,
         icon: IconAlertCircle,
       };
+    }
     default:
       return undefined;
   }

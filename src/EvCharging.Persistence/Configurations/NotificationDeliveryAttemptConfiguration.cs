@@ -6,10 +6,14 @@ namespace EvCharging.Persistence.Configurations;
 
 internal sealed class NotificationDeliveryAttemptConfiguration : IEntityTypeConfiguration<NotificationDeliveryAttempt>
 {
+    internal const string NotificationNumberIndexName = "ix_notification_delivery_attempts_notification_id_number";
+
     public void Configure(EntityTypeBuilder<NotificationDeliveryAttempt> entity)
     {
         entity.HasOne(attempt => attempt.Notification).WithMany().HasForeignKey(attempt => attempt.NotificationId);
-        entity.HasIndex(attempt => new { attempt.NotificationId, attempt.Number }).IsUnique();
+        entity.HasIndex(attempt => new { attempt.NotificationId, attempt.Number })
+            .IsUnique()
+            .HasDatabaseName(NotificationNumberIndexName);
         entity.Property(attempt => attempt.Provider).HasMaxLength(40);
         entity.Property(attempt => attempt.ExternalMessageId).HasMaxLength(200);
         entity.Property(attempt => attempt.FailureCode).HasMaxLength(100);

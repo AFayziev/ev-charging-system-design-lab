@@ -119,7 +119,7 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 |---|---|
 | Gateway / BFF | Browser authentication sessions, identity-provider interactions, and browser/service/callback routing to runtime-balanced API services |
 | API | Command/query acceptance, transactional reservation/operation/session intent, file authorization, observation ingestion, and live connections/event subscription |
-| Charging worker | Charging-provider adapters and start/stop effects, reservation expiry, reconciliation, recovery polling through observation ingestion, and recurring due-work discovery |
+| Charging worker | Charging-provider integrations and start/stop effects, reservation expiry, reconciliation, recovery polling through observation ingestion, and recurring due-work discovery |
 | Observation worker | Stream consumers, document history/latest views, transactional lifecycle/final-usage processing, stalled-session detection, and isolated observation-view replay |
 | Search index worker | Station/business-event and observation consumers, search indexing, replacement-index rebuilds, validation, and switchover |
 | Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and bounded warming/recovery |
@@ -381,7 +381,7 @@ sequenceDiagram
     R->>B: Publish work
     B->>W: Deliver command job
     W->>SQL: Recheck eligibility and persist authorized attempt
-    W->>OP: Execute through adapter
+    W->>OP: Execute through provider client
     alt Authoritative result
         OP-->>W: Applied or rejected
         W->>SQL: Commit evidence, transition, and outbox

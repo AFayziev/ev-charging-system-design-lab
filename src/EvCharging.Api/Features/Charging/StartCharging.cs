@@ -49,7 +49,7 @@ public sealed class StartChargingCommandHandler(
             var originalReservation = existing.Session?.Reservation
                 ?? throw new InvalidOperationException("Reservation must be loaded.");
             return originalReservation.PublicId == command.ReservationId
-                ? Result.Ok(existing.ToResponse())
+                ? Result.Ok(await existing.ToResponseAsync(database, cancellationToken))
                 : Conflict(IdempotencyMismatchCode, "This request key was already used for a different reservation.");
         }
 

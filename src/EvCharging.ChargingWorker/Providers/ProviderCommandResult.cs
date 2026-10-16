@@ -1,14 +1,14 @@
 namespace EvCharging.ChargingWorker.Providers;
 
-internal enum ProviderCommandOutcome
+public enum ProviderCommandOutcome
 {
     Applied,
     Rejected
 }
 
-internal sealed record ProviderCommandResult(
+public sealed record ProviderCommandResult(
     Guid Id,
-    Guid Reference,
+    Guid ExternalOperationId,
     ProviderCommandOutcome Outcome,
     Guid? SessionId,
     DateTimeOffset? AppliedAt,

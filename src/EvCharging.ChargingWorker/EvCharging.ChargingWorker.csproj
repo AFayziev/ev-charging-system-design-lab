@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="EvCharging.ProviderContracts.Tests" />
+    <InternalsVisibleTo Include="EvCharging.ChargingWorker.Tests" />
     <PackageReference Include="Duende.AccessTokenManagement" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />

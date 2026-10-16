@@ -17,7 +17,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { isNotEmpty, useForm } from "@mantine/form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { sessionQuery } from "@/features/auth/api";
+import { useUserSession } from "@/features/auth/useUserSession";
 import { PlatformRole } from "@/features/auth/PlatformRole";
 import type { StationDetail } from "@/features/stations/api";
 import { connectorTypeLabel } from "@/features/stations/components/StationPresentation";
@@ -41,12 +41,10 @@ interface BookingFormProps {
 }
 
 export function BookingForm(props: BookingFormProps) {
-  const session = useQuery(sessionQuery);
+  const session = useUserSession();
   const policy = useQuery({
     ...bookingPolicyQuery,
-    enabled:
-      session.isSuccess &&
-      session.data.user?.roles.includes(PlatformRole.Driver) === true,
+    enabled: session.user?.roles.includes(PlatformRole.Driver) === true,
   });
   const policyError = policy.isError ? getHttpFailure(policy.error) : null;
   const policyFailure = policyError && (
@@ -100,7 +98,7 @@ function ConfiguredBookingForm({
   policy: BookingPolicy;
   policyFailure: ReactNode;
 }) {
-  const session = useQuery(sessionQuery);
+  const session = useUserSession();
   const client = useQueryClient();
   const navigate = useNavigate();
   const browserZone = getBrowserTimeZone();
@@ -188,7 +186,7 @@ function ConfiguredBookingForm({
   };
   const mutation = useMutation({
     mutationFn: (booking: Booking) =>
-      createReservation(booking, session.data?.antiforgeryToken ?? ""),
+      createReservation(booking, session.antiforgeryToken ?? ""),
     retry: false,
     onSuccess: (saved) => {
       void client.invalidateQueries({ queryKey: reservationKeys.lists });
@@ -215,7 +213,7 @@ function ConfiguredBookingForm({
             if (
               !mutation.isPending &&
               !policyFailure &&
-              session.data?.antiforgeryToken
+              session.antiforgeryToken
             )
               mutation.mutate({
                 connectorId: values.connectorId,
@@ -347,7 +345,7 @@ function ConfiguredBookingForm({
           <Button
             type="submit"
             loading={mutation.isPending}
-            disabled={!session.data?.antiforgeryToken || !!policyFailure}
+            disabled={!session.antiforgeryToken || !!policyFailure}
             fullWidth
           >
             Reserve connector

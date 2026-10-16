@@ -3,13 +3,13 @@ using EvCharging.NotificationWorker.Delivery;
 using EvCharging.NotificationWorker.Handlers;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Entities;
+using EvCharging.Persistence.Extensions;
 using EvCharging.Testing;
 using JasperFx;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Time.Testing;
-using Npgsql;
 using Wolverine;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.Persistence.Durability;
@@ -35,11 +35,7 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
             {
                 await SendNotificationHandler.HandleAsync(new(notification.Id), database, delivery, _clock, default);
             }
-            catch (DbUpdateException exception) when (exception.InnerException is PostgresException
-            {
-                SqlState: PostgresErrorCodes.UniqueViolation,
-                ConstraintName: "ix_notification_delivery_attempts_notification_id_number"
-            })
+            catch (DbUpdateException exception) when (exception.IsNotificationDeliveryConflict())
             {
                 // Retry an authorization conflict with a fresh scope, as the Wolverine policy does.
                 await using var retry = CreateDatabase();

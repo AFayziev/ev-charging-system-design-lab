@@ -1,4 +1,3 @@
-using EvCharging.Domain.Equipment;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -9,11 +8,11 @@ internal sealed class ProviderConnectorConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<ProviderConnector> entity)
     {
-        entity.HasOne<ProviderCharger>()
+        entity.HasOne(mapping => mapping.ProviderCharger)
             .WithMany()
             .HasForeignKey(mapping => mapping.ProviderChargerId)
             .OnDelete(DeleteBehavior.Restrict);
-        entity.HasOne<Connector>()
+        entity.HasOne(mapping => mapping.Connector)
             .WithMany()
             .HasForeignKey(mapping => mapping.ConnectorId)
             .OnDelete(DeleteBehavior.Restrict);

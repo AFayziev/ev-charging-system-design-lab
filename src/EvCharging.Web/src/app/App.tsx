@@ -13,7 +13,6 @@ import {
   Text,
   UnstyledButton,
 } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
 import { IconBolt, IconChevronDown, IconLogout } from "@tabler/icons-react";
 import {
   Link,
@@ -36,15 +35,15 @@ import { SignInErrorPage } from "@/features/auth/components/SignInErrorPage";
 
 import { PageHeading } from "@/components/PageHeading";
 import { Activity, type ReactNode } from "react";
-import { getSignInUrl, sessionQuery } from "@/features/auth/api";
+import { getSignInUrl } from "@/features/auth/api";
+import { useUserSession } from "@/features/auth/useUserSession";
 
 const SentryRoutes = wrapReactRouterRouting(Routes);
 
 export function App() {
   const location = useLocation();
-  const session = useQuery(sessionQuery);
-  const currentSession = session.isSuccess ? session.data : undefined;
-  const roles = currentSession?.user?.roles ?? [];
+  const session = useUserSession();
+  const roles = session.user?.roles ?? [];
   const currentUrl = createPath(location);
   const logoutReturnUrl =
     matchPath("/stations", location.pathname) ||
@@ -64,15 +63,17 @@ export function App() {
   );
   const area = (role: PlatformRole, content: ReactNode) => {
     let fallback: ReactNode = null;
-    if (session.isPending) fallback = <AppLoading />;
-    else if (session.isError)
+    if (session.query.isPending) fallback = <AppLoading />;
+    else if (session.query.isError)
       fallback = (
         <Stack>
           <Text role="alert">Unable to check your session.</Text>
-          <Button onClick={() => void session.refetch()}>Try again</Button>
+          <Button onClick={() => void session.query.refetch()}>
+            Try again
+          </Button>
         </Stack>
       );
-    else if (!currentSession?.signedIn)
+    else if (!session.signedIn)
       fallback = (
         <PageHeading
           title="Sign in to continue"
@@ -142,7 +143,7 @@ export function App() {
                 </Anchor>
               )}
             </nav>
-            {session.isPending ? (
+            {session.query.isPending ? (
               <Group
                 className={classes.account}
                 gap="xs"
@@ -154,7 +155,7 @@ export function App() {
                   Loading account
                 </Text>
               </Group>
-            ) : session.isError ? (
+            ) : session.query.isError ? (
               <Stack className={classes.account} gap={2} align="flex-end">
                 <Text size="xs" role="alert">
                   Account unavailable
@@ -162,13 +163,13 @@ export function App() {
                 <Button
                   size="compact-xs"
                   variant="subtle"
-                  loading={session.isFetching}
-                  onClick={() => void session.refetch()}
+                  loading={session.query.isFetching}
+                  onClick={() => void session.query.refetch()}
                 >
                   Try again
                 </Button>
               </Stack>
-            ) : currentSession?.signedIn ? (
+            ) : session.signedIn ? (
               <Menu position="bottom-end" width={220} shadow="md">
                 <Menu.Target>
                   <UnstyledButton
@@ -182,17 +183,12 @@ export function App() {
                         size={34}
                         aria-hidden="true"
                       >
-                        {(
-                          currentSession.user?.name ??
-                          currentSession.user?.username ??
-                          ""
-                        )
+                        {(session.user?.name ?? session.user?.username ?? "")
                           .slice(0, 1)
                           .toUpperCase()}
                       </Avatar>
                       <Text size="sm" visibleFrom="sm" maw={180} truncate>
-                        {currentSession.user?.name ??
-                          currentSession.user?.username}
+                        {session.user?.name ?? session.user?.username}
                       </Text>
                       <IconChevronDown size={16} aria-hidden="true" />
                     </Group>
@@ -200,7 +196,7 @@ export function App() {
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Label hiddenFrom="sm">
-                    {currentSession.user?.name ?? currentSession.user?.username}
+                    {session.user?.name ?? session.user?.username}
                   </Menu.Label>
                   <form
                     method="post"
@@ -209,7 +205,7 @@ export function App() {
                     <input
                       type="hidden"
                       name="__RequestVerificationToken"
-                      value={currentSession.antiforgeryToken ?? ""}
+                      value={session.antiforgeryToken ?? ""}
                     />
                     <Menu.Item
                       type="submit"

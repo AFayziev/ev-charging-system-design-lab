@@ -58,6 +58,30 @@ public sealed class ChargingSessionTests
         Assert.Equal(state, reservation.State);
     }
 
+    [Fact]
+    public void RejectStart_ActiveSession_ReturnsFailureWithoutChangingEvidence()
+    {
+        var reservation = Booking();
+        var session = ChargingSession.AcceptStart(reservation, Start).Value;
+        var providerId = Guid.NewGuid();
+        Assert.True(session.ConfirmStart(providerId, "provider-session", Start).IsSuccess);
+
+        var rejection = session.RejectStart();
+        var confirmation = session.ConfirmStart(Guid.NewGuid(), "replacement", Start.AddMinutes(1));
+
+        Assert.Equal(
+            ChargingStartError.SessionNotStartingCode,
+            Assert.IsType<ChargingStartError>(Assert.Single(rejection.Errors)).Code);
+        Assert.Equal(
+            ChargingStartError.SessionNotStartingCode,
+            Assert.IsType<ChargingStartError>(Assert.Single(confirmation.Errors)).Code);
+        Assert.Equal(SessionLifecycle.Active, session.Lifecycle);
+        Assert.Equal(providerId, session.ChargingProviderId);
+        Assert.Equal("provider-session", session.ProviderSessionId);
+        Assert.Equal(Start, session.StartedAt);
+        Assert.Equal(ReservationState.Consumed, reservation.State);
+    }
+
     private static Reservation Booking() => Reservation.Book(
         new Connector { Id = Guid.NewGuid(), ConnectorType = "Type2", PowerSupply = "AC" },
         Driver.Register("https://test.invalid", "driver", EmailAddress.Create("driver@example.test").Value),

@@ -8,8 +8,7 @@ import {
   Text,
 } from "@mantine/core";
 import { IconAlertCircle, IconInfoCircle } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
-import { sessionQuery } from "@/features/auth/api";
+import { useUserSession } from "@/features/auth/useUserSession";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
 import type { Reservation } from "../api";
 import {
@@ -32,11 +31,8 @@ export function ChargingStartDialog({
   onConfirm: (token: string) => void;
   onClose: () => void;
 }) {
-  const session = useQuery(sessionQuery);
-  const token =
-    session.isSuccess && session.data.signedIn
-      ? session.data.antiforgeryToken
-      : null;
+  const session = useUserSession();
+  const token = session.antiforgeryToken;
   return (
     <Modal
       opened
@@ -74,16 +70,16 @@ export function ChargingStartDialog({
         <Text size="sm">
           We will show the result after the station confirms your request.
         </Text>
-        {session.isPending && <Loader aria-label="Loading session" />}
-        {session.isError && (
+        {session.query.isPending && <Loader aria-label="Loading session" />}
+        {session.query.isError && (
           <ReservationFailure
-            error={session.error}
+            error={session.query.error}
             retry={() => {
-              void session.refetch();
+              void session.query.refetch();
             }}
           />
         )}
-        {session.isSuccess && !token && (
+        {session.signedIn === false && (
           <Alert
             color="orange"
             icon={<IconAlertCircle size={20} aria-hidden />}

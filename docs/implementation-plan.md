@@ -90,7 +90,7 @@ monorepo baseline.
 - [x] M01.02 Add the Aspire C# AppHost, YARP gateway, API host, and independent
   charging, observation, search index, cache, media, and notification worker hosts using
   [settled host responsibilities](architecture.md#3-components-and-request-topology).
-  Add stub API hosts for the synchronous and queued provider simulators and add a
+  Add stub API hosts for the WattHarbor and AmpTrail lab providers and add a
   local notification mail sink. Wire HTTP
   dependencies with Aspire references and service discovery: gateway destinations,
   gateway-routed platform clients, and direct external simulator clients. Share
@@ -338,8 +338,8 @@ Notification failure leaves accepted reservations intact and remains separately 
 
 ### M06 — Charging start/stop and operator investigation
 
-- [ ] M06.01 Deliver driver start and operation-status interactions for the
-  synchronous provider, following the [domain start rules](domain.md#51-start-and-expiry)
+- [ ] M06.01 Deliver driver start and operation-status interactions for
+  WattHarbor, following the [domain start rules](domain.md#51-start-and-expiry)
   and [provider contract](integrations.md#1-provider-contracts). The interactive
   [start confirmation mockup](mockups/start-charging.html) records the UI states
   and responsive interactions.
@@ -351,37 +351,68 @@ Notification failure leaves accepted reservations intact and remains separately 
     flow, duplicate submissions, payload mismatches, competing starts, unauthorized
     access, and dependency failures. Retain pending status after navigation/reload,
     support responsive interactions, and distinguish acceptance from confirmation.
-  - [x] M06.01.2 Synchronous provider integration: implement persistent simulator
+  - [x] M06.01.2 WattHarbor integration: implement persistent provider
     commands/sessions, command deduplication, and outcome queries.
-    Add the authenticated adapter with identity, payload, and unit mapping
-    and bounded timeouts. Verify matching results and retained simulator state.
+    Add the authenticated client with identity, payload, and unit mapping
+    and bounded timeouts. Verify matching results and retained provider state.
     Depends on M06.01.1.
-  - [ ] M06.01.3 Worker execution: consume accepted start work, recheck eligibility,
+  - [x] M06.01.3 Worker execution: consume accepted start work, recheck eligibility,
     persist attempts and effect budgets, call the provider outside SQL transactions,
     and apply matching confirmed/rejected outcomes atomically. Record ambiguous
     outcomes as uncertain. Verify the confirmed/rejected driver flows and claim
-    handling. Depends on M06.01.2.
+    handling, including definitive access denial on the initial provider request.
+    Keep unresolved-state wording accurate for the implemented behavior.
+    Make the owner's status action perform a bounded provider lookup without
+    resending the start; retain unresolved claims after missing results or failures.
+    Depends on M06.01.2.
   - [ ] M06.01.4 Uncertain start resolution: add safe bounded HTTP retries, outcome
-    queries, and scheduled reconciliation using persisted budgets. Display pending,
-    uncertain, and exhausted automatic work accurately. Verify lost responses,
-    eventual matching evidence, and retained execution claims without repeating
-    unsafe effects using provider fault controls exercised through the platform
-    integration. Depends on M06.01.3.
+    queries, and scheduled reconciliation using persisted budgets. Follow
+    [command safety](integrations.md#2-command-safety) and
+    [start deadlines](domain.md#51-start-and-expiry). Depends on M06.01.3.
+    Acceptance includes:
+    - Resolve through provider command/session lookups using the existing external
+      operation/session IDs; apply matching authoritative evidence atomically.
+      A missing lookup retains uncertainty rather than establishing rejection.
+    - Retry WattHarbor effects with the existing operation, idempotency key, and
+      persisted payload. Enforce persisted effect limits across HTTP retries,
+      worker retries, and redelivery; use a separate bounded query budget.
+      Verify every effect retry rechecks eligibility and the arrival deadline.
+    - Extend manual status checks with durable, scheduled reconciliation. Coalesce
+      duplicate work and bound query admission; manual checks neither reset
+      recovery budgets nor create another start operation. Preserve the block on
+      new starts while the outcome remains unresolved.
+    - Display pending, uncertain, checking, and exhausted automatic work accurately.
+      Claim active checking only when reconciliation is scheduled or running.
+      Keep exhaustion separate from command outcome and retain unresolved claims.
+      The operator assistance workflow is delivered by M06.04.
+    - Verify lost responses, eventual matching confirmation/rejection, missing
+      lookups, query outages, budget exhaustion, and duplicate manual checks.
+      A 401/403 on a later request must not reject an operation whose earlier
+      attempt remains ambiguous. Exercise provider faults through the platform's
+      public integration, without tests of provider simulation internals.
   - [ ] M06.01.5 No-show expiry: switch automatic expiry to accepted arrival
     deadlines, resolve unexecuted queued starts, and update booking explanations.
     Verify pre-attempt expiry and retained claims for
-    unresolved authorized attempts through the application. Depends on M06.01.4.
+    unresolved authorized attempts through the application. Verify existing effects
+    can still be reconciled after the deadline without authorizing another start.
+    Depends on M06.01.4.
 - [ ] M06.02 Deliver driver stop with the same operation tracking and recovery;
   display confirmed stop separately from pending final usage. Verify rejected
   and uncertain stops, overruns, and recovery after worker loss.
   Depends on M06.01.
-- [ ] M06.03 Deliver start/stop for the queued provider with its persistent
-  simulator, adapter, acknowledgement/query behavior, and correlation recovery.
+- [ ] M06.03 Deliver start/stop for AmpTrail with its persistent
+  lab provider, client, acknowledgement/query behavior, and correlation recovery.
   Verify lost acknowledgements and delayed effects without blind resubmission.
   Depends on M06.01 and M06.02.
 - [ ] M06.04 Deliver assigned-operator session/attempt investigation and audited
   reconciliation requests, including exhausted recovery and unresolved outcomes.
-  Verify assignment denial and provider unavailability in the backoffice flow.
+  Expose attempts, retained provider evidence, checking state, and exhausted
+  automatic work. Make the unresolved operation's public reference available in
+  the driver view and support lookup by that reference for assigned-operator
+  investigation. Operator reconciliation requests use the durable worker
+  path with bounded admission, rather than directly resending effects or releasing
+  claims without evidence. Verify assignment denial, audited requests, repeated
+  requests, provider unavailability, and retained uncertainty when evidence is absent.
   Depends on M04.02 and M06.01–M06.03.
 - [ ] M06.05 Exercise both provider flows through crash after external effect,
   provider restart, rate limiting, circuit opening, and per-provider concurrency
@@ -404,7 +435,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   MongoDB history/latest views and SQL evidence. Add source-time freshness,
   sequence-conditional updates, checkpoints, canonical units, stalled-session
   detection, and bounded browser polling. Verify progress and visible staleness
-  end to end. Depends on M06.01; queued-provider coverage requires M06.03.
+  end to end. Depends on M06.01; AmpTrail coverage requires M06.03.
 - [ ] M07.02 Deliver completed-session final usage and completion notifications.
   Match provider/session evidence, validate cumulative usage, conditionally
   freeze completion facts, and commit outgoing completion events with SQL state.
