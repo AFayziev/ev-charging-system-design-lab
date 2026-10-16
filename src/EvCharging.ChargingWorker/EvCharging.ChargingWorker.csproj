@@ -3,6 +3,8 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="EvCharging.ProviderContracts.Tests" />
+    <PackageReference Include="Duende.AccessTokenManagement" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" />

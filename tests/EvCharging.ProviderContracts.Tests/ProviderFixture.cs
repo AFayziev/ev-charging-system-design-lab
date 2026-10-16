@@ -4,6 +4,9 @@ using System.Text.Json.Serialization;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
+using EvCharging.ChargingWorker.Providers.Synchronous;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace EvCharging.ProviderContracts.Tests;
@@ -13,6 +16,7 @@ public sealed class ProviderFixture : IAsyncLifetime
     private DistributedApplication? _app;
     private HttpClient? _charging;
     private HttpClient? _controls;
+    private IHost? _adapterHost;
 
     private DistributedApplication App => _app ?? throw new InvalidOperationException("The provider has not started.");
     public HttpClient Charging => _charging ?? throw new InvalidOperationException("The charging client is not ready.");
@@ -43,9 +47,28 @@ public sealed class ProviderFixture : IAsyncLifetime
                 .WaitForResourceHealthyAsync("synchronous-charging-provider-api", timeout.Token);
             _charging = await CreateClientAsync("charging-worker", "charging-client-secret");
             _controls = await CreateClientAsync("simulation-control", "simulation-client-secret");
+            var adapterBuilder = Host.CreateApplicationBuilder();
+            adapterBuilder.AddServiceDefaults();
+            var tokenEndpoint = new Uri(
+                App.GetEndpoint("provider-identity", "http"),
+                "/realms/providers/protocol/openid-connect/token");
+            var secret = builder.Resources.OfType<ParameterResource>()
+                .Single(parameter => parameter.Name == "charging-client-secret");
+            adapterBuilder.Configuration["SynchronousChargingProvider:TokenEndpoint"] = tokenEndpoint.ToString();
+            adapterBuilder.Configuration["SynchronousChargingProvider:ClientId"] = "charging-worker";
+            adapterBuilder.Configuration["SynchronousChargingProvider:ClientSecret"] = await secret.GetValueAsync(
+                timeout.Token);
+            adapterBuilder.Configuration["SynchronousChargingProvider:AllowLocalHttp"] = "true";
+            adapterBuilder.Configuration["SynchronousChargingProvider:RequestTimeout"] = "00:00:05";
+            adapterBuilder.Configuration["services:synchronous-charging-provider-api:http:0"] =
+                App.GetEndpoint("synchronous-charging-provider-api", "http").ToString();
+            adapterBuilder.AddSynchronousChargingProvider();
+            _adapterHost = adapterBuilder.Build();
+            await _adapterHost.StartAsync(timeout.Token);
         }
         catch
         {
+            _adapterHost?.Dispose();
             await App.DisposeAsync();
             _app = null;
             throw;
@@ -75,6 +98,11 @@ public sealed class ProviderFixture : IAsyncLifetime
         }
     }
 
+    internal SynchronousChargingProviderClient CreateAdapter() =>
+        (_adapterHost ?? throw new InvalidOperationException("The adapter has not started."))
+            .Services
+            .GetRequiredService<SynchronousChargingProviderClient>();
+
     public async Task PrepareConnectorAsync(string stationId, string chargerId, string connectorId, bool enabled)
     {
         var controls = _controls ?? throw new InvalidOperationException("The control client is not ready.");
@@ -86,6 +114,12 @@ public sealed class ProviderFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        if (_adapterHost is not null)
+        {
+            await _adapterHost.StopAsync();
+            _adapterHost.Dispose();
+        }
+
         _charging?.Dispose();
         _controls?.Dispose();
         if (_app is not null)

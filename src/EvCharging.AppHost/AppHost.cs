@@ -151,9 +151,17 @@ var synchronousChargingProviderApi = builder.AddExternalService(
 var queuedChargingProviderApi = builder.AddExternalService(
     "queued-charging-provider-api", builder.AddParameter("queued-provider-url"));
 var notificationMail = builder.AddMailPit("notification-mail").WithDataVolume("notification-mail-data");
+var synchronousProviderTokenEndpoint = builder.AddParameter("synchronous-provider-token-endpoint");
+var synchronousProviderClientSecret = builder.AddParameter("synchronous-provider-client-secret", secret: true);
 
 var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithEnvironment(
+        "SynchronousChargingProvider__TokenEndpoint", synchronousProviderTokenEndpoint)
+    .WithEnvironment(
+        "SynchronousChargingProvider__ClientSecret", synchronousProviderClientSecret)
+    .WithEnvironment(
+        "SynchronousChargingProvider__AllowLocalHttp", builder.ExecutionContext.IsRunMode ? "true" : "false")
     .WithReference(databaseAccess.ChargingMessaging, "messaging")
     .WaitForCompletion(chargingMessageMigrations)
     .WithReference(gateway)

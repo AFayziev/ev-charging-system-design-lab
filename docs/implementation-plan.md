@@ -351,9 +351,9 @@ Notification failure leaves accepted reservations intact and remains separately 
     flow, duplicate submissions, payload mismatches, competing starts, unauthorized
     access, and dependency failures. Retain pending status after navigation/reload,
     support responsive interactions, and distinguish acceptance from confirmation.
-  - [ ] M06.01.2 Synchronous provider integration: implement persistent simulator
-    commands/sessions, command deduplication, outcome queries, and controlled
-    faults. Add the authenticated adapter with identity, payload, and unit mapping
+  - [x] M06.01.2 Synchronous provider integration: implement persistent simulator
+    commands/sessions, command deduplication, and outcome queries.
+    Add the authenticated adapter with identity, payload, and unit mapping
     and bounded timeouts. Verify matching results and retained simulator state.
     Depends on M06.01.1.
   - [ ] M06.01.3 Worker execution: consume accepted start work, recheck eligibility,
@@ -365,7 +365,8 @@ Notification failure leaves accepted reservations intact and remains separately 
     queries, and scheduled reconciliation using persisted budgets. Display pending,
     uncertain, and exhausted automatic work accurately. Verify lost responses,
     eventual matching evidence, and retained execution claims without repeating
-    unsafe effects. Depends on M06.01.3.
+    unsafe effects using provider fault controls exercised through the platform
+    integration. Depends on M06.01.3.
   - [ ] M06.01.5 No-show expiry: switch automatic expiry to accepted arrival
     deadlines, resolve unexecuted queued starts, and update booking explanations.
     Verify pre-attempt expiry and retained claims for

@@ -78,6 +78,27 @@ function Start-AppHost {
     Invoke-Aspire -AppHost $AppHost -Arguments $arguments | Out-Host
 }
 
+function Get-ProviderAuthentication {
+    $description = Invoke-Aspire -AppHost $providers -Arguments @(
+        'describe', 'synchronous-charging-provider-api', '--apphost', $providers, '--format', 'Json'
+    ) | Out-String | ConvertFrom-Json -AsHashtable
+    $authority = $description.resources[0].environment['ProviderAuthentication__Authority']
+    if (-not $authority) {
+        throw 'The synchronous provider authentication authority is unavailable.'
+    }
+    $metadata = Invoke-RestMethod "$($authority.TrimEnd('/'))/.well-known/openid-configuration" -TimeoutSec 10
+    $secretJson = & dotnet user-secrets list --project $providers --json
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not read the provider AppHost credentials.'
+    }
+    $secrets = $secretJson | Where-Object { $_ -notmatch '^//' } | Out-String | ConvertFrom-Json -AsHashtable
+    $clientSecret = $secrets['Parameters:charging-client-secret']
+    if (-not $clientSecret -or -not $metadata.token_endpoint) {
+        throw 'The provider token endpoint and charging-client secret are required.'
+    }
+    return @{ TokenEndpoint = $metadata.token_endpoint; ClientSecret = $clientSecret }
+}
+
 function Wait-ForShutdown {
     $prompt = 'Press Enter or Ctrl+C to stop hosts started by this launcher'
     if ([Console]::IsInputRedirected) {
@@ -128,10 +149,17 @@ try {
         Write-Host 'Reusing the platform AppHost.'
     }
     else {
+        $providerAuthentication = Get-ProviderAuthentication
+        $platformParameters = @{
+            'Parameters__synchronous-provider-token-endpoint' = $providerAuthentication.TokenEndpoint
+            'Parameters__synchronous-provider-client-secret' = $providerAuthentication.ClientSecret
+        }
         foreach ($kind in $providerEndpoints.Keys) {
-            $name = "Parameters__$kind-provider-url"
+            $platformParameters["Parameters__$kind-provider-url"] = $providerEndpoints[$kind]
+        }
+        foreach ($name in $platformParameters.Keys) {
             $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
-            [Environment]::SetEnvironmentVariable($name, $providerEndpoints[$kind], 'Process')
+            [Environment]::SetEnvironmentVariable($name, $platformParameters[$name], 'Process')
         }
         Start-AppHost $platform @('--launch-profile', 'http')
     }

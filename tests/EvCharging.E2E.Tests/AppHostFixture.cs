@@ -19,6 +19,7 @@ public sealed class AppHostFixture : IAsyncLifetime
 
     private DistributedApplication? _app;
     private DistributedApplication? _providers;
+    private string? _providerClientSecret;
 
     public DistributedApplication App =>
         _app ?? throw new InvalidOperationException("The application has not started.");
@@ -64,6 +65,9 @@ public sealed class AppHostFixture : IAsyncLifetime
             "synchronous-charging-provider-api", cancellationToken);
         await _providers.ResourceNotifications.WaitForResourceHealthyAsync(
             "queued-charging-provider-api", cancellationToken);
+        _providerClientSecret = await builder.Resources.OfType<ParameterResource>()
+            .Single(parameter => parameter.Name == "charging-client-secret")
+            .GetValueAsync(cancellationToken);
     }
 
     private async Task StartPlatformAsync(CancellationToken cancellationToken)
@@ -71,12 +75,18 @@ public sealed class AppHostFixture : IAsyncLifetime
         var providers = _providers ?? throw new InvalidOperationException("The providers have not started.");
         var synchronousUrl = providers.GetEndpoint("synchronous-charging-provider-api", "http");
         var queuedUrl = providers.GetEndpoint("queued-charging-provider-api", "http");
+        var tokenEndpoint = new Uri(
+            providers.GetEndpoint("provider-identity", "http"),
+            "/realms/providers/protocol/openid-connect/token");
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_AppHost>(
             ["--environment=Development", "--Parameters:api-instances=2",
                 "--Parameters:gateway-instances=2",
+                $"--Parameters:synchronous-provider-token-endpoint={tokenEndpoint}",
                 $"--Parameters:synchronous-provider-url={synchronousUrl}",
                 $"--Parameters:queued-provider-url={queuedUrl}"],
             cancellationToken);
+        builder.Configuration["Parameters:synchronous-provider-client-secret"] = _providerClientSecret
+            ?? throw new InvalidOperationException("The provider charging-client secret is required.");
         var api = builder.Resources.OfType<ProjectResource>().Single(resource => resource.Name == "api");
         var charging = builder.Resources.OfType<ProjectResource>()
             .Single(resource => resource.Name == "charging-worker");

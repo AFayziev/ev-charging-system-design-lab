@@ -1,6 +1,7 @@
 using EvCharging.ChargingWorker.Configuration;
 using EvCharging.ChargingWorker.Handlers;
 using EvCharging.ChargingWorker.Persistence;
+using EvCharging.ChargingWorker.Providers.Synchronous;
 using EvCharging.Contracts.Events.Reservations;
 using EvCharging.Messaging;
 using EvCharging.Persistence.Extensions;
@@ -10,6 +11,7 @@ using Wolverine.RabbitMQ;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
+builder.AddSynchronousChargingProvider();
 builder.AddPlatformPersistence();
 int maximumConcurrentChecks = builder.Configuration.GetValue<int>("ReservationExpiry:MaximumConcurrentChecks");
 var retryDelays = builder.Configuration.GetSection("MessagingFailures:TransientDatabaseRetryDelays")
@@ -37,9 +39,6 @@ builder.AddMessaging(
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddHttpClient("gateway", client => client.BaseAddress = new("https+http://gateway/api/"));
-builder.Services.AddHttpClient(
-    "synchronous-charging-provider-api",
-    client => client.BaseAddress = new("https+http://synchronous-charging-provider-api/"));
 builder.Services.AddHttpClient(
     "queued-charging-provider-api",
     client => client.BaseAddress = new("https+http://queued-charging-provider-api/"));

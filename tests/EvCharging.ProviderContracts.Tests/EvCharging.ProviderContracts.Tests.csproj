@@ -9,5 +9,6 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <ProjectReference Include="../../simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj" />
+    <ProjectReference Include="../../src/EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
   </ItemGroup>
 </Project>

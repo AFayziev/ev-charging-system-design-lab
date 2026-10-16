@@ -4,6 +4,7 @@
     <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="Duende.AccessTokenManagement" Version="4.2.0" />
     <PackageVersion Include="Duende.AccessTokenManagement.OpenIdConnect" Version="4.2.0" />
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="5.0.1" />
     <PackageVersion Include="Respawn" Version="7.0.0" />

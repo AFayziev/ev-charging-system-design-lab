@@ -100,16 +100,24 @@ isolated startup in Git worktrees. Detached sessions are stopped with the
    ```
 
 2. Copy the simulator HTTP endpoints from its dashboard or `aspire describe`
-   into platform configuration:
+   into platform configuration. Supply the provider's OAuth token endpoint and
+   charging-client secret as well:
 
    ```sh
    dotnet user-secrets set "Parameters:synchronous-provider-url" "<synchronous HTTP endpoint>" --project src/EvCharging.AppHost
    dotnet user-secrets set "Parameters:queued-provider-url" "<queued HTTP endpoint>" --project src/EvCharging.AppHost
+   dotnet user-secrets set "Parameters:synchronous-provider-token-endpoint" "<provider OAuth token endpoint>" --project src/EvCharging.AppHost
+   dotnet user-secrets set "Parameters:synchronous-provider-client-secret" "<charging-client secret>" --project src/EvCharging.AppHost
    ```
 
    Refresh these values when the simulator endpoints change. Environment variables
    `Parameters__synchronous-provider-url` and `Parameters__queued-provider-url`
    can supply the same settings in automated runs.
+
+   The provider's discovery document identifies its token endpoint; the charging
+   client secret is `Parameters:charging-client-secret` in the provider AppHost's
+   user secrets. `tools/dev.ps1` discovers and passes these settings automatically,
+   without saving a second copy of the credential.
 
 3. Start the platform in another terminal:
 

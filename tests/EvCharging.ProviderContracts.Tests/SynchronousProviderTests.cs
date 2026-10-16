@@ -1,12 +1,86 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using EvCharging.ChargingWorker.Providers;
+using EvCharging.Persistence.Entities;
 using Xunit;
 
 namespace EvCharging.ProviderContracts.Tests;
 
 public sealed class SynchronousProviderTests(ProviderFixture fixture) : IClassFixture<ProviderFixture>
 {
+    [Fact]
+    public async Task Adapter_StartAndLookups_PreserveMappedEquipmentAndReferences()
+    {
+        var request = await ConfigureAsync();
+        var station = new ProviderStation
+        {
+            Id = Guid.CreateVersion7(),
+            ExternalId = request.StationId
+        };
+        var charger = new ProviderCharger
+        {
+            Id = Guid.CreateVersion7(),
+            ProviderStationId = station.Id,
+            ExternalId = request.ChargerId
+        };
+        var connector = new ProviderConnector
+        {
+            ProviderChargerId = charger.Id,
+            ExternalId = request.ConnectorId
+        };
+        var equipment = connector.ToProviderAddress(charger, station);
+        var adapter = fixture.CreateAdapter();
+        var reference = Guid.NewGuid();
+        var started = await adapter.StartAsync(reference, request.SessionReference, equipment, CancellationToken.None);
+        Assert.True(started.IsSuccess);
+        Assert.Equal(reference, started.Value.Reference);
+        Assert.Equal(ProviderCommandOutcome.Applied, started.Value.Outcome);
+        Assert.NotNull(started.Value.SessionId);
+        Assert.NotNull(started.Value.AppliedAt);
+        var replay = await adapter.StartAsync(reference, request.SessionReference, equipment, CancellationToken.None);
+        Assert.Equal(started.Value, replay.Value);
+        var command = await adapter.GetCommandAsync(started.Value.Id, CancellationToken.None);
+        var byReference = await adapter.GetCommandByReferenceAsync(reference, CancellationToken.None);
+        Assert.Equal(started.Value, command.Value);
+        Assert.Equal(started.Value, byReference.Value);
+        var session = await adapter.GetSessionAsync(started.Value.SessionId.Value, CancellationToken.None);
+        var sessionByReference = await adapter.GetSessionByReferenceAsync(
+            request.SessionReference,
+            CancellationToken.None);
+        Assert.Equal(session.Value, sessionByReference.Value);
+        Assert.NotNull(session.Value);
+        Assert.Equal(request.SessionReference, session.Value.Reference);
+        Assert.Equal(equipment, session.Value.Equipment);
+        Assert.Equal(22m, session.Value.PowerKw);
+        Assert.Equal(ProviderSessionState.Charging, session.Value.State);
+    }
+
+    [Fact]
+    public async Task Adapter_RejectionAndIdempotencyConflict_AreDifferentOutcomes()
+    {
+        var request = await ConfigureAsync(enabled: false);
+        var adapter = fixture.CreateAdapter();
+        var equipment = new ProviderEquipmentAddress(request.StationId, request.ChargerId, request.ConnectorId);
+        var reference = Guid.NewGuid();
+        var rejected = await adapter.StartAsync(reference, request.SessionReference, equipment, CancellationToken.None);
+        var error = Assert.IsType<ProviderRejectedError>(Assert.Single(rejected.Errors));
+        Assert.Equal(reference, error.Reference);
+        Assert.Equal("connector_unavailable", error.Code);
+        var stored = await adapter.GetCommandByReferenceAsync(reference, CancellationToken.None);
+        Assert.NotNull(stored.Value);
+        Assert.Equal(error.CommandId, stored.Value.Id);
+        Assert.Equal(ProviderCommandOutcome.Rejected, stored.Value.Outcome);
+        var conflict = await adapter.StartAsync(reference, Guid.NewGuid(), equipment, CancellationToken.None);
+        var conflictError = Assert.IsType<ProviderResponseError>(Assert.Single(conflict.Errors));
+        Assert.Equal(HttpStatusCode.Conflict, conflictError.StatusCode);
+        var missing = await adapter.GetSessionByReferenceAsync(request.SessionReference, CancellationToken.None);
+        Assert.True(missing.IsSuccess);
+        Assert.Null(missing.Value);
+    }
+
+
+
     [Fact]
     public async Task Start_ReplayAndLookups_ReturnSameCommandAndSession()
     {
