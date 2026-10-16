@@ -50,7 +50,7 @@ function Get-RunningAppHost {
     return $matchingHosts | Select-Object -First 1
 }
 
-function Get-ResourceUrl {
+function Get-ResourceOrigin {
     param([string]$AppHost, [string]$Resource)
 
     $description = Invoke-Aspire -AppHost $AppHost -Arguments @(
@@ -62,7 +62,7 @@ function Get-ResourceUrl {
     if ($urls.Count -ne 1) {
         throw "Expected one public HTTP endpoint for '$Resource'; found $($urls.Count)."
     }
-    return $urls[0]['url'].TrimEnd('/')
+    return ([uri]$urls[0]['url']).GetLeftPart([UriPartial]::Authority)
 }
 
 function Start-AppHost {
@@ -114,13 +114,13 @@ try {
         Invoke-Aspire -AppHost $providers -Arguments @(
             'wait', $resource, '--apphost', $providers, '--timeout', '120'
         ) | Out-Host
-        $providerEndpoints[$kind] = Get-ResourceUrl $providers $resource
+        $providerEndpoints[$kind] = Get-ResourceOrigin $providers $resource
     }
 
     $platformHost = Get-RunningAppHost $platform
     if ($platformHost) {
         foreach ($kind in $providerEndpoints.Keys) {
-            $configured = Get-ResourceUrl $platform "$kind-charging-provider-api"
+            $configured = Get-ResourceOrigin $platform "$kind-charging-provider-api"
             if ($configured -ne $providerEndpoints[$kind]) {
                 throw 'The running platform uses different provider URLs. Stop its AppHost and rerun tools/dev.ps1.'
             }

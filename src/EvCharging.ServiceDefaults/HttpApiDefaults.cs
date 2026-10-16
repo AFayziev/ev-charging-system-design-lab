@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi;
+using Scalar.AspNetCore;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -47,11 +48,12 @@ public static class HttpApiDefaultsExtensions
         app.MapDefaultEndpoints();
         if (app.Environment.IsDevelopment())
         {
-            app.MapOpenApi();
+            app.MapOpenApi().AllowAnonymous();
+            app.MapScalarApiReference(options => options.DisableAgent().AddServer("/")).AllowAnonymous();
             app.MapGet(
                 "/diagnostics/instance",
                 () => TypedResults.Ok(new InstanceResponse(
-                    host, $"{Environment.MachineName}:{Environment.ProcessId}", Stub: true)));
+                    host, $"{Environment.MachineName}:{Environment.ProcessId}")));
         }
 
         return app;

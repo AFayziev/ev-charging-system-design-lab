@@ -55,7 +55,7 @@ internal static class ResourceExtensions
             .WithDataVolume()
             .AddDatabase("identity-database", "keycloak");
         var databaseEndpoint = database.Resource.Parent.GetEndpoint("tcp");
-        var identity = builder.AddDockerfile("keycloak", "../../infra/keycloak")
+        var identity = builder.AddDockerfile("keycloak", "../../infra/keycloak/platform")
             .WithBuildArg("KEYCLOAK_IMAGE", "quay.io/keycloak/keycloak:26.8.0")
             .WithArgs("start-dev", "--import-realm")
             .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")

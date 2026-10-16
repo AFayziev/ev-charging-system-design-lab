@@ -41,6 +41,10 @@ retain their prescribed names and signatures.
   reads and command handlers for writes. Namespaces follow the directory layout.
   Shared infrastructure stays outside `Features`. Keep HTTP binding and response
   handling at the endpoint boundary.
+- Name query handlers `<UseCase>QueryHandler` and command handlers
+  `<UseCase>CommandHandler`, with a single `Handle` or `HandleAsync` entry point.
+  Each handler owns one query or command; split unrelated reads and writes into
+  separate handlers.
 - Organize workers by responsibility: message handlers under `Handlers`, with
   related handlers grouped by area as their number grows. Keep hosted services
   and provider adapters in their own responsibility-based directories. Add
@@ -234,6 +238,8 @@ retain their prescribed names and signatures.
 - Application checks cannot establish cross-request exclusivity. Use appropriate
   database constraints or concurrency control and translate only recognized
   conflicts to expected results. See [EF concurrency handling](https://learn.microsoft.com/en-us/ef/core/saving/concurrency).
+  For expected contention, prefer atomic conditional writes or claims and inspect
+  affected-row counts, rather than using constraint exceptions as the normal flow.
 - Check the installed EF/provider capabilities before choosing a value-object
   mapping. Prefer supported mappings that preserve required indexes and constraints;
   mapped private-set scalars with a derived domain value are acceptable when

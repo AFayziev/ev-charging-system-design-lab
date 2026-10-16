@@ -1,5 +1,6 @@
 using EvCharging.AppHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -67,6 +68,20 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchP
     .WithHttpHealthCheck("/health")
     .WithReference(api)
     .WaitFor(api);
+
+if (builder.Environment.IsDevelopment())
+{
+    foreach (var httpApi in new[] { api, gateway })
+    {
+        httpApi.WithUrlForEndpoint(
+            "http",
+            url =>
+            {
+                url.Url = "/scalar";
+                url.DisplayText = "Scalar";
+            });
+    }
+}
 
 gateway.WithReference(databaseAccess.Authentication)
     .WaitForCompletion(authenticationMigrations)

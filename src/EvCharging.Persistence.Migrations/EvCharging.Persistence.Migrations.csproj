@@ -8,7 +8,7 @@
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="../../infra/keycloak/evcharging-realm.json" Link="SeedData/evcharging-realm.json"
+    <None Include="../../infra/keycloak/platform/evcharging-realm.json" Link="SeedData/evcharging-realm.json"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

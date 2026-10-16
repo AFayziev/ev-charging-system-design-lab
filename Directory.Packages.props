@@ -13,6 +13,7 @@
     <PackageVersion Include="Aspire.Hosting.Elasticsearch" Version="13.3.0" />
     <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.6.0" />
     <PackageVersion Include="Aspire.Hosting.Kafka" Version="13.6.0" />
+    <PackageVersion Include="Aspire.Hosting.Keycloak" Version="13.6.0-preview.1.26479.8" />
     <PackageVersion Include="Aspire.Hosting.MongoDB" Version="13.6.0" />
     <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.0" />
     <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="13.6.0" />
@@ -49,6 +50,7 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
     <PackageVersion Include="PDFsharp" Version="6.2.4" />
     <PackageVersion Include="Polly" Version="8.8.0" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.18.0" />
     <PackageVersion Include="Sentry.AspNetCore" Version="6.12.0" />
     <PackageVersion Include="SkiaSharp" Version="3.119.4" />
     <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />

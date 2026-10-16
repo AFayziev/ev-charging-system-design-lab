@@ -24,7 +24,7 @@ internal static class DatabaseResourceExtensions
             "notification-messaging", "notification_messaging", notificationMessagingPassword);
 
         var endpoint = database.Resource.Parent.GetEndpoint("tcp");
-        var provisioning = builder.AddDockerfile("database-provisioning", "../../infra/postgres")
+        var provisioning = builder.AddDockerfile("database-provisioning", "../../infra/postgres/platform")
             .WithBuildArg("POSTGRES_IMAGE", $"docker.io/library/postgres:{ResourceExtensions.PostgresImageTag}")
             .WithEnvironment("PGHOST", endpoint.Property(EndpointProperty.Host))
             .WithEnvironment("PGPORT", endpoint.Property(EndpointProperty.Port))

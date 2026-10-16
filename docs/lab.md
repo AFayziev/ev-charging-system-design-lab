@@ -495,19 +495,24 @@ with these choices:
 
 | Area | Choice |
 |---|---|
-| Persistence | Dedicated PostgreSQL database and credentials on the lab server; provider-owned EF model and migrations, independent of platform persistence |
-| Authentication | Keycloak client-credentials service account for the charging worker, with a separate provider audience |
+| Persistence | Provider-owned PostgreSQL server, database and credentials; EF model and migrations independent of platform persistence |
+| Authentication | Provider-owned Keycloak realm and storage; client-credentials accounts for the charging worker and simulation controls, with a separate provider audience and control permissions |
 | Transport | HTTP/JSON start and command/session lookup endpoints; typed `HttpClient` through `IHttpClientFactory`, with bounded timeouts |
 | Idempotency | Platform operation public ID as the stable provider key across attempts; retain and compare the original effect payload |
 | Atomicity | Command result, simulated session and connector claim commit in one provider transaction |
 | Fault controls | Authenticated, deterministic, command-scoped scenarios recorded by the provider; apply-then-lose-response faults interrupt the response after commit |
 
+Endpoint tables separate the [public provider API](integrations.md#public-provider-api)
+from the [internal simulation API](integrations.md#internal-simulation-api).
+
 Testing treats the provider as a black box:
 
-- Call only documented HTTP command, query and fault-control endpoints. No direct
-  database access, internal handler calls, or assertions about storage records.
+- Assert only the documented command/query contract consumed by the platform.
+  Simulator controls arrange equipment and faults; their implementation,
+  validation, permissions and persistence are outside the contract-test scope.
+  No direct database access, internal handler calls or storage assertions.
 - Verify deduplication, payload conflicts, competing starts, rejection, lost-response
-  resolution, and retained outcomes through API queries after simulator restart.
+  resolution and outcome lookups through that public contract.
 - Adapter checks use the same contract; a small set of platform E2E journeys
   verifies the complete boundary without repeating every provider scenario.
 

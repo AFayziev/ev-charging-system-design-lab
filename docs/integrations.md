@@ -10,7 +10,7 @@ are defined in [architecture](architecture.md).
 
 | Capability | Synchronous provider | Queued provider |
 |---|---|---|
-| Response | Synchronous authoritative applied/rejected result | Queued acknowledgement; applied/rejected result obtained asynchronously |
+| Response | Authoritative success or rejection with Problem Details | Queued acknowledgement; applied/rejected result obtained asynchronously |
 | Provider command idempotency | Same key and payload return existing command/result without another effect | No effect deduplication; repeated submissions can create additional effects |
 | Queries | Command outcome and matching provider session | Command outcome and matching provider session |
 | Measurement units | kW and cumulative session kWh | W and cumulative session Wh |
@@ -25,6 +25,47 @@ requests. A rejection establishes that the request cannot execute later.
 Adapters map identities, acknowledgement stages, state, timestamps, and units.
 Unknown fields/statuses remain inspectable rather than becoming success.
 Provider state and identity survive simulator restart.
+
+### 1.1 Synchronous provider HTTP API
+
+Calls use bearer tokens for the provider audience. Charging clients can submit
+commands and read outcomes; simulation controls require the separate control role.
+Equipment addresses are provider-owned strings. Command and session identifiers
+are opaque UUIDs; correlation references are the platform's public operation and
+session identifiers.
+Request and response schemas are defined by the provider's generated OpenAPI document.
+
+#### Public provider API
+
+| Method and path | Purpose |
+|---|---|
+| `POST /commands/start` | Submit a charging start command |
+| `GET /commands/{id}` | Look up a provider command by its returned identifier |
+| `GET /commands/by-reference/{reference}` | Resolve a command when its response or provider identifier was lost |
+| `GET /sessions/{id}` | Read the matching provider session |
+| `GET /sessions/by-reference/{reference}` | Resolve a session by its platform reference |
+| `GET /stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Read equipment availability and rated power |
+
+A successful start establishes that charging was applied. Rejected starts return
+Problem Details; command lookups expose the recorded outcome, including rejections.
+
+| Condition | HTTP status | Error or outcome |
+|---|---|---|
+| Unknown, disabled or occupied equipment | 409 | Definitive rejection: `connector_unavailable` |
+| Session reference already used by another start | 409 | Definitive rejection: `session_reference_conflict` |
+| Idempotency key reused with a different payload | 409 | `idempotency_conflict`; original command unchanged |
+
+- Applied and rejected results are retained. Identical replays return the original
+  success or rejection even after equipment availability changes.
+- Recognized rejection codes establish that the command cannot execute later.
+  Transport failures and unrecognized errors require outcome lookup.
+- A missing lookup does not establish that an in-flight request cannot commit later.
+
+#### Internal simulation API
+
+| Method and path | Purpose |
+|---|---|
+| `PUT /simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Configure simulated equipment while preserving existing occupancy |
 
 ## 2. Command safety
 

@@ -27,12 +27,14 @@
     <Project Path="simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj" />
     <Project Path="simulators/EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
     <Project Path="simulators/EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
+    <Project Path="simulators/EvCharging.SynchronousChargingProviderApi.Migrations/EvCharging.SynchronousChargingProviderApi.Migrations.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EvCharging.Api.Tests/EvCharging.Api.Tests.csproj" />
     <Project Path="tests/EvCharging.Domain.Tests/EvCharging.Domain.Tests.csproj" />
     <Project Path="tests/EvCharging.Gateway.Tests/EvCharging.Gateway.Tests.csproj" />
     <Project Path="tests/EvCharging.Persistence.Tests/EvCharging.Persistence.Tests.csproj" />
+    <Project Path="tests/EvCharging.ProviderContracts.Tests/EvCharging.ProviderContracts.Tests.csproj" />
     <Project Path="tests/EvCharging.NotificationWorker.Tests/EvCharging.NotificationWorker.Tests.csproj" />
     <Project Path="tests/EvCharging.Testing/EvCharging.Testing.csproj" />
     <Project Path="tests/EvCharging.E2E.Tests/EvCharging.E2E.Tests.csproj" />

@@ -87,6 +87,8 @@ isolated startup in Git worktrees. Detached sessions are stopped with the
 - Development replica diagnostics: `/api/diagnostics/instance` identifies the API
   instance; the `X-Gateway-Instance` response header identifies the gateway instance.
 - HTTP backend hosts expose `/health` and `/alive` at their own service endpoints.
+- In Development, each HTTP host exposes Scalar at `/scalar` and its OpenAPI
+  document at `/openapi/v1.json`. API links in Aspire open Scalar directly.
 - [Routing and execution profiles](docs/lab.md#12-application-wiring).
 
 ### Independent AppHost startup
@@ -120,6 +122,11 @@ isolated startup in Git worktrees. Detached sessions are stopped with the
 
 - Each AppHost manages its own resources and dashboard. Platform startup does not
   start the provider simulators.
+- The provider AppHost owns the synchronous simulator's PostgreSQL database and
+  Keycloak instance. Its client credentials are generated into that AppHost's
+  user secrets. The imported [provider realm](infra/keycloak/providers/providers-realm.json)
+  separates charging access from simulation controls. Realm imports apply on first
+  creation; editing the import file does not update an existing realm.
 
 ### Management tools
 
@@ -153,7 +160,7 @@ verification and sign-in creates the required driver profile. Later sign-ins reu
 
 An existing Keycloak realm is retained across restarts. Apply registration and SMTP
 changes through its Admin Console; the source configuration is
-[the realm definition](infra/keycloak/evcharging-realm.json), and SMTP connection
+[the realm definition](infra/keycloak/platform/evcharging-realm.json), and SMTP connection
 values come from the Keycloak resource environment. Restart does not reimport
 an existing realm. Account-email changes are a separate delivery task.
 
@@ -240,6 +247,15 @@ dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.
 - Apply formatting fixes: `npm --prefix src/EvCharging.Web run format`.
 
 ## Tests
+
+### Provider contract tests
+
+The provider suite starts only the simulator AppHost and checks its documented
+HTTP API using isolated storage. It requires a running Docker Linux engine.
+
+```sh
+dotnet test tests/EvCharging.ProviderContracts.Tests
+```
 
 ### Gateway session tests
 

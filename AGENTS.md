@@ -49,6 +49,7 @@ implementation progress is recorded in the plan.
 | `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, diagnostic bundles, and upload/orphan cleanup |
 | `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
 | `EvCharging.SynchronousChargingProviderApi` | Resource | Simulator with authoritative synchronous results and command deduplication |
+| `EvCharging.SynchronousChargingProviderApi.Migrations` | Resource | Provider-owned EF migrations and one-shot database initialization |
 | `EvCharging.QueuedChargingProviderApi` | Resource | Simulator with queued acknowledgement and no effect deduplication |
 | `EvCharging.Contracts` | Library | Shared API and messaging contracts and canonical role types |
 | `EvCharging.Domain` | Library | Business entities, value objects, measurements, and pure business policies |
@@ -61,7 +62,7 @@ Projects dedicated to handling incoming HTTP/gRPC requests use the `Api` suffix.
 Queue, stream, and scheduled-job processors use `Worker`. The proxy/BFF host uses
 `Gateway`.
 
-`infra` owns infrastructure configuration; `tests` owns verification; `tools` owns
+`infra/<component>/<system>` owns infrastructure configuration; `tests` owns verification; `tools` owns
 repeatable lab commands. NuGet package pins belong in `Directory.Packages.props`;
 container image pins belong alongside their AppHost resource definitions. Do not
 duplicate them in documentation or a separate toolchain document.

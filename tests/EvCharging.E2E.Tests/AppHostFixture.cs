@@ -57,6 +57,7 @@ public sealed class AppHostFixture : IAsyncLifetime
     {
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_Providers_AppHost>(
             ["--environment=Development"], cancellationToken);
+        UseEphemeralVolumes(builder);
         _providers = await builder.BuildAsync(cancellationToken);
         await _providers.StartAsync(cancellationToken);
         await _providers.ResourceNotifications.WaitForResourceHealthyAsync(
@@ -100,6 +101,16 @@ public sealed class AppHostFixture : IAsyncLifetime
             .WithEnvironment(
                 "ReservationPolicy__ArrivalAllowance",
                 BookingLimits.ArrivalAllowance.ToString("c", CultureInfo.InvariantCulture));
+        UseEphemeralVolumes(builder);
+
+        _app = await builder.BuildAsync(cancellationToken);
+        await App.StartAsync(cancellationToken);
+        await App.ResourceNotifications.WaitForResourceHealthyAsync("gateway", cancellationToken);
+        await App.ResourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+    }
+
+    private static void UseEphemeralVolumes(IDistributedApplicationBuilder builder)
+    {
         foreach (var resource in builder.Resources.OfType<ContainerResource>())
         {
             var volumeMounts = resource.Annotations.OfType<ContainerMountAnnotation>()
@@ -113,11 +124,6 @@ public sealed class AppHostFixture : IAsyncLifetime
                     null, mount.Target, ContainerMountType.Volume, mount.IsReadOnly));
             }
         }
-
-        _app = await builder.BuildAsync(cancellationToken);
-        await App.StartAsync(cancellationToken);
-        await App.ResourceNotifications.WaitForResourceHealthyAsync("gateway", cancellationToken);
-        await App.ResourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
     }
 
     public async Task DisposeAsync()

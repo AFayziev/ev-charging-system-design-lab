@@ -8,7 +8,10 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="Aspire.Hosting.Keycloak" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
     <ProjectReference Include="../EvCharging.SynchronousChargingProviderApi/EvCharging.SynchronousChargingProviderApi.csproj" />
+    <ProjectReference Include="../EvCharging.SynchronousChargingProviderApi.Migrations/EvCharging.SynchronousChargingProviderApi.Migrations.csproj" />
     <ProjectReference Include="../EvCharging.QueuedChargingProviderApi/EvCharging.QueuedChargingProviderApi.csproj" />
   </ItemGroup>
 </Project>
