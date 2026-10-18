@@ -1,7 +1,6 @@
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence.Auditing;
-using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

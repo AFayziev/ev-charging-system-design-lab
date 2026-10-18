@@ -1,4 +1,4 @@
-using EvCharging.Persistence.Entities;
+using EvCharging.Domain.Equipment;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -13,8 +13,8 @@ internal sealed class ProviderChargerConfiguration : IEntityTypeConfiguration<Pr
             .HasForeignKey(mapping => mapping.ProviderStationId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasOne(mapping => mapping.Charger)
-            .WithMany()
-            .HasForeignKey(mapping => mapping.ChargerId)
+            .WithOne(charger => charger.ProviderCharger)
+            .HasForeignKey<ProviderCharger>(mapping => mapping.ChargerId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasIndex(mapping => mapping.ChargerId).IsUnique();
         entity.HasIndex(mapping => new { mapping.ProviderStationId, mapping.ExternalId }).IsUnique();

@@ -26,6 +26,7 @@ const station = {
     {
       id: "charger",
       name: "Charger",
+      providerName: "WattHarbor",
       connectors: [
         {
           id: "connector",

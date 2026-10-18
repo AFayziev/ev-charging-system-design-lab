@@ -32,6 +32,7 @@ export interface StationDetail {
   readonly chargers: readonly {
     readonly id: string;
     readonly name: string;
+    readonly providerName: string | null;
     readonly connectors: readonly (ConnectorCapability & {
       readonly id: string;
       readonly number: number;

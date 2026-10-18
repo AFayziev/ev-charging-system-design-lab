@@ -37,10 +37,8 @@ builder.Services.AddOptions<LabDataOptions>()
             && issuer.Scheme is "http" or "https",
         "An absolute HTTP(S) LabData:IdentityIssuer is required when seeding is enabled.")
     .Validate(
-        options => !options.Enabled
-            || !string.IsNullOrWhiteSpace(options.WattHarborIntegrationKey)
-                && !string.IsNullOrWhiteSpace(options.AmpTrailIntegrationKey),
-        "Explicit provider integration keys are required when seeding is enabled.")
+        options => !options.Enabled || !string.IsNullOrWhiteSpace(options.WattHarborIntegrationKey),
+        "An explicit WattHarbor integration key is required when seeding is enabled.")
     .ValidateOnStart();
 
 builder.Services.AddDbContext<PlatformDbContext>(
@@ -56,8 +54,6 @@ builder.Services.AddDbContext<PlatformDbContext>(
                     (PlatformDbContext)context,
                     labData.IdentityIssuer!,
                     labData.WattHarborIntegrationKey!,
-                    labData
-                        .AmpTrailIntegrationKey!,
                     cancellationToken));
         }
     });

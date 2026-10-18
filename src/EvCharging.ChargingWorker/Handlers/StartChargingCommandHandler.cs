@@ -9,7 +9,9 @@ using EvCharging.Persistence.Extensions;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Wolverine;
 using Wolverine.Attributes;
+using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
@@ -18,6 +20,7 @@ public sealed class StartChargingCommandHandler(
     ChargingProviderClientFactory providers,
     TimeProvider clock,
     IOptions<ChargingExecutionOptions> options,
+    IDbContextOutbox outbox,
     ILogger<StartChargingCommandHandler> logger)
 {
     private const string TransportFailureCode = "provider_transport_failure";
@@ -138,8 +141,29 @@ public sealed class StartChargingCommandHandler(
             SessionPublicId = session.PublicId
         };
         database.Attempts.Add(attempt);
-        await database.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        var policy = options.Value;
+        // One extra interval lets the final scheduled check run before the window closes.
+        var endsAt = authorizedAt + policy.AutomaticCheckInterval * (policy.MaximumAutomaticChecks + 1);
+        var scheduling = operation.ScheduleAutomaticChecks(endsAt);
+        if (scheduling.IsFailed)
+        {
+            logger.LogWarning(
+                "Automatic checks cannot be scheduled for start {OperationId}: {Errors}",
+                operation.PublicId,
+                string.Join(", ", scheduling.Errors));
+            return null;
+        }
+
+        outbox.Enroll(database);
+        for (int number = 1; number <= policy.MaximumAutomaticChecks; number++)
+        {
+            await outbox.ScheduleAsync(
+                new CheckChargingStart(operation.Id, Automatic: true),
+                authorizedAt + policy.AutomaticCheckInterval * number,
+                new DeliveryOptions { DeliverBy = endsAt });
+        }
+
+        await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
         logger.LogInformation("Authorized attempt {AttemptId} for start {OperationId}", attempt.Id, operation.PublicId);
         return attempt;
     }

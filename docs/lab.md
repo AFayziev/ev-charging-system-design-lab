@@ -500,7 +500,7 @@ with these choices:
 | Transport | HTTP/JSON start and command/session lookup endpoints; typed `HttpClient` through `IHttpClientFactory`, with bounded timeouts |
 | Idempotency | Platform operation public ID as the stable provider key across attempts; retain and compare the original effect payload |
 | Atomicity | Command result, simulated session and connector claim commit in one provider transaction |
-| Fault controls | Authenticated, deterministic, command-scoped scenarios recorded by the provider; apply-then-lose-response faults interrupt the response after commit |
+| Fault controls | Authenticated, deterministic faults scoped to a command; apply-then-lose-response faults interrupt the response after commit, without requiring persisted fault history |
 
 Endpoint tables separate the [public provider API](integrations.md#public-provider-api)
 from the [internal simulation API](integrations.md#internal-simulation-api).
@@ -556,13 +556,12 @@ recipient restrictions depend on the provider selected for the external exercise
 
 | Fixture | Exercise |
 |---|---|
-| North Station, WattHarbor | Assigned operator access and authoritative command outcomes |
-| South Station, AmpTrail | Unassigned operator denial and uncertain command outcomes |
+| Assigned and unassigned stations | Operator access and authorization boundaries |
 | Fictional catalogue with varied equipment counts | Public browsing and concurrent sessions without sharing one charging outlet |
-| Driver and operator from the Keycloak realm fixtures | Identity-linked ownership and station assignments |
+| Synthetic driver and operator identities | Identity-linked ownership and station assignments |
 
-Seeding is additive and retains existing station details. Reset restores charging
-fixtures and removes charging workflow/file metadata while preserving browser sessions,
+Seeding creates the synthetic catalogue and identity-linked fixtures. Reset restores
+charging fixtures and removes charging workflow/file metadata while preserving browser sessions,
 encryption keys, and identity-provider data. Reset is limited to relational
 charging data; other stores are unaffected. Entity identifiers change when reset
 recreates records. The reset operation is excluded from deployment.
@@ -580,11 +579,12 @@ These are overridable experiment settings, not production availability targets.
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
 | Safe effect-attempt budget | 3 total attempts | Initial attempt plus retries after 1 and 2 seconds; subject to provider safety and start eligibility |
-| Automatic reconciliation | Every 5 seconds, at most 6 checks per pass | Unresolved work then requires operator investigation |
+| Automatic reconciliation | Every 5 seconds, 6 scheduled checks per run | Captured checking window closes one interval after the final scheduled check; manual or operator checks remain available |
 
-All effect layers share the operation budget; reconciliation queries use a separate
-budget. An operator-triggered reconciliation starts an audited new query pass.
-Scenario records define any callback/query retry settings beyond this baseline.
+Wolverine scheduled work and retry policies bound automatic reconciliation under
+the [resilience boundaries](architecture.md#12-resilience-boundaries).
+Operator reconciliation requests are audited. Scenario records define request
+retry and admission limits.
 
 Pool limits, worker concurrency, instance counts, stream/document/file retention,
 and load are set per scenario. Deliberately small budgets expose saturation without a large
@@ -622,6 +622,11 @@ without cancelling accepted allocations.
 
 Verification uses correlated telemetry from the
 [configured diagnostics path](#12-application-wiring).
+
+Charging-provider scenarios use operation/session identifiers, execution records,
+and correlated logs and traces for troubleshooting. A history of every provider
+request and response is outside scope. Provider behavior is verified through its
+public API and the resulting platform state.
 
 | Boundary | Evidence |
 |---|---|

@@ -8,4 +8,7 @@ public sealed class ChargingExecutionOptions
     public int MaximumEffectAttempts { get; set; }
     [Range(1, 32)]
     public int MaximumConcurrentStarts { get; set; }
+    [Range(1, 12)]
+    public int MaximumAutomaticChecks { get; set; }
+    public TimeSpan AutomaticCheckInterval { get; set; }
 }

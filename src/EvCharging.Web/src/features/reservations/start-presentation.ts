@@ -12,6 +12,26 @@ export function getStartPresentation(
   canRetry: boolean,
   arrivalDeadline: string,
 ) {
+  const automatic = operation?.automaticChecksEndAt;
+  const ended = automatic && Date.now() >= Date.parse(automatic);
+  if (
+    automatic &&
+    (operation.outcome === "pending" || operation.outcome === "uncertain")
+  ) {
+    return {
+      color: ended ? "orange" : "blue",
+      badge:
+        operation.outcome === "pending" ? "Start pending" : "Start unresolved",
+      title: ended
+        ? "Automatic checking ended"
+        : "Automatic status checks scheduled",
+      text: ended
+        ? "Automatic checks have ended without a definite result. You can check status again. Charging may still have started; do not submit another start."
+        : "We will check for the station's result during a limited period. You can also check status yourself. Charging may still have started; do not submit another start.",
+      icon: ended ? IconHelpCircle : IconClock,
+    };
+  }
+
   switch (operation?.outcome) {
     case "confirmed":
       return {

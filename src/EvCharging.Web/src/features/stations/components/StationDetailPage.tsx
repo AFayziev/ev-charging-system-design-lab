@@ -147,6 +147,14 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
                       </ThemeIcon>
                       <Title order={3} size="h4">
                         {charger.name}
+                        {charger.providerName && (
+                          <Text component="span" size="sm" fw={400} c="dimmed">
+                            <span className={classes.providerSeparator}>
+                              {" · "}
+                            </span>
+                            {charger.providerName}
+                          </Text>
+                        )}
                       </Title>
                     </div>
                     {charger.connectors.length === 0 && (

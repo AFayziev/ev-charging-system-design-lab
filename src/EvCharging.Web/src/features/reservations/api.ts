@@ -32,6 +32,7 @@ export interface StartOperation {
   readonly acceptedAt: string;
   readonly startedAt: string | null;
   readonly failureReason: "chargingServiceUnavailable" | null;
+  readonly automaticChecksEndAt: string | null;
 }
 
 export interface ChargingStartCheck {

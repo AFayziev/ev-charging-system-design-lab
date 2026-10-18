@@ -64,6 +64,7 @@ it("keeps connector selection synchronized with the URL and booking form", async
       {
         id: "charger",
         name: "Charger 1",
+        providerName: "WattHarbor",
         connectors: [1, 2].map((number) => ({
           id: `connector-${number}`,
           number,

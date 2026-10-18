@@ -1,6 +1,4 @@
-using EvCharging.Domain.Equipment;
-
-namespace EvCharging.Persistence.Entities;
+namespace EvCharging.Domain.Equipment;
 
 public sealed class ProviderCharger
 {

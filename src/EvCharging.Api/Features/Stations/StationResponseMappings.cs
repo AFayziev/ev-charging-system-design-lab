@@ -41,6 +41,7 @@ internal static class StationResponseMappings
     public static ChargerResponse ToResponse(this Charger charger) => new(
         charger.PublicId,
         charger.Name,
+        charger.ProviderCharger?.ProviderStation?.ChargingProvider?.Name,
         charger.Connectors
             .OrderBy(connector => connector.Number)
             .Select(connector => connector.ToResponse())

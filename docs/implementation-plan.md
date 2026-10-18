@@ -365,31 +365,23 @@ Notification failure leaves accepted reservations intact and remains separately 
     Make the owner's status action perform a bounded provider lookup without
     resending the start; retain unresolved claims after missing results or failures.
     Depends on M06.01.2.
-  - [ ] M06.01.4 Uncertain start resolution: add safe bounded HTTP retries, outcome
-    queries, and scheduled reconciliation using persisted budgets. Follow
-    [command safety](integrations.md#2-command-safety) and
-    [start deadlines](domain.md#51-start-and-expiry). Depends on M06.01.3.
-    Acceptance includes:
-    - Resolve through provider command/session lookups using the existing external
-      operation/session IDs; apply matching authoritative evidence atomically.
-      A missing lookup retains uncertainty rather than establishing rejection.
-    - Retry WattHarbor effects with the existing operation, idempotency key, and
-      persisted payload. Enforce persisted effect limits across HTTP retries,
-      worker retries, and redelivery; use a separate bounded query budget.
-      Verify every effect retry rechecks eligibility and the arrival deadline.
-    - Extend manual status checks with durable, scheduled reconciliation. Coalesce
-      duplicate work and bound query admission; manual checks neither reset
-      recovery budgets nor create another start operation. Preserve the block on
-      new starts while the outcome remains unresolved.
-    - Display pending, uncertain, checking, and exhausted automatic work accurately.
-      Claim active checking only when reconciliation is scheduled or running.
-      Keep exhaustion separate from command outcome and retain unresolved claims.
-      The operator assistance workflow is delivered by M06.04.
-    - Verify lost responses, eventual matching confirmation/rejection, missing
-      lookups, query outages, budget exhaustion, and duplicate manual checks.
-      A 401/403 on a later request must not reject an operation whose earlier
-      attempt remains ambiguous. Exercise provider faults through the platform's
-      public integration, without tests of provider simulation internals.
+  - [ ] M06.01.4 Uncertain start resolution, following
+    [command safety](integrations.md#2-command-safety),
+    [start deadlines](domain.md#51-start-and-expiry), and the
+    [execution records](architecture.md#92-startstop-execution).
+    Depends on M06.01.3. Sub-items are sequenced as follows:
+    - [x] M06.01.4.1 Automatic outcome checks: reuse existing lookups and atomic
+      resolution with bounded Wolverine scheduling. Manual checks remain available
+      without restarting automatic work. Rate limiting is outside this slice.
+      Show when checks are running and when automatic checking has ended.
+      Verify lost-response resolution, missing results, outages, and repeated
+      checks through the public integration; retain uncertainty and claims after
+      missing results or later 401/403 responses. No query counters or lookup history.
+    - [ ] M06.01.4.2 Safe WattHarbor effect retries: reuse the operation, key, and
+      saved payload with one retry owner and the existing persisted effect limit.
+      Recheck eligibility before each attempt. Verify deadline enforcement,
+      bounded attempts across redelivery, and no regression of resolved outcomes.
+      Depends on M06.01.4.1.
   - [ ] M06.01.5 No-show expiry: switch automatic expiry to accepted arrival
     deadlines, resolve unexecuted queued starts, and update booking explanations.
     Verify pre-attempt expiry and retained claims for
@@ -406,11 +398,11 @@ Notification failure leaves accepted reservations intact and remains separately 
   Depends on M06.01 and M06.02.
 - [ ] M06.04 Deliver assigned-operator session/attempt investigation and audited
   reconciliation requests, including exhausted recovery and unresolved outcomes.
-  Expose attempts, retained provider evidence, checking state, and exhausted
-  automatic work. Make the unresolved operation's public reference available in
-  the driver view and support lookup by that reference for assigned-operator
-  investigation. Operator reconciliation requests use the durable worker
-  path with bounded admission, rather than directly resending effects or releasing
+  Expose execution attempts, provider identifiers, outcomes, failure summaries,
+  checking state, and exhausted automatic work. Make the unresolved operation's
+  public reference available in the driver view and support lookup by that
+  reference for assigned-operator investigation. Operator reconciliation requests
+  use the durable worker path with bounded admission, rather than directly resending effects or releasing
   claims without evidence. Verify assignment denial, audited requests, repeated
   requests, provider unavailability, and retained uncertainty when evidence is absent.
   Depends on M04.02 and M06.01–M06.03.
@@ -419,8 +411,8 @@ Notification failure leaves accepted reservations intact and remains separately 
   isolation. Verify no SQL transaction spans an external call and uncertain
   commits resolve by operation identity. Depends on M06.01–M06.03.
 - [ ] M06.06 Verify cancellation/start races, queued-start expiry, retained
-  uncertain claims after expiry, session exclusivity, and shared retry budgets
-  across transport and job layers. Depends on M05.03 and M06.01–M06.03.
+  uncertain claims after expiry, session exclusivity, and effect limits across
+  worker retries and redelivery. Depends on M05.03 and M06.01–M06.03.
 
 Acceptance: driver start/stop and operator investigation work through the gateway,
 durable workers, and both providers. Uncertain effects remain visible and
@@ -641,6 +633,7 @@ closes coverage gaps and repeats the integrated demonstrations.
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
 | Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
+| API rate limiting | Deferred separately from M06.01.4.1; enforce limits at the gateway or through instance middleware backed by a central store (for example, Redis), consistently across replicas | Pending design and implementation |
 | External email provider and test recipients | Provider selection, sender onboarding, scoped credentials, and real-delivery setup | M05.07 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.02 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

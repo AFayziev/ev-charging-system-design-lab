@@ -121,8 +121,7 @@ const string IdentityMetadataAddress = "http://keycloak/realms/evcharging/.well-
 
 platformMigrations.WithEnvironment("LabData__Enabled", "true")
     .WithEnvironment("LabData__IdentityIssuer", identityAuthority)
-    .WithEnvironment("LabData__WattHarborIntegrationKey", chargingProviders.WattHarborIntegrationKey)
-    .WithEnvironment("LabData__AmpTrailIntegrationKey", chargingProviders.AmpTrailIntegrationKey);
+    .WithEnvironment("LabData__WattHarborIntegrationKey", chargingProviders.WattHarborIntegrationKey);
 
 if (builder.ExecutionContext.IsRunMode)
 {
@@ -132,7 +131,6 @@ if (builder.ExecutionContext.IsRunMode)
         .WithEnvironment("LabData__Reset", "true")
         .WithEnvironment("LabData__IdentityIssuer", identityAuthority)
         .WithEnvironment("LabData__WattHarborIntegrationKey", chargingProviders.WattHarborIntegrationKey)
-        .WithEnvironment("LabData__AmpTrailIntegrationKey", chargingProviders.AmpTrailIntegrationKey)
         .WithReference(databaseAccess.Migration)
         .WaitForCompletion(platformMigrations)
         .WithExplicitStart()

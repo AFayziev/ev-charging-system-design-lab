@@ -165,6 +165,8 @@ retain their prescribed names and signatures.
   Transitions check the current state and required facts before mutation; rejected
   operations leave state unchanged. Commands use these operations rather than
   duplicate their rules or assign properties directly.
+  Rejected transitions, ineligible state, and invalid business values return typed
+  errors rather than exceptions.
 - Use an EF-compatible constructor, normally a private parameterless constructor
   alongside the business creation operation. Materialization restores stored
   state; it must not rerun current-time creation rules or trigger side effects.

@@ -1,4 +1,4 @@
-namespace EvCharging.Persistence.Entities;
+namespace EvCharging.Domain.Equipment;
 
 public sealed class ChargingProvider
 {

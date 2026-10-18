@@ -409,6 +409,11 @@ window and claims connector exclusivity; stop targets an existing session and
 retains its claim, without requiring an unexpired reservation. Workers recheck
 command eligibility, persist attempt identity, and release database connections before
 external calls. Reconciliation runs as separately scheduled durable work.
+
+Charging records retain effect authorization, the provider binding and original
+payload, returned provider identifiers, outcome, timestamps, and failure summary.
+Correlated logs and traces provide request-level troubleshooting.
+
 The [domain transition table](domain.md#62-session-lifecycle) defines resulting
 states; [provider contracts](integrations.md) determine authoritative evidence.
 Reconciliation requests from operator users use the same durable path and are audited.
@@ -484,14 +489,21 @@ last-observation timestamps.
 
 HTTP policies are explicit per provider and operation. Effect retries and hedging
 are disabled unless permitted by the integration contract. HTTP method or library
-defaults do not establish safety. A persisted operation budget covers HTTP attempts,
-worker retries, and redelivery; reconciliation has a separate query budget.
+defaults do not establish safety. Effect retries have one owner and share the
+persisted operation limit across worker retries and redelivery. Outcome lookups
+use bounded request retries, timeouts, and concurrency, without a
+persisted per-operation query budget. Scheduled reconciliation has a bounded run;
+later manual or operator checks can obtain a result without authorizing an effect.
 [Lab defaults](lab.md#22-default-timings) set the baseline limits.
 
 Per-dependency deadlines, cancellation, circuit breaking, concurrency limits, and
 backpressure bound overload. Optional cache/search failures do not make command-capable
 APIs unready. Worker admission depends on the stores required for its effects.
 Readiness is workload-specific; liveness only establishes that the process runs.
+
+API rate limits are enforced at the gateway or by instance middleware backed by a
+shared central store. Limits apply consistently across replicas; isolated
+per-instance counters do not provide the required enforcement.
 
 Browser, API, outbox, message, worker, and provider spans share operation, entity,
 message, and correlation IDs. Diagnostics are not a business-readiness dependency.

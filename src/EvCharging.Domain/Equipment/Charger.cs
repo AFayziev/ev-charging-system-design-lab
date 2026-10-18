@@ -8,6 +8,7 @@ public sealed class Charger
     public required string Name { get; set; }
 
     public Station? Station { get; set; }
+    public ProviderCharger? ProviderCharger { get; set; }
 
     public ICollection<Connector> Connectors { get; } = [];
 }

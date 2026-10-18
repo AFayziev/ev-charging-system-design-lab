@@ -80,8 +80,29 @@ public sealed class AppHostFixture : IAsyncLifetime
     public async Task PrepareWattHarborConnectorAsync(
         string stationId, string chargerId, string connectorId, bool enabled)
     {
-        var providers = _providers ?? throw new InvalidOperationException("The providers have not started.");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var controls = await CreateWattHarborControlClientAsync(timeout.Token);
+        using var response = await controls.PutAsJsonAsync(
+            $"/simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}",
+            new ProviderEquipment(22m, enabled),
+            timeout.Token);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task ConfigureWattHarborCommandFaultAsync(Guid operationId, Guid sessionId, int? lookupStatus)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var controls = await CreateWattHarborControlClientAsync(timeout.Token);
+        using var response = await controls.PutAsJsonAsync(
+            $"/simulation/commands/{operationId}",
+            new ProviderCommandFault(sessionId, true, lookupStatus),
+            timeout.Token);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task<HttpClient> CreateWattHarborControlClientAsync(CancellationToken cancellationToken)
+    {
+        var providers = _providers ?? throw new InvalidOperationException("The providers have not started.");
         using var identity = providers.CreateHttpClient("provider-identity", "http");
         using var tokenResponse = await identity.PostAsync(
             "/realms/providers/protocol/openid-connect/token",
@@ -92,20 +113,17 @@ public sealed class AppHostFixture : IAsyncLifetime
                 ["client_secret"] = _simulationClientSecret
                     ?? throw new InvalidOperationException("Simulation credentials are required.")
             }),
-            timeout.Token);
+            cancellationToken);
         tokenResponse.EnsureSuccessStatusCode();
-        var token = await tokenResponse.Content.ReadFromJsonAsync<ProviderToken>(timeout.Token)
+        var token = await tokenResponse.Content.ReadFromJsonAsync<ProviderToken>(cancellationToken)
             ?? throw new InvalidOperationException("Missing simulation token.");
-        using var controls = providers.CreateHttpClient("wattharbor-provider-api", "http");
+        var controls = providers.CreateHttpClient("wattharbor-provider-api", "http");
         controls.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
-        using var response = await controls.PutAsJsonAsync(
-            $"/simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}",
-            new ProviderEquipment(22m, enabled),
-            timeout.Token);
-        response.EnsureSuccessStatusCode();
+        return controls;
     }
 
     private sealed record ProviderEquipment(decimal PowerKw, bool Enabled);
+    private sealed record ProviderCommandFault(Guid ExternalSessionId, bool LoseStartResponse, int? LookupStatusCode);
     private sealed record ProviderToken([property: JsonPropertyName("access_token")] string AccessToken);
 
     private async Task StartPlatformAsync(CancellationToken cancellationToken)
@@ -137,6 +155,8 @@ public sealed class AppHostFixture : IAsyncLifetime
         builder.CreateResourceBuilder(charging)
             .WithEnvironment("ChargingExecution__MaximumEffectAttempts", "3")
             .WithEnvironment("ChargingExecution__MaximumConcurrentStarts", "2")
+            .WithEnvironment("ChargingExecution__MaximumAutomaticChecks", "2")
+            .WithEnvironment("ChargingExecution__AutomaticCheckInterval", "00:00:03")
             .WithEnvironment("ReservationExpiry__SweepInterval", "00:05:00")
             .WithEnvironment("ReservationExpiry__SweepBatchSize", "2")
             .WithEnvironment("ReservationExpiry__MaximumConcurrentChecks", "2");

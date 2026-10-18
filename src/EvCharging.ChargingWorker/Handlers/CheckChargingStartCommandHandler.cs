@@ -13,6 +13,7 @@ namespace EvCharging.ChargingWorker.Handlers;
 public sealed class CheckChargingStartCommandHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
+    TimeProvider clock,
     ILogger<CheckChargingStartCommandHandler> logger)
 {
     [NonTransactional]
@@ -20,8 +21,41 @@ public sealed class CheckChargingStartCommandHandler(
         CheckChargingStart message,
         CancellationToken cancellationToken)
     {
+        if (!message.Automatic)
+        {
+            return await CheckAsync(message.OperationId, cancellationToken);
+        }
+
+        var endsAt = await database.Operations.AsNoTracking()
+            .Where(value => value.Id == message.OperationId)
+            .Select(value => value.AutomaticChecksEndAt)
+            .SingleOrDefaultAsync(cancellationToken);
+        var remaining = endsAt - clock.GetUtcNow();
+        if (remaining is null || remaining <= TimeSpan.Zero)
+        {
+            return new(ChargingStartCheckOutcome.Unresolved);
+        }
+
+        using var window = new CancellationTokenSource(remaining.Value, clock);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, window.Token);
+        try
+        {
+            return await CheckAsync(message.OperationId, bounded.Token);
+        }
+        catch (OperationCanceledException) when (window.IsCancellationRequested
+            && !cancellationToken.IsCancellationRequested)
+        {
+            // An expired checking window is not evidence about the external effect.
+            return new(ChargingStartCheckOutcome.Unresolved);
+        }
+    }
+
+    private async Task<ChargingStartCheckResult> CheckAsync(
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
         var operation = await database.Operations.AsNoTracking()
-            .SingleOrDefaultAsync(value => value.Id == message.OperationId, cancellationToken);
+            .SingleOrDefaultAsync(value => value.Id == operationId, cancellationToken);
         if (operation is null)
         {
             return new(ChargingStartCheckOutcome.Unresolved);
@@ -53,7 +87,7 @@ public sealed class CheckChargingStartCommandHandler(
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
         await database.LockDriverReservationsAsync(operation.DriverId, cancellationToken);
         operation = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
-            .SingleAsync(value => value.Id == message.OperationId, cancellationToken);
+            .SingleAsync(value => value.Id == operationId, cancellationToken);
         if (operation.Outcome is not (CommandOutcome.Confirmed or CommandOutcome.Rejected))
         {
             var transition = evidence.Command is { Outcome: ProviderCommandOutcome.Rejected }

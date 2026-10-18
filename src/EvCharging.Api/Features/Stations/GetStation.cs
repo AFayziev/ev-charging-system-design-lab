@@ -21,7 +21,8 @@ public sealed record StationDetailResponse(
     IReadOnlyList<ChargerResponse> Chargers,
     bool CanEdit);
 
-public sealed record ChargerResponse(Guid Id, string Name, IReadOnlyList<ConnectorResponse> Connectors);
+public sealed record ChargerResponse(
+    Guid Id, string Name, string? ProviderName, IReadOnlyList<ConnectorResponse> Connectors);
 
 public sealed record ConnectorResponse(
     Guid Id,
@@ -41,6 +42,10 @@ public sealed class GetStationQueryHandler(PlatformReadDbContext database, IAuth
             .AsNoTracking()
             .Include(station => station.Chargers)
             .ThenInclude(charger => charger.Connectors)
+            .Include(station => station.Chargers)
+            .ThenInclude(charger => charger.ProviderCharger)
+            .ThenInclude(mapping => mapping!.ProviderStation)
+            .ThenInclude(providerStation => providerStation!.ChargingProvider)
             .SingleOrDefaultAsync(station => station.PublicId == request.Id, cancellationToken);
         if (station is null)
         {

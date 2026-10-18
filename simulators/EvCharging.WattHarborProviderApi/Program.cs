@@ -2,6 +2,7 @@ using EvCharging.WattHarborProviderApi.Authentication;
 using EvCharging.WattHarborProviderApi.Features.Commands;
 using EvCharging.WattHarborProviderApi.Features.Equipment;
 using EvCharging.WattHarborProviderApi.Features.Sessions;
+using EvCharging.WattHarborProviderApi.Features.Simulation;
 using EvCharging.WattHarborProviderApi.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +12,8 @@ builder.AddProviderPersistence();
 builder.AddProviderAuthentication();
 builder.Services.AddValidation();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<CommandFaults>();
 builder.Services.AddScoped<StartChargingCommandHandler>();
 builder.Services.AddScoped<GetCommandQueryHandler>();
 builder.Services.AddScoped<GetCommandByExternalOperationIdQueryHandler>();
@@ -26,8 +29,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHttpApiDiagnostics("wattharbor-provider-api");
-app.MapCommandEndpoints();
-app.MapSessionEndpoints();
+var publicApi = app.MapGroup("")
+    .AddEndpointFilterFactory(FaultInjectionFilters.StartResponseLoss)
+    .AddEndpointFilterFactory(FaultInjectionFilters.LookupFailure);
+publicApi.MapCommandEndpoints();
+publicApi.MapSessionEndpoints();
+app.MapCommandFaultEndpoints();
 app.MapEquipmentEndpoints();
 
 app.Run();

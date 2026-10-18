@@ -199,6 +199,7 @@ export function ChargingStartControls({
           </Alert>
         )}
         {isStartUnresolved(operation) &&
+          !operation?.automaticChecksEndAt &&
           check &&
           !statusCheck.isPending &&
           check.outcome === "unresolved" && (
@@ -225,6 +226,7 @@ export function ChargingStartControls({
         {outcomeContent &&
           !statusCheck.isPending &&
           (!isStartUnresolved(operation) ||
+            operation?.automaticChecksEndAt ||
             !check ||
             check.outcome === "resolved") && (
             <Alert
@@ -234,6 +236,10 @@ export function ChargingStartControls({
               role="status"
             >
               {outcomeContent.text}
+              {isStartUnresolved(operation) &&
+                check?.outcome === "unresolved" &&
+                operation?.automaticChecksEndAt &&
+                " The latest status check did not provide a definite result."}
             </Alert>
           )}
         {ambiguous && !blocked && (

@@ -6,7 +6,12 @@ import { HttpStatusCode } from "axios";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { authKeys } from "@/features/auth/api";
-import type { Reservation, ReservationList, StartOperation } from "../api";
+import {
+  reservationKeys,
+  type Reservation,
+  type ReservationList,
+  type StartOperation,
+} from "../api";
 import { connectorBusyCode } from "../errors";
 import { ReservationsPage } from "./ReservationsPage";
 
@@ -345,7 +350,35 @@ const pendingStart: StartOperation = {
   acceptedAt: "2026-10-11T12:31:00Z",
   startedAt: null,
   failureReason: null,
+  automaticChecksEndAt: null,
 };
+
+it("ends automatic checking at the cutoff without updated reservation data", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
+  const cutoff = "2026-10-11T12:31:35Z";
+  const data = {
+    reservations: [
+      {
+        ...reservation,
+        startOperation: { ...pendingStart, automaticChecksEndAt: cutoff },
+      },
+    ],
+    nextAfterId: null,
+  };
+  get.mockResolvedValue({ data });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  client.setQueryData(reservationKeys.list(null), data);
+  setup(client);
+  expect(screen.getByText("Automatic status checks scheduled")).toBeVisible();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(35_000);
+  });
+  expect(screen.getByText("Automatic checking ended")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+});
 
 it("requires a successful session check when a failed refresh retains a cached token", async () => {
   vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
@@ -617,11 +650,31 @@ it("retains accepted status after a failed check and clears its error after conf
   ).not.toBeInTheDocument();
 });
 
-it.each(["resolved", "unresolved"] as const)(
-  "shows the result of a %s provider check",
-  async (outcome) => {
+it.each([
+  {
+    outcome: "resolved",
+    automaticChecksEndAt: null,
+    title: "Charging started",
+  },
+  {
+    outcome: "unresolved",
+    automaticChecksEndAt: null,
+    title: "Start is still unresolved",
+  },
+  {
+    outcome: "unresolved",
+    automaticChecksEndAt: "2026-10-10T22:29:00Z",
+    title: "Automatic checking ended",
+  },
+] as const)(
+  "shows $title after a provider check",
+  async ({ outcome, automaticChecksEndAt, title }) => {
     const user = userEvent.setup();
-    let current = { ...reservation, startOperation: pendingStart };
+    const operation = {
+      ...pendingStart,
+      automaticChecksEndAt,
+    };
+    let current = { ...reservation, startOperation: operation };
     get.mockImplementation(async (url: string) => ({
       data:
         url === "/auth/session"
@@ -650,7 +703,7 @@ it.each(["resolved", "unresolved"] as const)(
         ...current,
         state: "consumed",
         startOperation: {
-          ...pendingStart,
+          ...operation,
           outcome: "confirmed",
           lifecycle: "active",
           startedAt: reservation.startsAt,
@@ -659,13 +712,7 @@ it.each(["resolved", "unresolved"] as const)(
     await act(async () =>
       finish?.({ data: { outcome, operation: current.startOperation } }),
     );
-    expect(
-      await screen.findByText(
-        outcome === "resolved"
-          ? "Charging started"
-          : "Start is still unresolved",
-      ),
-    ).toBeVisible();
+    expect(await screen.findByText(title)).toBeVisible();
     expect(
       screen.queryByText("Checking with the station"),
     ).not.toBeInTheDocument();
@@ -675,6 +722,10 @@ it.each(["resolved", "unresolved"] as const)(
     expect(
       screen.queryByRole("button", { name: "Check status" }) !== null,
     ).toBe(outcome === "unresolved");
+    if (automaticChecksEndAt)
+      expect(
+        screen.getByText(/The latest status check did not provide/),
+      ).toBeVisible();
   },
 );
 

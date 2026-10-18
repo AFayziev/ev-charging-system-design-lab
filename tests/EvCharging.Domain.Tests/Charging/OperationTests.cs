@@ -10,6 +10,19 @@ public sealed class OperationTests
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 15, 12, 0, 0, TimeSpan.Zero);
 
+    [Fact]
+    public void ScheduleAutomaticChecks_BeforeEffectAuthorization_ReturnsFailureWithoutMutation()
+    {
+        var operation = Operation.AcceptStart(ChargingSession.AcceptStart(Booking(), Start).Value, Guid.NewGuid());
+
+        var result = operation.ScheduleAutomaticChecks(Start.AddSeconds(35));
+
+        Assert.True(result.IsFailed);
+        Assert.Null(operation.AutomaticChecksEndAt);
+        Assert.Equal(CommandOutcome.Pending, operation.Outcome);
+        Assert.Equal(0, operation.AuthorizedAttemptCount);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

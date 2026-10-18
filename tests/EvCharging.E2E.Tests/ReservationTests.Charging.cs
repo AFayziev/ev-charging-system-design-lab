@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Aspire.Hosting.ApplicationModel;
 using EvCharging.Domain.Charging;
@@ -12,6 +13,55 @@ namespace EvCharging.E2E.Tests;
 
 public sealed partial class ReservationTests
 {
+    [Fact]
+    [Trait("Category", "Api")]
+    public async Task Start_LostResponse_AutomaticallyConfirmsWithoutRepeatingEffect()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        var operation = await StartWithLostResponseAsync(page, null, timeout.Token);
+
+        await AwaitStartOutcomeAsync(operation.Id, CommandOutcome.Confirmed, timeout.Token);
+        var attempt = await Storage.Attempts.AsNoTracking()
+            .SingleAsync(value => value.OperationId == operation.Id, timeout.Token);
+        Assert.Equal(CommandOutcome.Uncertain, attempt.Outcome);
+        var confirmed = await Storage.Operations.AsNoTracking().Include(value => value.Session!)
+            .ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id, timeout.Token);
+        Assert.Equal(1, confirmed.AuthorizedAttemptCount);
+        Assert.Equal(SessionLifecycle.Active, confirmed.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Consumed, confirmed.Session.Reservation!.State);
+    }
+
+    [Fact]
+    [Trait("Category", "Browser")]
+    public async Task CheckStart_ProviderRecoversAfterAutomaticWindow_ResolvesWithoutAnotherStart()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var page = await browser.NewPageAsync();
+        var operation = await StartWithLostResponseAsync(page, HttpStatusCode.ServiceUnavailable, timeout.Token);
+        await AwaitStartOutcomeAsync(operation.Id, CommandOutcome.Uncertain, timeout.Token);
+        await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
+        await Expect(page.GetByText("Automatic checking ended", new() { Exact = true }))
+            .ToBeVisibleAsync(new() { Timeout = 25_000 });
+
+        var unresolved = await Storage.Operations.AsNoTracking().Include(value => value.Session!)
+            .ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id, timeout.Token);
+        Assert.Equal(CommandOutcome.Uncertain, unresolved.Outcome);
+        Assert.Equal(SessionLifecycle.Starting, unresolved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Active, unresolved.Session.Reservation!.State);
+        await fixture.ConfigureWattHarborCommandFaultAsync(operation.PublicId, unresolved.Session.PublicId, null);
+
+        await page.GetByRole(AriaRole.Button, new() { Name = "Check status" }).ClickAsync();
+        await Expect(page.GetByText("Charging started", new() { Exact = true })).ToBeVisibleAsync();
+        Assert.Equal(1, await Storage.Attempts.CountAsync(value => value.OperationId == operation.Id, timeout.Token));
+    }
+
     [Fact]
     [Trait("Category", "Api")]
     public async Task Start_CompetingKeys_AcceptsOneLogicalStart()
@@ -274,6 +324,23 @@ public sealed partial class ReservationTests
         }
 
         await CaptureStartAsync(page, enabled ? "confirmed" : "rejected");
+    }
+
+    private async Task<Operation> StartWithLostResponseAsync(
+        IPage page, HttpStatusCode? lookupStatus, CancellationToken cancellationToken)
+    {
+        await PauseChargingAsync();
+        var reservation = await CurrentBookingAsync();
+        await PrepareProviderEquipmentAsync(reservation, enabled: true);
+        await fixture.LoginAsync(page, "driver");
+        var accepted = await SubmitStartAsync(page, reservation.PublicId, Guid.NewGuid());
+        Assert.Equal(202, accepted.GetProperty("status").GetInt32());
+        var operationId = accepted.GetProperty("body").GetProperty("id").GetGuid();
+        var sessionId = accepted.GetProperty("body").GetProperty("sessionId").GetGuid();
+        await fixture.ConfigureWattHarborCommandFaultAsync(operationId, sessionId, (int?)lookupStatus);
+        await WorkerCommandAsync(KnownResourceCommands.StartCommand, cancellationToken);
+        _chargingPaused = false;
+        return await Storage.Operations.SingleAsync(value => value.PublicId == operationId, cancellationToken);
     }
 
     private async Task PauseChargingAsync()

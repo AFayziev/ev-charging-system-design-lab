@@ -20,6 +20,19 @@ public sealed class Operation : IAuditableEntity
     public DateTimeOffset AcceptedAt { get; private set; }
     public int AuthorizedAttemptCount { get; private set; }
     public int? EffectAttemptLimit { get; private set; }
+    public DateTimeOffset? AutomaticChecksEndAt { get; private set; }
+
+    public Result ScheduleAutomaticChecks(DateTimeOffset endsAt)
+    {
+        if (Kind != ChargingCommandKind.Start || Outcome != CommandOutcome.Pending
+            || AuthorizedAttemptCount != 1 || AutomaticChecksEndAt is not null || endsAt <= AcceptedAt)
+        {
+            return Result.Fail("Automatic checks require a newly authorized start and a cutoff after acceptance.");
+        }
+
+        AutomaticChecksEndAt = endsAt;
+        return Result.Ok();
+    }
 
     public static Operation AcceptStart(ChargingSession session, Guid key)
     {

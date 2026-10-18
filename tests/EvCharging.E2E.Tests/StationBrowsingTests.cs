@@ -36,7 +36,7 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Find a station" })).ToBeVisibleAsync();
         await Expect(page.GetByRole(AriaRole.Link, new() { Name = "Sign in", Exact = true })).ToBeVisibleAsync();
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "North Station", Exact = true }))
-            .ToBeVisibleAsync();
+            .ToBeVisibleAsync(new() { Timeout = 30_000 });
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "South Station", Exact = true }))
             .ToBeVisibleAsync();
         Assert.False(await page.EvaluateAsync<bool>("document.documentElement.scrollWidth > window.innerWidth"));

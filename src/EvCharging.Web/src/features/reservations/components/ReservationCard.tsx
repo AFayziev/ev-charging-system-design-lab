@@ -1,9 +1,14 @@
 import { Anchor, Badge, Paper, Stack, Text } from "@mantine/core";
+import { useForceUpdate, useTimeout } from "@mantine/hooks";
 import { IconCalendar, IconPlug } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { StationPhoto } from "@/features/stations/components/StationPhoto";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
-import { hasCurrentCharging, type Reservation } from "../api";
+import {
+  hasCurrentCharging,
+  isStartUnresolved,
+  type Reservation,
+} from "../api";
 import {
   formatReservationSlot,
   getBrowserTimeZone,
@@ -27,6 +32,15 @@ export function ReservationCard({
   statusUnavailable?: boolean;
   onRefresh: () => Promise<unknown>;
 }) {
+  const operation = reservation.startOperation;
+  const refreshCheckingWindow = useForceUpdate();
+  const automaticWindowRemaining =
+    isStartUnresolved(operation) && operation?.automaticChecksEndAt
+      ? Date.parse(operation.automaticChecksEndAt) - Date.now()
+      : 0;
+  useTimeout(refreshCheckingWindow, Math.max(0, automaticWindowRemaining), {
+    autoInvoke: automaticWindowRemaining > 0,
+  });
   const active =
     reservation.state === "active" || hasCurrentCharging(reservation);
   const startPresentation = getStartPresentation(

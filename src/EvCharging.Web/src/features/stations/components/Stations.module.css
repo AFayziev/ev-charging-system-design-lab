@@ -96,6 +96,11 @@
   border-bottom: 1px solid #e5eaee;
 }
 
+.providerSeparator {
+  margin-inline: var(--mantine-spacing-xs);
+  white-space: pre;
+}
+
 .connectors {
   padding: 0 16px;
 }

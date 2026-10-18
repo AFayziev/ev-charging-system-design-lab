@@ -1,7 +1,6 @@
 using System.Text.Json;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
-using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Persistence.Migrations.SeedData;
@@ -12,7 +11,6 @@ public static class LabDataSeeder
         PlatformDbContext context,
         string identityIssuer,
         string wattHarborIntegrationKey,
-        string ampTrailIntegrationKey,
         CancellationToken cancellationToken)
     {
         using var realm = JsonDocument.Parse(
@@ -49,6 +47,7 @@ public static class LabDataSeeder
 
         await context.SaveChangesAsync(cancellationToken);
 
+        // Add AmpTrail seed data only after platform interaction with that provider is implemented.
         var assignedStationIds = new List<Guid>();
         assignedStationIds.Add(await SeedStationAsync(
             context,
@@ -68,8 +67,8 @@ public static class LabDataSeeder
             cancellationToken));
         await SeedStationAsync(
             context,
-            "AmpTrail",
-            ampTrailIntegrationKey,
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "south",
             "South Station",
             "2 Synthetic Avenue, Demo South Quarter, London",
@@ -101,8 +100,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "AmpTrail",
-            ampTrailIntegrationKey,
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "market",
             "Demo Market Square",
             "8 Example Market Road, Demo North Quarter, London",
@@ -133,8 +132,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "AmpTrail",
-            ampTrailIntegrationKey,
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "riverside",
             "Demo Riverside Hub",
             "42 Mock River Walk, Demo South Quarter, London",
@@ -165,8 +164,8 @@ public static class LabDataSeeder
             cancellationToken));
         assignedStationIds.Add(await SeedStationAsync(
             context,
-            "AmpTrail",
-            ampTrailIntegrationKey,
+            "WattHarbor",
+            wattHarborIntegrationKey,
             "exchange",
             "Demo Exchange Park",
             "19 Fictional Exchange Way, Demo North Quarter, London",

@@ -21,6 +21,9 @@ Queries support provider command/session identity and the platform correlation
 identifier, including when a lost response prevents the platform learning the
 provider command ID. Results distinguish queued, applied, and definitively rejected
 requests. A rejection establishes that the request cannot execute later.
+Lookups expose the current command result or session state. Replayed submissions
+and reads do not require an interaction history, query counters, or evidence-export
+endpoints.
 
 Each integration implements a specific external system's API contract. Synchronous or
 queued describes command behavior; it does not identify a shared API surface.
@@ -75,6 +78,7 @@ Problem Details; command lookups expose the recorded outcome, including rejectio
 | Method and path | Purpose |
 |---|---|
 | `PUT /simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Configure simulated equipment while preserving existing occupancy |
+| `PUT /simulation/commands/{externalOperationId}` | Configure temporary command-scoped response loss and outcome-lookup failures; requires the simulation control role |
 
 ## 2. Command safety
 
@@ -85,8 +89,8 @@ A snapshot with no active session does not establish safe repetition: a queued
 request might execute later.
 
 Another AmpTrail effect request requires definitive rejection evidence and
-the [domain eligibility rules](domain.md#5-reservations). Queries can repeat within
-their separate budget.
+the [domain eligibility rules](domain.md#5-reservations). Outcome queries are
+read-only and may repeat under bounded request and admission policies.
 
 HTTP effect retries are explicit per integration; transport timeouts and generic
 resilience defaults do not supply rejection evidence. Persistence of a platform
