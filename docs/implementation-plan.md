@@ -391,7 +391,26 @@ Notification failure leaves accepted reservations intact and remains separately 
 - [ ] M06.02 Deliver driver stop with the same operation tracking and recovery;
   display confirmed stop separately from pending final usage. Verify rejected
   and uncertain stops, overruns, and recovery after worker loss.
-  Depends on M06.01.
+  Depends on M06.01. Sub-items are sequenced as follows:
+  - [x] M06.02.1 WattHarbor stop contract: add an idempotent stop command,
+    retained command/session outcomes, and an ended session state to the provider
+    and its documented contract. Stopping an already ended session is applied;
+    an unknown session is a definitive rejection. Verify replays, concurrent and
+    competing stops, key reuse, response loss, and connector release.
+  - [ ] M06.02.2 Stop acceptance: make operation limits and guards kind-neutral,
+    accept a driver stop for an active session with one live stop per session,
+    and expose typed stop status. Verify ownership, idempotency, conflicts, and
+    rejected stops returning the session to active.
+    Depends on M06.02.1.
+  - [ ] M06.02.3 Stop execution and recovery: execute stops with numbered attempts,
+    automatic outcome checks, and same-key resends, keeping a confirmed stop in
+    stopping until final usage exists. Verify rejected, uncertain, and redelivered
+    stops and recovery after worker interruption.
+    Depends on M06.02.2.
+  - [ ] M06.02.4 Driver stop UI and end-to-end flow: show stop progress, unresolved
+    stops, and confirmed stop with pending final usage. Verify overruns blocking
+    later starts through the application.
+    Depends on M06.02.3.
 - [ ] M06.03 Deliver start/stop for AmpTrail with its persistent
   lab provider, client, acknowledgement/query behavior, and correlation recovery.
   Verify lost acknowledgements and delayed effects without blind resubmission.

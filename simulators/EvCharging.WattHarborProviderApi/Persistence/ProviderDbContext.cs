@@ -54,9 +54,11 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
         await Database.ExecuteSqlInterpolatedAsync(
             $"""
             INSERT INTO commands
-                (id, public_id, external_operation_id, station_id, charger_id, connector_id, external_session_id, created_at)
-            VALUES ({command.Id}, {command.PublicId}, {command.ExternalOperationId}, {command.StationId},
-                {command.ChargerId}, {command.ConnectorId}, {command.ExternalSessionId}, {command.CreatedAt})
+                (id, public_id, kind, external_operation_id, station_id, charger_id, connector_id, external_session_id,
+                    created_at)
+            VALUES ({command.Id}, {command.PublicId}, {command.Kind}, {command.ExternalOperationId},
+                {command.StationId}, {command.ChargerId}, {command.ConnectorId}, {command.ExternalSessionId},
+                {command.CreatedAt})
             ON CONFLICT (external_operation_id) DO NOTHING
             """,
             cancellationToken) == 1;
@@ -82,6 +84,24 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
             ON CONFLICT (external_session_id) DO NOTHING
             """,
             cancellationToken) == 1;
+
+    /// <summary>Ends a session once; false means another stop already ended it.</summary>
+    internal async Task<bool> TryEndSessionAsync(
+        Guid sessionId, DateTimeOffset endedAt, CancellationToken cancellationToken) =>
+        await Sessions
+            .Where(session => session.Id == sessionId && session.EndedAt == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(session => session.EndedAt, endedAt),
+                cancellationToken) == 1;
+
+    internal Task ReleaseConnectorAsync(ProviderSession session, CancellationToken cancellationToken) =>
+        Connectors
+            .Where(connector => connector.StationId == session.StationId
+                && connector.ChargerId == session.ChargerId
+                && connector.ConnectorId == session.ConnectorId)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(connector => connector.ActiveCommandId, (Guid?)null),
+                cancellationToken);
 
     internal Task ReleaseConnectorAsync(Guid commandId, CancellationToken cancellationToken) =>
         Connectors

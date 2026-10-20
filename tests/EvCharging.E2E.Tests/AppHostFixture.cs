@@ -123,7 +123,7 @@ public sealed class AppHostFixture : IAsyncLifetime
     }
 
     private sealed record ProviderEquipment(decimal PowerKw, bool Enabled);
-    private sealed record ProviderCommandFault(Guid ExternalSessionId, bool LoseStartResponse, int? LookupStatusCode);
+    private sealed record ProviderCommandFault(Guid ExternalSessionId, bool LoseResponse, int? LookupStatusCode);
     private sealed record ProviderToken([property: JsonPropertyName("access_token")] string AccessToken);
 
     private async Task StartPlatformAsync(CancellationToken cancellationToken)

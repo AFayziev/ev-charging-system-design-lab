@@ -16,10 +16,11 @@ internal static class ProviderErrorCodes
     public const string IdempotencyConflict = "idempotency_conflict";
     public const string ConnectorUnavailable = "connector_unavailable";
     public const string ExternalSessionIdConflict = "external_session_id_conflict";
+    public const string SessionNotFound = "session_not_found";
 }
 
 internal sealed class IdempotencyConflictError()
-    : Error("The idempotency key was used with a different start request.");
+    : Error("The idempotency key was used with a different request.");
 
 internal sealed class ChargingStartRejectedError(Guid commandId, Guid externalOperationId, string code)
     : Error(GetMessage(code))
@@ -48,6 +49,7 @@ internal sealed class StartChargingCommandHandler(
     {
         var command = new ProviderCommand
         {
+            Kind = CommandKind.Start,
             ExternalOperationId = externalOperationId,
             StationId = request.StationId,
             ChargerId = request.ChargerId,
@@ -63,7 +65,7 @@ internal sealed class StartChargingCommandHandler(
         }
 
         database.Commands.Attach(command);
-        await ApplyStartAsync(command, cancellationToken);
+        await ApplyStartAsync(command, request, cancellationToken);
         await database.SaveChangesAsync(cancellationToken);
         // Return stored timestamp precision so the initial response and later replays match.
         await database.Entry(command).ReloadAsync(cancellationToken);
@@ -87,8 +89,9 @@ internal sealed class StartChargingCommandHandler(
     {
         var existing = await database.Commands.AsNoTracking().Include(command => command.Session)
             .SingleAsync(command => command.ExternalOperationId == externalOperationId, cancellationToken);
-        return existing.StationId == request.StationId && existing.ChargerId == request.ChargerId
-            && existing.ConnectorId == request.ConnectorId && existing.ExternalSessionId == request.ExternalSessionId
+        return existing.Kind == CommandKind.Start && existing.StationId == request.StationId
+            && existing.ChargerId == request.ChargerId && existing.ConnectorId == request.ConnectorId
+            && existing.ExternalSessionId == request.ExternalSessionId
                 ? ToStartResult(existing.ToResponse()) : Result.Fail<CommandResponse>(new IdempotencyConflictError());
     }
 
@@ -100,7 +103,8 @@ internal sealed class StartChargingCommandHandler(
                 response.ExternalOperationId,
                 response.Rejection ?? throw new InvalidOperationException("A rejected command requires a reason.")));
 
-    private async Task ApplyStartAsync(ProviderCommand command, CancellationToken cancellationToken)
+    private async Task ApplyStartAsync(
+        ProviderCommand command, StartChargingRequest request, CancellationToken cancellationToken)
     {
         if (!await database.TryClaimConnectorAsync(command, cancellationToken))
         {
@@ -109,15 +113,15 @@ internal sealed class StartChargingCommandHandler(
         }
 
         var connector = await database.Connectors.AsNoTracking().SingleAsync(
-            connector => connector.StationId == command.StationId && connector.ChargerId == command.ChargerId
-                && connector.ConnectorId == command.ConnectorId,
+            connector => connector.StationId == request.StationId && connector.ChargerId == request.ChargerId
+                && connector.ConnectorId == request.ConnectorId,
             cancellationToken);
         var session = new ProviderSession
         {
             ExternalSessionId = command.ExternalSessionId,
-            StationId = command.StationId,
-            ChargerId = command.ChargerId,
-            ConnectorId = command.ConnectorId,
+            StationId = request.StationId,
+            ChargerId = request.ChargerId,
+            ConnectorId = request.ConnectorId,
             StartedAt = clock.GetUtcNow(),
             PowerKw = connector.PowerKw
         };

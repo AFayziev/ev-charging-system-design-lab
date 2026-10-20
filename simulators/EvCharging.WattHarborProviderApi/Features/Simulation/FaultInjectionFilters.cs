@@ -5,11 +5,13 @@ namespace EvCharging.WattHarborProviderApi.Features.Simulation;
 
 internal static class FaultInjectionFilters
 {
-    public static EndpointFilterDelegate StartResponseLoss(
+    public static EndpointFilterDelegate ResponseLoss(
         EndpointFilterFactoryContext factory, EndpointFilterDelegate next)
     {
         var parameters = factory.MethodInfo.GetParameters();
-        if (!parameters.Any(parameter => parameter.ParameterType == typeof(StartChargingRequest)))
+        if (!parameters.Any(parameter =>
+            parameter.ParameterType == typeof(StartChargingRequest)
+            || parameter.ParameterType == typeof(StopChargingRequest)))
         {
             return next;
         }
@@ -19,7 +21,7 @@ internal static class FaultInjectionFilters
         return async invocation =>
         {
             var result = await next(invocation);
-            if (faults.Find(invocation.GetArgument<Guid>(correlationIndex)) is { LoseStartResponse: true })
+            if (faults.Find(invocation.GetArgument<Guid>(correlationIndex)) is { LoseResponse: true })
             {
                 // The handler commits the effect before returning; serialization has not started.
                 invocation.HttpContext.Abort();

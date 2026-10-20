@@ -5,6 +5,7 @@ namespace EvCharging.WattHarborProviderApi.Features.Commands;
 internal sealed record CommandResponse(
     Guid Id,
     Guid ExternalOperationId,
+    CommandKind Kind,
     CommandOutcome Outcome,
     Guid? SessionId,
     DateTimeOffset? AppliedAt,
@@ -22,6 +23,7 @@ internal static class CommandMappingExtensions
         return new(
             command.PublicId,
             command.ExternalOperationId,
+            command.Kind,
             applied ? CommandOutcome.Applied : CommandOutcome.Rejected,
             command.Session?.PublicId,
             applied ? command.CompletedAt : null,

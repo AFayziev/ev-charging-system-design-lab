@@ -6,7 +6,7 @@ namespace EvCharging.WattHarborProviderApi.Features.Simulation;
 
 internal sealed record ConfigureCommandFaultRequest(
     Guid ExternalSessionId,
-    bool LoseStartResponse,
+    bool LoseResponse,
     int? LookupStatusCode);
 
 internal sealed class CommandFaults(IMemoryCache cache)

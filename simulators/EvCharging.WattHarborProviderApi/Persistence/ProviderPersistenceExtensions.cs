@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql.NameTranslation;
 
 namespace EvCharging.WattHarborProviderApi.Persistence;
 
@@ -15,7 +16,9 @@ public static class ProviderPersistenceExtensions
 
     public static DbContextOptionsBuilder UseProviderModel(this DbContextOptionsBuilder options) =>
         options.UseSnakeCaseNamingConvention()
-            .UseNpgsql(postgres => postgres.MigrationsAssembly("EvCharging.WattHarborProviderApi.Migrations"))
+            .UseNpgsql(postgres => postgres
+                .MigrationsAssembly("EvCharging.WattHarborProviderApi.Migrations")
+                .MapEnum<CommandKind>("command_kind", nameTranslator: new NpgsqlSnakeCaseNameTranslator()))
             .UseSeeding((context, _) => ProviderSeedData.Seed(context))
             .UseAsyncSeeding((context, _, cancellationToken) => ProviderSeedData.SeedAsync(context, cancellationToken));
 }

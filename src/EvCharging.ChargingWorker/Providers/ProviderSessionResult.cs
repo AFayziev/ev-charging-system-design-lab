@@ -2,7 +2,8 @@ namespace EvCharging.ChargingWorker.Providers;
 
 public enum ProviderSessionState
 {
-    Charging
+    Charging,
+    Stopped
 }
 
 public sealed record ProviderSessionResult(

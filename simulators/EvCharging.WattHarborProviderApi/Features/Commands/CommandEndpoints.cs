@@ -12,6 +12,8 @@ internal static class CommandEndpoints
         var group = endpoints.MapGroup("/commands");
         group.MapPost("/start", StartAsync)
             .ProducesProblem(StatusCodes.Status409Conflict);
+        group.MapPost("/stop", StopAsync)
+            .ProducesProblem(StatusCodes.Status409Conflict);
         group.MapGet("/{id:guid}", GetAsync);
         group.MapGet("/by-external-operation/{externalOperationId:guid}", GetByExternalOperationIdAsync);
         return endpoints;
@@ -23,34 +25,72 @@ internal static class CommandEndpoints
         StartChargingCommandHandler handler,
         CancellationToken cancellationToken)
     {
+        if (Validate(idempotencyKey, request.ExternalSessionId) is { } invalid)
+        {
+            return invalid;
+        }
+
+        var result = await handler.HandleAsync(idempotencyKey, request, cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<IdempotencyConflictError>(out var conflicts) => ToProblem(conflicts.First()),
+            _ when result.HasError<ChargingStartRejectedError>(out var rejections) => ToProblem(rejections.First()),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
+
+    private static async Task<Results<Ok<CommandResponse>, ProblemHttpResult, ValidationProblem>> StopAsync(
+        [FromHeader(Name = IdempotencyKeyHeader)] Guid idempotencyKey,
+        StopChargingRequest request,
+        StopChargingCommandHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (Validate(idempotencyKey, request.ExternalSessionId) is { } invalid)
+        {
+            return invalid;
+        }
+
+        var result = await handler.HandleAsync(idempotencyKey, request, cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<IdempotencyConflictError>(out var conflicts) => ToProblem(conflicts.First()),
+            _ when result.HasError<ChargingStopRejectedError>(out var rejections) => ToProblem(rejections.First()),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
+
+    private static ValidationProblem? Validate(Guid idempotencyKey, Guid externalSessionId)
+    {
         var errors = new Dictionary<string, string[]>();
         if (idempotencyKey == Guid.Empty)
         {
             errors[IdempotencyKeyHeader] = ["A non-empty UUID idempotency key is required."];
         }
 
-        if (request.ExternalSessionId == Guid.Empty)
+        if (externalSessionId == Guid.Empty)
         {
-            errors[nameof(request.ExternalSessionId)] = ["A non-empty external session ID is required."];
+            errors[nameof(StartChargingRequest.ExternalSessionId)] = ["A non-empty external session ID is required."];
         }
 
-        if (errors.Count != 0)
-        {
-            return TypedResults.ValidationProblem(errors);
-        }
-
-        var result = await handler.HandleAsync(idempotencyKey, request, cancellationToken);
-        return result switch
-        {
-            _ when result.HasError<IdempotencyConflictError>(out var conflicts) => TypedResults.Problem(
-                statusCode: StatusCodes.Status409Conflict,
-                title: "Idempotency key conflict",
-                detail: conflicts.First().Message,
-                extensions: new Dictionary<string, object?> { ["code"] = ProviderErrorCodes.IdempotencyConflict }),
-            _ when result.HasError<ChargingStartRejectedError>(out var rejections) => ToProblem(rejections.First()),
-            _ => TypedResults.Ok(result.Value)
-        };
+        return errors.Count == 0 ? null : (ValidationProblem)TypedResults.ValidationProblem(errors);
     }
+
+    private static ProblemHttpResult ToProblem(IdempotencyConflictError error) => TypedResults.Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: "Idempotency key conflict",
+        detail: error.Message,
+        extensions: new Dictionary<string, object?> { ["code"] = ProviderErrorCodes.IdempotencyConflict });
+
+    private static ProblemHttpResult ToProblem(ChargingStopRejectedError error) => TypedResults.Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: "Charging stop rejected",
+        detail: error.Message,
+        extensions: new Dictionary<string, object?>
+        {
+            ["code"] = error.Code,
+            ["commandId"] = error.CommandId,
+            ["externalOperationId"] = error.ExternalOperationId
+        });
 
     private static ProblemHttpResult ToProblem(ChargingStartRejectedError error) => TypedResults.Problem(
         statusCode: StatusCodes.Status409Conflict,

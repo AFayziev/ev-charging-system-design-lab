@@ -40,8 +40,9 @@ commands and read outcomes; simulation controls require the separate control rol
 Equipment addresses are provider-owned strings. Command and session identifiers
 are opaque UUIDs. `ExternalOperationId` and `ExternalSessionId` identify the calling
 system's operation and session; the platform supplies its public identifiers.
-The `Idempotency-Key` header supplies `ExternalOperationId` for a start, and the
-request body supplies `ExternalSessionId`. Provider-generated IDs remain separate.
+The `Idempotency-Key` header supplies `ExternalOperationId` for a start or stop,
+and the request body supplies `ExternalSessionId`: the new session for a start, the
+session to end for a stop. Provider-generated IDs remain separate.
 Request and response schemas are defined by the provider's generated OpenAPI document.
 
 #### Public provider API
@@ -49,21 +50,24 @@ Request and response schemas are defined by the provider's generated OpenAPI doc
 | Method and path | Purpose |
 |---|---|
 | `POST /commands/start` | Submit a charging start command |
+| `POST /commands/stop` | Submit a command to end the session with the given `ExternalSessionId` |
 | `GET /commands/{id}` | Look up a provider command by its returned identifier |
 | `GET /commands/by-external-operation/{externalOperationId}` | Resolve a command by the caller's operation ID |
 | `GET /sessions/{id}` | Read the matching provider session |
 | `GET /sessions/by-external-session/{externalSessionId}` | Resolve a session by the caller's session ID |
 | `GET /stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Read equipment availability and rated power |
 
-A successful start establishes that charging was applied. Rejected starts return
-Problem Details; command lookups expose the recorded outcome, including rejections.
+A successful start establishes that charging was applied. Rejected starts and stops
+return Problem Details; command lookups expose the command kind and the recorded
+outcome, including rejections.
 
 | Condition | HTTP status | Error or outcome |
 |---|---|---|
 | Authentication or authorization denied | 401 / 403 | Request rejected before command creation or execution; no provider command ID |
 | Unknown, disabled or occupied equipment | 409 | Definitive rejection: `connector_unavailable` |
 | External session ID already used by another start | 409 | Definitive rejection: `external_session_id_conflict` |
-| Idempotency key reused with a different payload | 409 | `idempotency_conflict`; original command unchanged |
+| Idempotency key reused with a different payload or command kind | 409 | `idempotency_conflict`; original command unchanged |
+| Stop for an `ExternalSessionId` the provider has no session for | 409 | Definitive rejection: `session_not_found` |
 
 - Applied commands and business rejections are retained. Identical replays return
   the original success or business rejection even after equipment availability changes.
@@ -72,6 +76,11 @@ Problem Details; command lookups expose the recorded outcome, including rejectio
 - An authentication or authorization denial establishes non-execution of the
   denied request, not other requests for the same command.
 - A missing lookup does not establish that an in-flight request cannot commit later.
+- A stop applies once: it ends the session and frees its connector. Stopping an
+  already ended session is applied, because the requested end state holds; it is not
+  a rejection. Ended sessions report `stopped` and an `endedAt` time.
+  The end time is the session's `endedAt`, never a later stop's `appliedAt`.
+  A stop acknowledgement does not report final energy usage.
 
 #### Internal simulation API
 

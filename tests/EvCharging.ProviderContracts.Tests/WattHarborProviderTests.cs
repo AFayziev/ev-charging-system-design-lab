@@ -14,6 +14,7 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
         var externalOperationId = Guid.NewGuid();
         var result = await StartAsync(externalOperationId, request);
         Assert.Equal(externalOperationId, result.ExternalOperationId);
+        Assert.Equal("start", result.Kind);
         Assert.Equal("applied", result.Outcome);
         Assert.NotNull(result.SessionId);
         Assert.NotNull(result.AppliedAt);
@@ -35,6 +36,7 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
         Assert.Equal(result.AppliedAt, session.StartedAt);
         Assert.Equal(22m, session.PowerKw);
         Assert.Equal("charging", session.State);
+        Assert.Null(session.EndedAt);
         Assert.Equal(
             session,
             await fixture.Charging.GetFromJsonAsync<SessionResult>(
@@ -167,6 +169,189 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
         Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
     }
 
+    [Fact]
+    public async Task Stop_ReplayAndLookups_EndSessionAndReleaseConnector()
+    {
+        var request = await ConfigureAsync();
+        var start = await StartAsync(Guid.NewGuid(), request);
+        var externalOperationId = Guid.NewGuid();
+        var stop = new StopRequest(request.ExternalSessionId);
+
+        var result = await StopAsync(externalOperationId, stop);
+
+        Assert.Equal(externalOperationId, result.ExternalOperationId);
+        Assert.Equal("stop", result.Kind);
+        Assert.Equal("applied", result.Outcome);
+        Assert.Equal(start.SessionId, result.SessionId);
+        Assert.NotNull(result.AppliedAt);
+        Assert.Null(result.Rejection);
+        Assert.Equal(result, await StopAsync(externalOperationId, stop));
+        Assert.Equal(result, await fixture.Charging.GetFromJsonAsync<CommandResult>($"/commands/{result.Id}"));
+        Assert.Equal(
+            result,
+            await fixture.Charging.GetFromJsonAsync<CommandResult>(
+                $"/commands/by-external-operation/{externalOperationId}"));
+        Assert.Equal("start", (await fixture.Charging.GetFromJsonAsync<CommandResult>($"/commands/{start.Id}"))?.Kind);
+
+        var session = await fixture.Charging.GetFromJsonAsync<SessionResult>($"/sessions/{start.SessionId}");
+        Assert.NotNull(session);
+        Assert.Equal("stopped", session.State);
+        Assert.Equal(result.AppliedAt, session.EndedAt);
+        Assert.Equal(start.AppliedAt, session.StartedAt);
+        var connector = await fixture.Charging.GetFromJsonAsync<EquipmentResult>(EquipmentPath(request));
+        Assert.False(connector?.Occupied);
+        var next = await StartAsync(Guid.NewGuid(), request with { ExternalSessionId = Guid.NewGuid() });
+        Assert.Equal("applied", next.Outcome);
+    }
+
+    [Fact]
+    public async Task Stop_AlreadyStoppedSession_IsAppliedWithoutChangingTheEnd()
+    {
+        var request = await ConfigureAsync();
+        var start = await StartAsync(Guid.NewGuid(), request);
+        var stop = new StopRequest(request.ExternalSessionId);
+        var first = await StopAsync(Guid.NewGuid(), stop);
+        var second = await StopAsync(Guid.NewGuid(), stop);
+
+        Assert.Equal("applied", second.Outcome);
+        Assert.Equal(first.SessionId, second.SessionId);
+        Assert.NotEqual(first.Id, second.Id);
+        var session = await fixture.Charging.GetFromJsonAsync<SessionResult>($"/sessions/{start.SessionId}");
+        Assert.Equal(first.AppliedAt, session?.EndedAt);
+    }
+
+    [Fact]
+    public async Task Stop_UnknownSession_ReturnsReplayableRejection()
+    {
+        var externalOperationId = Guid.NewGuid();
+        var stop = new StopRequest(Guid.NewGuid());
+
+        var rejected = await RejectStopAsync(externalOperationId, stop);
+
+        Assert.Equal("session_not_found", rejected.Code);
+        Assert.Equal(rejected, await RejectStopAsync(externalOperationId, stop));
+        var command = await fixture.Charging.GetFromJsonAsync<CommandResult>($"/commands/{rejected.CommandId}");
+        Assert.NotNull(command);
+        Assert.Equal("stop", command.Kind);
+        Assert.Equal("rejected", command.Outcome);
+        Assert.Equal(rejected.Code, command.Rejection);
+        Assert.Null(command.SessionId);
+        Assert.Null(command.AppliedAt);
+    }
+
+    [Fact]
+    public async Task Stop_ConcurrentRequests_EndTheSessionOnce()
+    {
+        var request = await ConfigureAsync();
+        await StartAsync(Guid.NewGuid(), request);
+        var sameKey = Guid.NewGuid();
+        var stop = new StopRequest(request.ExternalSessionId);
+
+        var identical = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => StopAsync(sameKey, stop)));
+        Assert.Single(identical.Distinct());
+
+        var other = await ConfigureAsync();
+        var otherStart = await StartAsync(Guid.NewGuid(), other);
+        var competing = await Task.WhenAll(Enumerable.Range(0, 8)
+            .Select(_ => StopAsync(Guid.NewGuid(), new StopRequest(other.ExternalSessionId))));
+        Assert.All(competing, result => Assert.Equal("applied", result.Outcome));
+        var session = await fixture.Charging.GetFromJsonAsync<SessionResult>($"/sessions/{otherStart.SessionId}");
+        Assert.Contains(session?.EndedAt, competing.Select(result => result.AppliedAt));
+        Assert.False((await fixture.Charging.GetFromJsonAsync<EquipmentResult>(EquipmentPath(other)))?.Occupied);
+    }
+
+    [Fact]
+    public async Task Stop_ReusedKey_ReturnsConflictAndPreservesOriginal()
+    {
+        var request = await ConfigureAsync();
+        var startKey = Guid.NewGuid();
+        await StartAsync(startKey, request);
+        using var asStop = await SendStopAsync(startKey, new StopRequest(request.ExternalSessionId));
+        Assert.Equal(HttpStatusCode.Conflict, asStop.StatusCode);
+        Assert.Equal(
+            "idempotency_conflict",
+            (await asStop.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+
+        var stopKey = Guid.NewGuid();
+        var original = await StopAsync(stopKey, new StopRequest(request.ExternalSessionId));
+        using var otherSession = await SendStopAsync(stopKey, new StopRequest(Guid.NewGuid()));
+        Assert.Equal(HttpStatusCode.Conflict, otherSession.StatusCode);
+        using var asStart = await SendStartAsync(stopKey, request);
+        Assert.Equal(HttpStatusCode.Conflict, asStart.StatusCode);
+        Assert.Equal(original, await StopAsync(stopKey, new StopRequest(request.ExternalSessionId)));
+        Assert.Equal("applied", (await StartAsync(startKey, request)).Outcome);
+    }
+
+    [Fact]
+    public async Task Stop_ResponseLost_EffectCommitsAndLookupResolvesIt()
+    {
+        var request = await ConfigureAsync();
+        await StartAsync(Guid.NewGuid(), request);
+        var externalOperationId = Guid.NewGuid();
+        await fixture.ConfigureCommandFaultAsync(externalOperationId, loseResponse: true);
+
+        await Assert.ThrowsAsync<HttpRequestException>(
+            () => SendStopAsync(externalOperationId, new StopRequest(request.ExternalSessionId)));
+
+        var command = await fixture.Charging.GetFromJsonAsync<CommandResult>(
+            $"/commands/by-external-operation/{externalOperationId}");
+        Assert.Equal("applied", command?.Outcome);
+        Assert.Equal("stop", command?.Kind);
+        Assert.False((await fixture.Charging.GetFromJsonAsync<EquipmentResult>(EquipmentPath(request)))?.Occupied);
+    }
+
+    [Fact]
+    public async Task Stop_AnonymousCallAndInvalidInput_AreRefused()
+    {
+        var stop = new StopRequest(Guid.NewGuid());
+        using var anonymous = new HttpClient { BaseAddress = fixture.Charging.BaseAddress };
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/commands/stop")
+        {
+            Content = JsonContent.Create(stop)
+        };
+        message.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        using var unauthorized = await anonymous.SendAsync(message);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
+        using var missingHeader = await fixture.Charging.PostAsJsonAsync("/commands/stop", stop);
+        Assert.Equal(HttpStatusCode.BadRequest, missingHeader.StatusCode);
+        using var emptyKey = await SendStopAsync(Guid.Empty, stop);
+        Assert.Equal(HttpStatusCode.BadRequest, emptyKey.StatusCode);
+        using var emptySession = await SendStopAsync(Guid.NewGuid(), new StopRequest(Guid.Empty));
+        Assert.Equal(HttpStatusCode.BadRequest, emptySession.StatusCode);
+    }
+
+    private async Task<CommandResult> StopAsync(Guid externalOperationId, StopRequest request)
+    {
+        using var response = await SendStopAsync(externalOperationId, request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadFromJsonAsync<CommandResult>()
+            ?? throw new InvalidOperationException("Expected a command response.");
+    }
+
+    private async Task<CommandProblem> RejectStopAsync(Guid externalOperationId, StopRequest request)
+    {
+        using var response = await SendStopAsync(externalOperationId, request);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<CommandProblem>();
+        Assert.NotNull(problem);
+        Assert.Equal("Charging stop rejected", problem.Title);
+        Assert.NotEqual(Guid.Empty, problem.CommandId);
+        Assert.Equal(externalOperationId, problem.ExternalOperationId);
+        return problem;
+    }
+
+    private Task<HttpResponseMessage> SendStopAsync(Guid externalOperationId, StopRequest request) =>
+        SendCommandAsync("/commands/stop", externalOperationId, request);
+
+    private async Task<HttpResponseMessage> SendCommandAsync(string path, Guid externalOperationId, object request)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(request) };
+        message.Headers.Add("Idempotency-Key", externalOperationId.ToString());
+        return await fixture.Charging.SendAsync(message);
+    }
+
     private async Task<StartRequest> ConfigureAsync(bool enabled = true)
     {
         var request = NewStartRequest();
@@ -182,12 +367,12 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
             ?? throw new InvalidOperationException("Expected a command response.");
     }
 
-    private async Task<StartProblem> RejectStartAsync(Guid externalOperationId, StartRequest request)
+    private async Task<CommandProblem> RejectStartAsync(Guid externalOperationId, StartRequest request)
     {
         using var response = await SendStartAsync(externalOperationId, request);
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
-        var problem = await response.Content.ReadFromJsonAsync<StartProblem>();
+        var problem = await response.Content.ReadFromJsonAsync<CommandProblem>();
         Assert.NotNull(problem);
         Assert.Equal((int)response.StatusCode, problem.Status);
         Assert.False(string.IsNullOrWhiteSpace(problem.Title));
@@ -197,15 +382,8 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
         return problem;
     }
 
-    private async Task<HttpResponseMessage> SendStartAsync(Guid externalOperationId, StartRequest request)
-    {
-        using var message = new HttpRequestMessage(HttpMethod.Post, "/commands/start")
-        {
-            Content = JsonContent.Create(request)
-        };
-        message.Headers.Add("Idempotency-Key", externalOperationId.ToString());
-        return await fixture.Charging.SendAsync(message);
-    }
+    private Task<HttpResponseMessage> SendStartAsync(Guid externalOperationId, StartRequest request) =>
+        SendCommandAsync("/commands/start", externalOperationId, request);
 
     private static string EquipmentPath(StartRequest request) =>
         $"/stations/{request.StationId}/chargers/{request.ChargerId}/connectors/{request.ConnectorId}";
@@ -214,8 +392,9 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
         new(Guid.NewGuid().ToString(), "charger-1", "connector-1", Guid.NewGuid());
 
     private sealed record StartRequest(string StationId, string ChargerId, string ConnectorId, Guid ExternalSessionId);
+    private sealed record StopRequest(Guid ExternalSessionId);
     private sealed record EquipmentResult(bool Occupied);
-    private sealed record StartProblem(
+    private sealed record CommandProblem(
         int Status,
         string Title,
         string Detail,
@@ -225,6 +404,7 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
     private sealed record CommandResult(
         Guid Id,
         Guid ExternalOperationId,
+        string Kind,
         string Outcome,
         Guid? SessionId,
         DateTimeOffset? AppliedAt,
@@ -236,6 +416,7 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
         string ChargerId,
         string ConnectorId,
         DateTimeOffset StartedAt,
+        DateTimeOffset? EndedAt,
         decimal PowerKw,
         string State);
 }

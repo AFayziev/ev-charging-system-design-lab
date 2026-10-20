@@ -11,6 +11,7 @@ internal static class SessionMappingExtensions
         session.ChargerId,
         session.ConnectorId,
         session.StartedAt,
+        session.EndedAt,
         session.PowerKw,
-        SessionState.Charging);
+        session.EndedAt is null ? SessionState.Charging : SessionState.Stopped);
 }

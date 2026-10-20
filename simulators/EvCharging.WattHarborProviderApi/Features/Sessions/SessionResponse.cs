@@ -7,5 +7,6 @@ internal sealed record SessionResponse(
     string ChargerId,
     string ConnectorId,
     DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt,
     decimal PowerKw,
     SessionState State);

@@ -15,6 +15,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<CommandFaults>();
 builder.Services.AddScoped<StartChargingCommandHandler>();
+builder.Services.AddScoped<StopChargingCommandHandler>();
 builder.Services.AddScoped<GetCommandQueryHandler>();
 builder.Services.AddScoped<GetCommandByExternalOperationIdQueryHandler>();
 builder.Services.AddScoped<GetSessionQueryHandler>();
@@ -30,7 +31,7 @@ app.UseAuthorization();
 
 app.MapHttpApiDiagnostics("wattharbor-provider-api");
 var publicApi = app.MapGroup("")
-    .AddEndpointFilterFactory(FaultInjectionFilters.StartResponseLoss)
+    .AddEndpointFilterFactory(FaultInjectionFilters.ResponseLoss)
     .AddEndpointFilterFactory(FaultInjectionFilters.LookupFailure);
 publicApi.MapCommandEndpoints();
 publicApi.MapSessionEndpoints();

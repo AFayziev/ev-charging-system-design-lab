@@ -4,10 +4,11 @@ internal sealed class ProviderCommand
 {
     public Guid Id { get; private set; } = Guid.CreateVersion7();
     public Guid PublicId { get; private set; } = Guid.NewGuid();
+    public CommandKind Kind { get; init; }
     public Guid ExternalOperationId { get; init; }
-    public string StationId { get; init; } = "";
-    public string ChargerId { get; init; } = "";
-    public string ConnectorId { get; init; } = "";
+    public string? StationId { get; init; }
+    public string? ChargerId { get; init; }
+    public string? ConnectorId { get; init; }
     public Guid ExternalSessionId { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public bool? Applied { get; private set; }
