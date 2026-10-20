@@ -87,7 +87,7 @@ outcome, including rejections.
 | Method and path | Purpose |
 |---|---|
 | `PUT /simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Configure simulated equipment while preserving existing occupancy |
-| `PUT /simulation/commands/{externalOperationId}` | Configure temporary command-scoped response loss and outcome-lookup failures; requires the simulation control role |
+| `PUT /simulation/commands/{externalOperationId}` | Configure temporary command-scoped response loss and outcome-lookup failures, which a stop can also match by its session ID; requires the simulation control role |
 
 ## 2. Command safety
 
@@ -95,7 +95,9 @@ WattHarbor permits bounded retry with the same provider idempotency
 key. AmpTrail requires reconciliation after a queued acknowledgement or
 ambiguous response.
 A snapshot with no active session does not establish safe repetition: a queued
-request might execute later.
+request might execute later. A stop is evidenced only by its own command record:
+an ended session does not show that this stop ended it, and a missing record permits
+the same bounded same-key resend as a start.
 
 Another AmpTrail effect request requires definitive rejection evidence and
 the [domain eligibility rules](domain.md#5-reservations). Outcome queries are

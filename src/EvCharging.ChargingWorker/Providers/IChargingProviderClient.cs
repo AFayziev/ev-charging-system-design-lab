@@ -14,4 +14,9 @@ public interface IChargingProviderClient : IDisposable
         Guid sessionPublicId,
         ProviderEquipmentAddress equipment,
         CancellationToken cancellationToken);
+
+    Task<Result<ProviderCommandResult>> StopAsync(
+        Guid operationPublicId,
+        Guid sessionPublicId,
+        CancellationToken cancellationToken);
 }

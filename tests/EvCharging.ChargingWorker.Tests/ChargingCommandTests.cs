@@ -32,7 +32,7 @@ using Xunit;
 
 namespace EvCharging.ChargingWorker.Tests;
 
-public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
+public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture) :
     IClassFixture<PlatformDatabaseFixture>,
     IAsyncLifetime
 {
@@ -47,6 +47,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         builder.Services
             .AddDbContext<PlatformDbContext>(options => options.UseNpgsql(fixture.GetDataSource("charging_messaging")));
         builder.Services.AddSingleton<StartRecorder>();
+        builder.Services.AddSingleton<StopRecorder>();
         builder.UseWolverine(options =>
         {
             options.Discovery.DisableConventionalDiscovery();
@@ -58,7 +59,10 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             options.Policies.UseDurableLocalQueues();
             options.PublishMessage<CheckChargingStart>().ToLocalQueue("automatic-check-tests");
             options.PublishMessage<StartCharging>().ToLocalQueue("resend-tests");
+            options.PublishMessage<CheckChargingStop>().ToLocalQueue("automatic-stop-check-tests");
+            options.PublishMessage<StopCharging>().ToLocalQueue("stop-resend-tests");
             options.Discovery.IncludeType<StartChargingRecorderHandler>();
+            options.Discovery.IncludeType<StopChargingRecorderHandler>();
         });
         _messaging = builder.Build();
         await _messaging.StartAsync();
@@ -101,7 +105,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
                 value => value.OperationId == operation.Id, cancellationToken);
             var saved = await observed.Operations.SingleAsync(value => value.Id == operation.Id, cancellationToken);
             Assert.Equal(1, saved.AuthorizedAttemptCount);
-            Assert.Equal(3, saved.StartRequestLimit);
+            Assert.Equal(3, saved.RequestLimit);
             Assert.Equal(attempt.AuthorizedAt.AddMinutes(3), saved.AutomaticChecksEndAt);
             Assert.Equal(2, (await ScheduledChecksAsync(operation.Id)).Length);
             Assert.Null(attempt.FinishedAt);
@@ -211,7 +215,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         if (windowExpires)
         {
             Assert.Equal(
-                ChargingStartCheckOutcome.Unresolved,
+                ChargingCheckOutcome.Unresolved,
                 (await handler.HandleAsync(new(operation.Id, Automatic: true), caller.Token)).Outcome);
         }
         else
@@ -389,15 +393,15 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
     }
 
     [Theory]
-    [InlineData("command", CommandOutcome.Confirmed, ChargingStartCheckOutcome.Resolved)]
-    [InlineData("rejected", CommandOutcome.Rejected, ChargingStartCheckOutcome.Resolved)]
-    [InlineData("session", CommandOutcome.Confirmed, ChargingStartCheckOutcome.Resolved)]
-    [InlineData("mismatched-session", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unavailable)]
-    [InlineData("missing", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unresolved)]
-    [InlineData("unauthorized", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unavailable)]
-    [InlineData("forbidden", CommandOutcome.Uncertain, ChargingStartCheckOutcome.Unavailable)]
+    [InlineData("command", CommandOutcome.Confirmed, ChargingCheckOutcome.Resolved)]
+    [InlineData("rejected", CommandOutcome.Rejected, ChargingCheckOutcome.Resolved)]
+    [InlineData("session", CommandOutcome.Confirmed, ChargingCheckOutcome.Resolved)]
+    [InlineData("mismatched-session", CommandOutcome.Uncertain, ChargingCheckOutcome.Unavailable)]
+    [InlineData("missing", CommandOutcome.Uncertain, ChargingCheckOutcome.Unresolved)]
+    [InlineData("unauthorized", CommandOutcome.Uncertain, ChargingCheckOutcome.Unavailable)]
+    [InlineData("forbidden", CommandOutcome.Uncertain, ChargingCheckOutcome.Unavailable)]
     public async Task CheckStart_QueriesExistingEffect_ResolvesOnlyMatchingEvidence(
-        string evidence, CommandOutcome expected, ChargingStartCheckOutcome checkOutcome)
+        string evidence, CommandOutcome expected, ChargingCheckOutcome checkOutcome)
     {
         var operation = await PrepareAsync();
         using var lostResponse = new ProviderTransport((_, _) => throw new HttpRequestException("Response was lost."));
@@ -417,6 +421,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             {
                 id = Guid.NewGuid(),
                 externalOperationId = operation.PublicId,
+                kind = "start",
                 outcome = "rejected",
                 sessionId = (Guid?)null,
                 appliedAt = (DateTimeOffset?)null,
@@ -466,7 +471,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         Assert.Equal(1, saved.AuthorizedAttemptCount);
         Assert.Equal(1, await database.Attempts.CountAsync(value => value.OperationId == operation.Id));
         int calls = transport.Calls;
-        if (checkOutcome == ChargingStartCheckOutcome.Resolved)
+        if (checkOutcome == ChargingCheckOutcome.Resolved)
         {
             await handler.HandleAsync(new(operation.Id), CancellationToken.None);
             Assert.Equal(calls, transport.Calls);
@@ -523,7 +528,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         var saved = await database.Operations.AsNoTracking().SingleAsync(value => value.Id == operation.Id);
         Assert.Equal(CommandOutcome.Uncertain, saved.Outcome);
         Assert.Equal(3, saved.AuthorizedAttemptCount);
-        Assert.Equal(3, saved.StartRequestLimit);
+        Assert.Equal(3, saved.RequestLimit);
         Assert.Equal(3, await database.Attempts.CountAsync(value => value.OperationId == operation.Id));
     }
 
@@ -786,16 +791,27 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             bus ?? _scope!.ServiceProvider.GetRequiredService<IMessageBus>(),
             NullLogger<CheckChargingStartCommandHandler>.Instance);
 
-    private async Task<CheckChargingStart[]> ScheduledChecksAsync(Guid operationId)
+    private static ChargingExecutionOptions TestExecutionOptions() => new()
+    {
+        MaximumCommandRequests = 3,
+        MaximumConcurrentCommands = 2,
+        MaximumAutomaticStatusChecks = 2,
+        AutomaticStatusCheckInterval = TimeSpan.FromMinutes(1)
+    };
+
+    private async Task<T[]> ScheduledAsync<T>(Guid operationId, Func<T, Guid> operationOf)
     {
         var envelopes = await _messaging!.Services.GetRequiredService<IMessageStore>().Admin.AllIncomingAsync();
-        return envelopes.Where(value => value.MessageType == typeof(CheckChargingStart).FullName)
-            .Select(value => JsonSerializer.Deserialize<CheckChargingStart>(
+        return envelopes.Where(value => value.MessageType == typeof(T).FullName)
+            .Select(value => JsonSerializer.Deserialize<T>(
                 value.Data!,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web))!)
-            .Where(value => value.OperationId == operationId)
+            .Where(value => operationOf(value) == operationId)
             .ToArray();
     }
+
+    private Task<CheckChargingStart[]> ScheduledChecksAsync(Guid operationId) =>
+        ScheduledAsync<CheckChargingStart>(operationId, value => value.OperationId);
 
     private async Task ExecuteAsync(
         Guid operationId,
@@ -820,13 +836,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             database,
             host.Services.GetRequiredService<ChargingProviderClientFactory>(),
             _clock,
-            Options.Create(new ChargingExecutionOptions
-            {
-                MaximumStartRequests = 3,
-                MaximumConcurrentStarts = 2,
-                MaximumAutomaticStatusChecks = 2,
-                AutomaticStatusCheckInterval = TimeSpan.FromMinutes(1)
-            }),
+            Options.Create(TestExecutionOptions()),
             scope.ServiceProvider.GetRequiredService<IDbContextOutbox>(),
             NullLogger<StartChargingCommandHandler>.Instance);
         await handler.HandleAsync(new(operationId, attemptNumber), cancellationToken);
@@ -908,13 +918,14 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         return operation;
     }
 
-    private HttpResponseMessage Applied(Guid externalOperationId) => new(HttpStatusCode.OK)
+    private HttpResponseMessage Applied(Guid externalOperationId, string kind = "start") => new(HttpStatusCode.OK)
     {
         Content = JsonContent.Create(
             new
             {
                 id = Guid.NewGuid(),
                 externalOperationId,
+                kind,
                 outcome = "applied",
                 sessionId = Guid.NewGuid(),
                 appliedAt = _clock.GetUtcNow(),

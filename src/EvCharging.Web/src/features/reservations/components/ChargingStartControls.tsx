@@ -7,16 +7,11 @@ import {
   IconPlug,
 } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { HttpStatusCode } from "axios";
 import { useState } from "react";
 import { useUserSession } from "@/features/auth/useUserSession";
+import { getHttpFailure, getHttpProblemCode } from "@/lib/http-errors";
 import {
-  getHttpFailure,
-  getHttpProblemCode,
-  getHttpStatus,
-} from "@/lib/http-errors";
-import {
-  isStartUnresolved,
+  isUnresolved,
   checkChargingStart,
   reservationKeys,
   startCharging,
@@ -25,6 +20,7 @@ import {
   type StartOperation,
 } from "../api";
 import { getStartPresentation } from "../start-presentation";
+import { useSubmissionIdentity } from "../useSubmissionIdentity";
 import { connectorBusyCode } from "../errors";
 import {
   formatReservationTransitionTime,
@@ -48,8 +44,8 @@ export function ChargingStartControls({
   // Refresh on demand rather than fetch a session for every reservation card.
   const session = useUserSession({ enabled: false });
   const [opened, setOpened] = useState(false);
-  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const operation = reservation.startOperation;
+  const submission = useSubmissionIdentity(operation?.id ?? null);
   const updateOperation = (saved: StartOperation) => {
     client.setQueriesData<ReservationList>(
       { queryKey: reservationKeys.lists },
@@ -68,7 +64,7 @@ export function ChargingStartControls({
     retry: false,
     onMutate: () => client.cancelQueries({ queryKey: reservationKeys.lists }),
     mutationFn: async () => {
-      if (!isStartUnresolved(operation) || !operation) {
+      if (!isUnresolved(operation) || !operation) {
         return null;
       }
       const refreshed = await session.query.refetch({
@@ -87,33 +83,24 @@ export function ChargingStartControls({
       void onRefresh();
     },
   });
-  const [unconfirmedAgainst, setUnconfirmedAgainst] = useState<string | null>();
-  const ambiguous =
-    unconfirmedAgainst !== undefined &&
-    unconfirmedAgainst === (operation?.id ?? null);
   const mutation = useMutation({
     mutationFn: (token: string) =>
-      startCharging(reservation.id, requestKey, token),
+      startCharging(reservation.id, submission.requestKey, token),
     retry: false,
     onSuccess: (operation) => {
-      setUnconfirmedAgainst(undefined);
+      submission.succeeded();
       setOpened(false);
       updateOperation(operation);
       void onRefresh();
     },
     onError: (error) => {
-      const status = getHttpStatus(error);
-      setUnconfirmedAgainst(
-        status === undefined || status >= HttpStatusCode.InternalServerError
-          ? (operation?.id ?? null)
-          : undefined,
-      );
+      submission.failed(error);
       setOpened(false);
       void onRefresh();
     },
   });
   const blocked =
-    isStartUnresolved(operation) ||
+    isUnresolved(operation) ||
     (operation?.outcome === "confirmed" && operation.lifecycle !== "failed");
   const now = Date.now();
   const check =
@@ -132,16 +119,21 @@ export function ChargingStartControls({
     !statusCheck.isPending &&
     !mutation.isPending;
   const failure =
-    mutation.isError && (unconfirmedAgainst === undefined || ambiguous)
+    mutation.isError && submission.showsFailure
       ? getHttpFailure(mutation.error, "write")
       : undefined;
   const connectorBusy =
     getHttpProblemCode(mutation.error) === connectorBusyCode;
-  const outcomeContent = getStartPresentation(
-    operation,
-    active && !late,
-    reservation.arrivalDeadline,
-  );
+  // A live stop supersedes the start result once the session is ending.
+  const outcomeContent =
+    reservation.stopOperation &&
+    reservation.stopOperation.outcome !== "rejected"
+      ? undefined
+      : getStartPresentation(
+          operation,
+          active && !late,
+          reservation.arrivalDeadline,
+        );
 
   return (
     <>
@@ -153,18 +145,18 @@ export function ChargingStartControls({
             disabled={!canStart}
             loading={mutation.isPending}
             onClick={() => {
-              if (!ambiguous) setRequestKey(crypto.randomUUID());
+              submission.prepare();
               setOpened(true);
             }}
           >
-            {ambiguous
+            {submission.ambiguous
               ? "Retry start request"
               : operation?.outcome === "rejected" || mutation.isError
                 ? "Try starting again"
                 : "Start charging"}
           </Button>
         )}
-        {isStartUnresolved(operation) && (
+        {isUnresolved(operation) && (
           <Button
             color="blue"
             variant="light"
@@ -175,17 +167,21 @@ export function ChargingStartControls({
             Check status
           </Button>
         )}
-        {active && !blocked && !ambiguous && !statusUnavailable && onCancel && (
-          <Button
-            variant="outline"
-            color="red"
-            fullWidth
-            disabled={mutation.isPending}
-            onClick={() => onCancel(reservation)}
-          >
-            Cancel reservation
-          </Button>
-        )}
+        {active &&
+          !blocked &&
+          !submission.ambiguous &&
+          !statusUnavailable &&
+          onCancel && (
+            <Button
+              variant="outline"
+              color="red"
+              fullWidth
+              disabled={mutation.isPending}
+              onClick={() => onCancel(reservation)}
+            >
+              Cancel reservation
+            </Button>
+          )}
       </div>
       <Stack gap="xs" className={classes.chargingStatus}>
         {statusCheck.isPending && (
@@ -198,7 +194,7 @@ export function ChargingStartControls({
             We are checking whether charging started. Please wait.
           </Alert>
         )}
-        {isStartUnresolved(operation) &&
+        {isUnresolved(operation) &&
           !operation?.automaticChecksEndAt &&
           check &&
           !statusCheck.isPending &&
@@ -213,7 +209,7 @@ export function ChargingStartControls({
               have started. Do not submit another start.
             </Alert>
           )}
-        {isStartUnresolved(operation) && statusCheck.isError && (
+        {isUnresolved(operation) && statusCheck.isError && (
           <Alert
             color="red"
             title={getHttpFailure(statusCheck.error).title}
@@ -225,7 +221,7 @@ export function ChargingStartControls({
         )}
         {outcomeContent &&
           !statusCheck.isPending &&
-          (!isStartUnresolved(operation) ||
+          (!isUnresolved(operation) ||
             operation?.automaticChecksEndAt ||
             !check ||
             check.outcome === "resolved") && (
@@ -236,13 +232,13 @@ export function ChargingStartControls({
               role="status"
             >
               {outcomeContent.text}
-              {isStartUnresolved(operation) &&
+              {isUnresolved(operation) &&
                 check?.outcome === "unresolved" &&
                 operation?.automaticChecksEndAt &&
                 " The latest status check did not provide a definite result."}
             </Alert>
           )}
-        {ambiguous && !blocked && (
+        {submission.ambiguous && !blocked && (
           <Alert
             color="orange"
             title="Start request not confirmed"
@@ -253,7 +249,7 @@ export function ChargingStartControls({
             request.
           </Alert>
         )}
-        {!blocked && !ambiguous && failure && (
+        {!blocked && !submission.ambiguous && failure && (
           <Alert
             color={connectorBusy ? "orange" : "red"}
             title={connectorBusy ? "Connector is still in use" : failure.title}

@@ -153,8 +153,8 @@ public sealed class AppHostFixture : IAsyncLifetime
         builder.CreateResourceBuilder(notifications)
             .WithEnvironment("NotificationPreparation__MaximumConcurrentPreparations", "4");
         builder.CreateResourceBuilder(charging)
-            .WithEnvironment("ChargingExecution__MaximumStartRequests", "3")
-            .WithEnvironment("ChargingExecution__MaximumConcurrentStarts", "2")
+            .WithEnvironment("ChargingExecution__MaximumCommandRequests", "3")
+            .WithEnvironment("ChargingExecution__MaximumConcurrentCommands", "2")
             .WithEnvironment("ChargingExecution__MaximumAutomaticStatusChecks", "2")
             .WithEnvironment("ChargingExecution__AutomaticStatusCheckInterval", "00:00:03")
             .WithEnvironment("ReservationExpiry__SweepInterval", "00:05:00")

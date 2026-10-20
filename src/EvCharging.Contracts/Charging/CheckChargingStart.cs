@@ -2,9 +2,11 @@ namespace EvCharging.Contracts.Charging;
 
 public sealed record CheckChargingStart(Guid OperationId, bool Automatic = false);
 
-public sealed record ChargingStartCheckResult(ChargingStartCheckOutcome Outcome);
+public sealed record CheckChargingStop(Guid OperationId);
 
-public enum ChargingStartCheckOutcome
+public sealed record ChargingCheckResult(ChargingCheckOutcome Outcome);
+
+public enum ChargingCheckOutcome
 {
     Resolved,
     Unresolved,

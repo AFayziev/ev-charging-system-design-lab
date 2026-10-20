@@ -84,16 +84,6 @@ public sealed class WattHarborFixture : IAsyncLifetime
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task ConfigureCommandFaultAsync(
-        Guid externalOperationId, bool loseResponse, int? lookupStatusCode = null)
-    {
-        var controls = _controls ?? throw new InvalidOperationException("The control client is not ready.");
-        using var response = await controls.PutAsJsonAsync(
-            $"/simulation/commands/{externalOperationId}",
-            new CommandFaultSettings(Guid.NewGuid(), loseResponse, lookupStatusCode));
-        response.EnsureSuccessStatusCode();
-    }
-
     public async Task DisposeAsync()
     {
         _charging?.Dispose();
@@ -106,6 +96,5 @@ public sealed class WattHarborFixture : IAsyncLifetime
     }
 
     private sealed record EquipmentSettings(decimal PowerKw, bool Enabled);
-    private sealed record CommandFaultSettings(Guid ExternalSessionId, bool LoseResponse, int? LookupStatusCode);
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string AccessToken);
 }

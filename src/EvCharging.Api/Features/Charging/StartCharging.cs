@@ -3,7 +3,6 @@ using EvCharging.Api.Errors;
 using EvCharging.Api.Features.Reservations;
 using EvCharging.Contracts.Charging;
 using EvCharging.Domain.Charging;
-using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Extensions;
 using FluentResults;
@@ -43,7 +42,8 @@ public sealed class StartChargingCommandHandler(
 
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
         await database.LockDriverReservationsAsync(driver.Id, cancellationToken);
-        var existing = await FindOperationAsync(driver.Id, command.IdempotencyKey, cancellationToken);
+        var existing = await database.FindOperationAsync(
+            driver.Id, ChargingCommandKind.Start, command.IdempotencyKey, cancellationToken);
         if (existing is not null)
         {
             var originalReservation = existing.Session?.Reservation
@@ -53,7 +53,7 @@ public sealed class StartChargingCommandHandler(
                 : Conflict(IdempotencyMismatchCode, "This request key was already used for a different reservation.");
         }
 
-        var loaded = await LoadReservationAsync(command.ReservationId, identity, cancellationToken);
+        var loaded = await database.LoadOwnedAsync(command.ReservationId, identity, cancellationToken);
         if (loaded.IsFailed)
         {
             return Result.Fail<StartOperationResponse>(loaded.Errors);
@@ -73,28 +73,6 @@ public sealed class StartChargingCommandHandler(
 
         var operation = Operation.AcceptStart(accepted.Value, command.IdempotencyKey);
         return await SaveIntentAsync(operation, cancellationToken);
-    }
-
-    private Task<Operation?> FindOperationAsync(Guid driverId, Guid key, CancellationToken cancellationToken) =>
-        database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
-            .SingleOrDefaultAsync(
-                value => value.DriverId == driverId && value.Kind == ChargingCommandKind.Start
-                    && value.IdempotencyKey == key,
-                cancellationToken);
-
-    private async Task<Result<Reservation>> LoadReservationAsync(
-        Guid publicId, UserIdentity identity, CancellationToken cancellationToken)
-    {
-        var reservation = await database.Reservations.OwnedBy(identity)
-            .SingleOrDefaultAsync(value => value.PublicId == publicId, cancellationToken);
-        if (reservation is not null)
-        {
-            return Result.Ok(reservation);
-        }
-
-        return await database.Reservations.AnyAsync(value => value.PublicId == publicId, cancellationToken)
-            ? Result.Fail<Reservation>(new ForbiddenError())
-            : Result.Fail<Reservation>(new NotFoundError<Guid>("reservation", publicId));
     }
 
     private Task<bool> HasConnectorClaimAsync(Guid connectorId, CancellationToken cancellationToken) =>

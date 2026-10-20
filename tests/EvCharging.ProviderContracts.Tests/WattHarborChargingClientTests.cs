@@ -24,6 +24,7 @@ public sealed class WattHarborChargingClientTests
         var payload = new CommandPayload(
             Guid.NewGuid(),
             externalOperationId,
+            "start",
             "applied",
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
@@ -121,6 +122,7 @@ public sealed class WattHarborChargingClientTests
     private sealed record CommandPayload(
         Guid Id,
         Guid ExternalOperationId,
+        string Kind,
         string Outcome,
         Guid? SessionId,
         DateTimeOffset? AppliedAt,

@@ -578,7 +578,7 @@ These are overridable experiment settings, not production availability targets.
 | Freshness limit | 10 seconds | Greater source-observation age is stale |
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
-| Start request limit | 3 total requests | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and start eligibility |
+| Command request limit | 3 total requests per start or stop | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and command eligibility |
 | Automatic reconciliation | Every 5 seconds, 6 scheduled checks per run | Captured checking window closes one interval after the final scheduled check; manual or operator checks remain available |
 
 Wolverine scheduled work and retry policies bound automatic reconciliation under

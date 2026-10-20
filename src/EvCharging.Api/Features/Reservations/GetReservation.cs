@@ -27,7 +27,8 @@ public sealed record ReservationResponse(
     DateTimeOffset? CancelledAt,
     DateTimeOffset? ExpiredAt,
     DateTimeOffset ArrivalDeadline,
-    StartOperationResponse? StartOperation = null);
+    StartOperationResponse? StartOperation = null,
+    StopOperationResponse? StopOperation = null);
 
 public sealed record GetReservationRequest(Guid Id) : IAuthenticatedRequest<ReservationResponse>;
 

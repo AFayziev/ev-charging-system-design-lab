@@ -64,6 +64,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M11 | Hosted R2 and Cloudflare CDN | M10.01 | Planned |
 | M12 | Managed PostgreSQL pooling, replication, and failover | M04; charging failover requires M08 | Planned |
 | M13 | Complete lab demonstrations and fault verification | M01–M12, M04.03; hosted email gate M05.07 | Planned |
+| M14 | AmpTrail queued-provider integration | M06, M07 | Planned |
 
 M04.01 is the first charging-domain feature: a visitor browses
 stations and equipment from the seeded relational data. Notifications, live
@@ -388,7 +389,7 @@ Notification failure leaves accepted reservations intact and remains separately 
     unresolved authorized attempts through the application. Verify existing effects
     can still be reconciled after the deadline without authorizing another start.
     Depends on M06.01.4.
-- [ ] M06.02 Deliver driver stop with the same operation tracking and recovery;
+- [x] M06.02 Deliver driver stop with the same operation tracking and recovery;
   display confirmed stop separately from pending final usage. Verify rejected
   and uncertain stops, overruns, and recovery after worker loss.
   Depends on M06.01. Sub-items are sequenced as follows:
@@ -397,24 +398,21 @@ Notification failure leaves accepted reservations intact and remains separately 
     and its documented contract. Stopping an already ended session is applied;
     an unknown session is a definitive rejection. Verify replays, concurrent and
     competing stops, key reuse, response loss, and connector release.
-  - [ ] M06.02.2 Stop acceptance: make operation limits and guards kind-neutral,
+  - [x] M06.02.2 Stop acceptance: make operation limits and guards kind-neutral,
     accept a driver stop for an active session with one live stop per session,
     and expose typed stop status. Verify ownership, idempotency, conflicts, and
     rejected stops returning the session to active.
     Depends on M06.02.1.
-  - [ ] M06.02.3 Stop execution and recovery: execute stops with numbered attempts,
+  - [x] M06.02.3 Stop execution and recovery: execute stops with numbered attempts,
     automatic outcome checks, and same-key resends, keeping a confirmed stop in
     stopping until final usage exists. Verify rejected, uncertain, and redelivered
     stops and recovery after worker interruption.
     Depends on M06.02.2.
-  - [ ] M06.02.4 Driver stop UI and end-to-end flow: show stop progress, unresolved
-    stops, and confirmed stop with pending final usage. Verify overruns blocking
-    later starts through the application.
+  - [x] M06.02.4 Driver stop UI and end-to-end flow: show stop progress, unresolved
+    stops, and confirmed stop with pending final usage. An unresolved stop offers
+    no driver status action; it awaits automatic checks and operator investigation.
+    Verify overruns blocking later starts through the application.
     Depends on M06.02.3.
-- [ ] M06.03 Deliver start/stop for AmpTrail with its persistent
-  lab provider, client, acknowledgement/query behavior, and correlation recovery.
-  Verify lost acknowledgements and delayed effects without blind resubmission.
-  Depends on M06.01 and M06.02.
 - [ ] M06.04 Deliver assigned-operator session/attempt investigation and audited
   reconciliation requests, including exhausted recovery and unresolved outcomes.
   Expose execution attempts, provider identifiers, outcomes, failure summaries,
@@ -424,17 +422,18 @@ Notification failure leaves accepted reservations intact and remains separately 
   use the durable worker path with bounded admission, rather than directly resending effects or releasing
   claims without evidence. Verify assignment denial, audited requests, repeated
   requests, provider unavailability, and retained uncertainty when evidence is absent.
-  Depends on M04.02 and M06.01–M06.03.
-- [ ] M06.05 Exercise both provider flows through crash after external effect,
-  provider restart, rate limiting, circuit opening, and per-provider concurrency
-  isolation. Verify no SQL transaction spans an external call and uncertain
-  commits resolve by operation identity. Depends on M06.01–M06.03.
+  Depends on M04.02 and M06.01–M06.02.
+- [ ] M06.05 Exercise the WattHarbor flow through crash after external effect,
+  provider restart, rate limiting, and circuit opening, including attempts left
+  unfinished by an interrupted request. Verify no SQL transaction spans an
+  external call and uncertain commits resolve by operation identity.
+  Depends on M06.01–M06.02.
 - [ ] M06.06 Verify cancellation/start races, queued-start expiry, retained
   uncertain claims after expiry, session exclusivity, and effect limits across
-  worker retries and redelivery. Depends on M05.03 and M06.01–M06.03.
+  worker retries and redelivery. Depends on M05.03 and M06.01–M06.02.
 
 Acceptance: driver start/stop and operator investigation work through the gateway,
-durable workers, and both providers. Uncertain effects remain visible and
+durable workers, and the synchronous provider. Uncertain effects remain visible and
 recoverable without authorizing conflicting starts. Final completion depends on M07.
 
 ### M07 — Charging progress, history, and completion
@@ -446,7 +445,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   MongoDB history/latest views and SQL evidence. Add source-time freshness,
   sequence-conditional updates, checkpoints, canonical units, stalled-session
   detection, and bounded browser polling. Verify progress and visible staleness
-  end to end. Depends on M06.01; AmpTrail coverage requires M06.03.
+  end to end. Depends on M06.01.
 - [ ] M07.02 Deliver completed-session final usage and completion notifications.
   Match provider/session evidence, validate cumulative usage, conditionally
   freeze completion facts, and commit outgoing completion events with SQL state.
@@ -612,6 +611,24 @@ flow. Every applicable lab fault scenario has repeatable injection and recorded
 business outcomes. Local demonstrations require no cloud subscription; hosted exercises
 use the same application contracts with configured provider endpoints.
 
+### M14 — AmpTrail queued-provider integration
+
+Deferred until the synchronous provider flows are complete and hardened. The
+AmpTrail lab provider remains a stub host until then.
+
+- [ ] M14.01 Deliver start/stop for AmpTrail with its persistent
+  lab provider, client, acknowledgement/query behavior, and correlation recovery.
+  Verify lost acknowledgements, delayed effects, and interrupted requests without
+  blind resubmission. Add AmpTrail coverage to charging progress.
+  Depends on M06.02 and M07.01.
+- [ ] M14.02 Exercise both provider flows through crash after external effect,
+  provider restart, rate limiting, circuit opening, and per-provider concurrency
+  isolation. Depends on M06.05 and M14.01.
+
+Acceptance: driver start/stop, progress, and operator investigation work against
+both providers. Uncertain AmpTrail effects remain visible and recoverable without
+blind resubmission.
+
 ## 4. Component and verification coverage
 
 | Component / boundary | Implementation | Principal verification |
@@ -624,7 +641,7 @@ use the same application contracts with configured provider endpoints.
 | Managed read replica and PgBouncer | M12; application routes introduced in M04 | Lag, read-only routes, server-pool saturation, reconnect/failover |
 | RabbitMQ jobs/topics, Wolverine inbox/outbox | Reservation expiry M05.02; independent subscribers M05.04 onward | Publish/ack crash windows, redelivery, independent subscribers |
 | Durable scheduler / reconciliation | Reservation expiry M05.02; charging M06, files M10 | Restart, deadlines, exhaustion, expiry races, missing notices |
-| Provider simulators, HTTP resilience | M06, M07 | Lost responses, idempotency differences, rate limits, physical evidence |
+| Provider simulators, HTTP resilience | M06, M07; queued provider M14 | Lost responses, idempotency differences, rate limits, physical evidence |
 | Notification mail sink/adapters and worker | Reservation notifications M05.04; completion M07.02; external exercise M05.07 | Local capture, real email delivery, ambiguity, independent retry |
 | Kafka and observation consumers | M07 | Durable acceptance, lag, offset recovery, replay |
 | MongoDB | M07, M10 | Latest/history ordering, outage catch-up, diagnostic queries |

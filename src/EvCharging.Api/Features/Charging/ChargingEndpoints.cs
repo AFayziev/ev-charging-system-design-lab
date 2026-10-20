@@ -15,6 +15,7 @@ internal static class ChargingEndpoints
         var routes = app.MapGroup("/reservations/{id:guid}").RequireAuthorization(PlatformRole.Driver.ToClaimValue());
         routes.MapPost("/start", Start);
         routes.MapPost("/start/{operationId:guid}/check", Check);
+        routes.MapPost("/stop", Stop);
         return app;
     }
 
@@ -35,11 +36,37 @@ internal static class ChargingEndpoints
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
-            _ when result.HasError<ChargingStartError>(out var errors) => TypedResults.Problem(
-                statusCode: StatusCodes.Status409Conflict,
-                title: "Charging start conflict",
-                detail: errors.First().Message,
-                extensions: new Dictionary<string, object?> { ["code"] = errors.First().Code }),
+            _ when result.HasError<ChargingStartError>(out var errors) =>
+                Conflict("Charging start conflict", errors.First().Message, errors.First().Code),
+            _ => TypedResults.Accepted($"/api/reservations/{id}", result.Value)
+        };
+    }
+
+    private static ProblemHttpResult Conflict(string title, string detail, string code) => TypedResults.Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: title,
+        detail: detail,
+        extensions: new Dictionary<string, object?> { ["code"] = code });
+
+    private static async Task<Results<
+        Accepted<StopOperationResponse>,
+        ValidationProblem,
+        NotFound,
+        ChallengeHttpResult,
+        ForbidHttpResult,
+        ProblemHttpResult>> Stop(
+            Guid id, StopChargingRequest request, IMessageBus bus, CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<StopOperationResponse>>(
+            new StopChargingCommand(id, request.IdempotencyKey), cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
+            _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
+            _ when result.HasError<ChargingStopError>(out var errors) =>
+                Conflict("Charging stop conflict", errors.First().Message, errors.First().Code),
             _ => TypedResults.Accepted($"/api/reservations/{id}", result.Value)
         };
     }
@@ -59,7 +86,7 @@ internal static class ChargingEndpoints
             _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
-            _ when result.Value.Outcome == ChargingStartCheckOutcome.Unavailable =>
+            _ when result.Value.Outcome == ChargingCheckOutcome.Unavailable =>
                 TypedResults.Problem(
                     statusCode: StatusCodes.Status503ServiceUnavailable,
                     title: "Could not check the station",

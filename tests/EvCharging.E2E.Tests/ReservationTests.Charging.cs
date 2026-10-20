@@ -377,18 +377,21 @@ public sealed partial class ReservationTests
     }
 
     private static Task<JsonElement> SubmitStartAsync(IPage page, Guid reservationId, Guid key) =>
+        PostKeyedAsync(page, $"/api/reservations/{reservationId}/start", key);
+
+    private static Task<JsonElement> PostKeyedAsync(IPage page, string path, Guid key) =>
         page.EvaluateAsync<JsonElement>(
             """
             async request => {
                 const session = await (await fetch('/auth/session')).json();
-                const response = await fetch(`/api/reservations/${request.id}/start`, {
+                const response = await fetch(request.path, {
                     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': session.antiforgeryToken },
                     body: JSON.stringify({ idempotencyKey: request.key })
                 });
                 return { status: response.status, body: await response.json().catch(() => null) };
             }
             """,
-            new { id = reservationId, key });
+            new { path, key });
 
     private async Task<Reservation> PastForeignBookingAsync()
     {

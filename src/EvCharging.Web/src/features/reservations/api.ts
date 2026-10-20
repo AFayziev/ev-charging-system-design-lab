@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 export interface Reservation {
   readonly arrivalDeadline: string;
   readonly startOperation: StartOperation | null;
+  readonly stopOperation: StopOperation | null;
   readonly id: string;
   readonly stationId: string;
   readonly stationName: string;
@@ -23,16 +24,26 @@ export interface Reservation {
   readonly expiredAt: string | null;
 }
 
+export type CommandOutcome = "pending" | "confirmed" | "rejected" | "uncertain";
+export type SessionLifecycle =
+  "starting" | "active" | "stopping" | "completed" | "failed";
+
 export interface StartOperation {
   readonly id: string;
   readonly sessionId: string;
-  readonly outcome: "pending" | "confirmed" | "rejected" | "uncertain";
-  readonly lifecycle:
-    "starting" | "active" | "stopping" | "completed" | "failed";
+  readonly outcome: CommandOutcome;
+  readonly lifecycle: SessionLifecycle;
   readonly acceptedAt: string;
   readonly startedAt: string | null;
   readonly failureReason: "chargingServiceUnavailable" | null;
   readonly automaticChecksEndAt: string | null;
+}
+
+export interface StopOperation {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly outcome: CommandOutcome;
+  readonly acceptedAt: string;
 }
 
 export interface ChargingStartCheck {
@@ -40,14 +51,16 @@ export interface ChargingStartCheck {
   readonly outcome: "resolved" | "unresolved" | "unavailable";
 }
 
-export function isStartUnresolved(operation: StartOperation | null) {
+export function isUnresolved(
+  operation: { readonly outcome: CommandOutcome } | null,
+) {
   return operation?.outcome === "pending" || operation?.outcome === "uncertain";
 }
 
 export function hasCurrentCharging(reservation: Reservation) {
   const operation = reservation.startOperation;
   return (
-    isStartUnresolved(operation) ||
+    isUnresolved(operation) ||
     operation?.lifecycle === "active" ||
     operation?.lifecycle === "stopping"
   );
@@ -61,6 +74,20 @@ export async function startCharging(
 ): Promise<StartOperation> {
   const response = await api.post<StartOperation>(
     `/api/reservations/${reservationId}/start`,
+    { idempotencyKey },
+    { headers: { "X-CSRF-TOKEN": token }, signal },
+  );
+  return response.data;
+}
+
+export async function stopCharging(
+  reservationId: string,
+  idempotencyKey: string,
+  token: string,
+  signal?: AbortSignal,
+): Promise<StopOperation> {
+  const response = await api.post<StopOperation>(
+    `/api/reservations/${reservationId}/stop`,
     { idempotencyKey },
     { headers: { "X-CSRF-TOKEN": token }, signal },
   );
@@ -173,7 +200,8 @@ export const reservationsQuery = (afterId: string | null) =>
       return query.state.data?.reservations.some(
         (reservation) =>
           reservation.state === "active" ||
-          isStartUnresolved(reservation.startOperation),
+          isUnresolved(reservation.startOperation) ||
+          isUnresolved(reservation.stopOperation),
       )
         ? 10_000
         : false;

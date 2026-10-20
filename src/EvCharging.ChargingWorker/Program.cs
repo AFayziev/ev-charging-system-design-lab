@@ -14,6 +14,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
 builder.AddChargingProviders();
 builder.AddPlatformPersistence();
+int maximumConcurrentCommands = builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentCommands");
 int maximumConcurrentChecks = builder.Configuration.GetValue<int>("ReservationExpiry:MaximumConcurrentChecks");
 var retryDelays = builder.Configuration.GetSection("MessagingFailures:TransientDatabaseRetryDelays")
     .Get<TimeSpan[]>() ?? throw new InvalidOperationException("Database message retry delays are required.");
@@ -30,6 +31,8 @@ builder.AddMessaging(
         options.Policies.ForMessagesOfType<ExpireReservation>().Audit(message => message.ReservationId);
         options.Policies.ForMessagesOfType<StartCharging>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CheckChargingStart>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<StopCharging>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<CheckChargingStop>().Audit(message => message.OperationId);
         options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure).ScheduleRetry(retryDelays);
         options.Policies
             .OnException(
@@ -41,10 +44,10 @@ builder.AddMessaging(
         options.LocalQueueFor<SweepOverdueReservations>().Sequential();
         options.ListenToRabbitQueue(ReservationEventTopology.ChargingQueue)
             .MaximumParallelMessages(maximumConcurrentChecks);
-        options.ListenToRabbitQueue(ChargingCommandTopology.StartQueue)
-            .MaximumParallelMessages(builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentStarts"));
-        options.ListenToRabbitQueue(ChargingCommandTopology.StatusCheckQueue)
-            .MaximumParallelMessages(builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentStarts"));
+        foreach (string queue in ChargingCommandTopology.ListenerQueues)
+        {
+            options.ListenToRabbitQueue(queue).MaximumParallelMessages(maximumConcurrentCommands);
+        }
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddHttpClient("gateway", client => client.BaseAddress = new("https+http://gateway/api/"));

@@ -156,14 +156,14 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("public_id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<int?>("RequestLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("request_limit");
+
                     b.Property<Guid>("SessionId")
                         .HasColumnType("uuid")
                         .HasColumnName("session_id")
                         .HasAnnotation("Audit:Included", true);
-
-                    b.Property<int?>("StartRequestLimit")
-                        .HasColumnType("integer")
-                        .HasColumnName("start_request_limit");
 
                     b.HasKey("Id")
                         .HasName("pk_operations");
@@ -181,7 +181,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.ToTable("operations", "charging", t =>
                         {
-                            t.HasCheckConstraint("ck_operations_start_request_budget", "authorized_attempt_count >= 0 AND (start_request_limit IS NULL AND authorized_attempt_count = 0 OR start_request_limit IS NOT NULL AND start_request_limit > 0 AND authorized_attempt_count <= start_request_limit)");
+                            t.HasCheckConstraint("ck_operations_request_budget", "authorized_attempt_count >= 0 AND (request_limit IS NULL AND authorized_attempt_count = 0 OR request_limit IS NOT NULL AND request_limit > 0 AND authorized_attempt_count <= request_limit)");
                         });
 
                     b.HasAnnotation("Audit:ResourceType", "Operation");

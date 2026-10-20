@@ -193,6 +193,7 @@ it("shows the created booking once and clears feedback on reload", async () => {
     expiredAt: null,
     arrivalDeadline: "2029-01-10T05:10:00Z",
     startOperation: null,
+    stopOperation: null,
   };
   get.mockImplementation(async (path: string) => ({
     data:

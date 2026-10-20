@@ -41,8 +41,7 @@ internal static class ReservationResponseMappings
     {
         var ids = reservations.Select(value => value.Id).ToArray();
         var operations = await database.Operations.AsNoTracking().Include(value => value.Session)
-            .Where(value => value.Kind == ChargingCommandKind.Start && value.Session != null
-                && ids.Contains(value.Session.ReservationId))
+            .Where(value => value.Session != null && ids.Contains(value.Session.ReservationId))
             .OrderByDescending(value => value.AcceptedAt)
             .ThenByDescending(value => value.Id)
             .Select(
@@ -56,17 +55,18 @@ internal static class ReservationResponseMappings
                         .FirstOrDefault()
                 })
             .ToListAsync(cancellationToken);
-        var latest = operations.GroupBy(value => value.Operation.Session!.ReservationId)
-            .ToDictionary(
-                group => group.Key,
-                group =>
-                {
-                    var latestOperation = group.First();
-                    return latestOperation.Operation.ToResponse(
-                        latestOperation.ResponseStatusCode);
-                });
+        var latest = operations
+            .GroupBy(value => (value.Operation.Session!.ReservationId, value.Operation.Kind))
+            .ToDictionary(group => group.Key, group => group.First());
         return reservations.Select(
-            value => value.ToResponse() with { StartOperation = latest.GetValueOrDefault(value.Id) })
+            value => value.ToResponse() with
+            {
+                StartOperation = latest.GetValueOrDefault((value.Id, ChargingCommandKind.Start)) is { } start
+                    ? start.Operation.ToResponse(start.ResponseStatusCode)
+                    : null,
+                StopOperation = latest.GetValueOrDefault((value.Id, ChargingCommandKind.Stop))?.Operation
+                    .ToStopResponse()
+            })
             .ToArray();
     }
 }

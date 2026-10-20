@@ -18,6 +18,7 @@ public sealed class WattHarborChargingClient(
 
     private const string ConnectorUnavailable = "connector_unavailable";
     private const string ExternalSessionIdConflict = "external_session_id_conflict";
+    private const string SessionNotFound = "session_not_found";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         RespectRequiredConstructorParameters = true,
@@ -45,7 +46,33 @@ public sealed class WattHarborChargingClient(
         };
         request.Headers.Add("Idempotency-Key", operationPublicId.ToString());
         return await SendAsync(
-            request, (response, body) => ReadStart(response, body, operationPublicId), cancellationToken);
+            request,
+            (response, body) => ReadCommand(response, body, operationPublicId, ProviderCommandKind.Start),
+            cancellationToken);
+    }
+
+    public async Task<Result<ProviderCommandResult>> StopAsync(
+        Guid operationPublicId,
+        Guid sessionPublicId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(operationPublicId, Guid.Empty);
+        ArgumentOutOfRangeException.ThrowIfEqual(sessionPublicId, Guid.Empty);
+        using var scope = logger.BeginScope(new Dictionary<string, object>
+        {
+            ["ProviderClient"] = nameof(WattHarborChargingClient),
+            ["OperationPublicId"] = operationPublicId,
+            ["SessionPublicId"] = sessionPublicId
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "commands/stop")
+        {
+            Content = JsonContent.Create(new StopRequest(sessionPublicId))
+        };
+        request.Headers.Add("Idempotency-Key", operationPublicId.ToString());
+        return await SendAsync(
+            request,
+            (response, body) => ReadCommand(response, body, operationPublicId, ProviderCommandKind.Stop),
+            cancellationToken);
     }
 
     public Task<Result<ProviderCommandResult?>> GetCommandAsync(Guid id, CancellationToken cancellationToken) =>
@@ -68,8 +95,8 @@ public sealed class WattHarborChargingClient(
             session => session.ExternalSessionId == externalSessionId,
             cancellationToken);
 
-    private static Result<ProviderCommandResult> ReadStart(
-        HttpResponseMessage response, string body, Guid externalOperationId)
+    private static Result<ProviderCommandResult> ReadCommand(
+        HttpResponseMessage response, string body, Guid externalOperationId, ProviderCommandKind kind)
     {
         // WattHarbor rejects these requests before creating or executing a command.
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
@@ -82,7 +109,7 @@ public sealed class WattHarborChargingClient(
         {
             var command = Deserialize<ProviderCommandResult>(body);
             bool matches = IsValid(command) && command.Outcome == ProviderCommandOutcome.Applied
-                && command.ExternalOperationId == externalOperationId;
+                && command.ExternalOperationId == externalOperationId && command.Kind == kind;
             return matches
                 ? Result.Ok(command with { AppliedAt = command.AppliedAt?.ToUniversalTime() })
                 : Result.Fail<ProviderCommandResult>(new ProviderResponseError(response.StatusCode, body));
@@ -92,7 +119,7 @@ public sealed class WattHarborChargingClient(
         {
             var problem = Deserialize<StartProblem>(body);
             if (response.StatusCode == HttpStatusCode.Conflict && problem.Status == (int)HttpStatusCode.Conflict
-                && IsRejection(problem.Code)
+                && IsRejection(problem.Code, kind)
                 && problem.CommandId is { } commandId && commandId != Guid.Empty
                 && problem.ExternalOperationId == externalOperationId)
             {
@@ -224,7 +251,7 @@ public sealed class WattHarborChargingClient(
             var rejection = rejections.First();
             logger.Log(
                 rejection.CommandId is null ? LogLevel.Error : LogLevel.Information,
-                "Provider rejected start for {ProviderPath}, command {ProviderCommandId}, HTTP {StatusCode}, code {RejectionCode}",
+                "Provider rejected command for {ProviderPath}, command {ProviderCommandId}, HTTP {StatusCode}, code {RejectionCode}",
                 path,
                 rejection.CommandId,
                 (int)status,
@@ -246,8 +273,12 @@ public sealed class WattHarborChargingClient(
     private static T Deserialize<T>(string body) => JsonSerializer.Deserialize<T>(body, JsonOptions)
         ?? throw new JsonException("The provider response is empty.");
 
-    private static bool IsRejection([NotNullWhen(true)] string? code) =>
-        code is ConnectorUnavailable or ExternalSessionIdConflict;
+    private static bool IsRejection([NotNullWhen(true)] string? code, ProviderCommandKind kind) => kind switch
+    {
+        ProviderCommandKind.Start => code is ConnectorUnavailable or ExternalSessionIdConflict,
+        ProviderCommandKind.Stop => code is SessionNotFound,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "The command kind is not supported.")
+    };
 
     private static bool IsValid(ProviderCommandResult command) =>
         command.Id != Guid.Empty && command.ExternalOperationId != Guid.Empty && (command.Outcome switch
@@ -256,11 +287,12 @@ public sealed class WattHarborChargingClient(
                 && providerSessionId != Guid.Empty
                 && command.AppliedAt is { } appliedAt && appliedAt != default && command.Rejection is null,
             ProviderCommandOutcome.Rejected => command.SessionId is null && command.AppliedAt is null
-                && IsRejection(command.Rejection),
+                && IsRejection(command.Rejection, command.Kind),
             _ => false
         });
 
     private sealed record StartRequest(string StationId, string ChargerId, string ConnectorId, Guid ExternalSessionId);
+    private sealed record StopRequest(Guid ExternalSessionId);
     private sealed record StartProblem(
         int? Status = null,
         string? Code = null,

@@ -443,7 +443,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
         await Storage.Operations.Where(value => value.Id == operation.Id).ExecuteUpdateAsync(
             setters => setters
                 .SetProperty(value => value.AuthorizedAttemptCount, 1)
-                .SetProperty(value => value.StartRequestLimit, 3)
+                .SetProperty(value => value.RequestLimit, 3)
                 .SetProperty(value => value.Outcome, CommandOutcome.Uncertain),
             cancellationToken);
     }

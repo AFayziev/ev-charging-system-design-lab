@@ -76,4 +76,34 @@ public sealed class ChargingSession : IAuditableEntity
         Lifecycle = SessionLifecycle.Failed;
         return Result.Ok();
     }
+
+    public Result AcceptStop()
+    {
+        if (Lifecycle == SessionLifecycle.Stopping)
+        {
+            return Result.Fail(new ChargingStopError(
+                ChargingStopError.StopInProgressCode, "A stop is already in progress for this session."));
+        }
+
+        if (Lifecycle != SessionLifecycle.Active)
+        {
+            return Result.Fail(new ChargingStopError(
+                ChargingStopError.SessionNotActiveCode, "Only an active session can be stopped."));
+        }
+
+        Lifecycle = SessionLifecycle.Stopping;
+        return Result.Ok();
+    }
+
+    public Result RejectStop()
+    {
+        if (Lifecycle != SessionLifecycle.Stopping)
+        {
+            return Result.Fail(new ChargingStopError(
+                ChargingStopError.SessionNotStoppingCode, "Only a stopping session can have its stop rejected."));
+        }
+
+        Lifecycle = SessionLifecycle.Active;
+        return Result.Ok();
+    }
 }

@@ -12,10 +12,10 @@ internal sealed class OperationConfiguration : IEntityTypeConfiguration<Operatio
     {
         entity.ToTable("operations");
         entity.ToTable(table => table.HasCheckConstraint(
-            "ck_operations_start_request_budget",
-            "authorized_attempt_count >= 0 AND (start_request_limit IS NULL AND authorized_attempt_count = 0 "
-                + "OR start_request_limit IS NOT NULL AND start_request_limit > 0 "
-                + "AND authorized_attempt_count <= start_request_limit)"));
+            "ck_operations_request_budget",
+            "authorized_attempt_count >= 0 AND (request_limit IS NULL AND authorized_attempt_count = 0 "
+                + "OR request_limit IS NOT NULL AND request_limit > 0 "
+                + "AND authorized_attempt_count <= request_limit)"));
         entity.HasPublicId(operation => operation.PublicId);
         entity.HasAuditResourceType(AuditResourceType.Operation);
         entity.Property(operation => operation.SessionId).IsAudited();

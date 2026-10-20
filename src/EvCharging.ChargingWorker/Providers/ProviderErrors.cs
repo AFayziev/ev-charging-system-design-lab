@@ -9,7 +9,7 @@ internal sealed class ProviderRejectedError(
     string? code,
     HttpStatusCode? statusCode = null,
     string? responseBody = null)
-    : Error("The provider definitively did not apply the charging start.")
+    : Error("The provider definitively did not apply the charging command.")
 {
     public Guid? CommandId { get; } = commandId;
     public Guid ExternalOperationId { get; } = externalOperationId;

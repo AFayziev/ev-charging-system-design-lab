@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using EvCharging.ChargingWorker.Providers;
+using EvCharging.ChargingWorker.Providers.WattHarbor;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace EvCharging.ProviderContracts.Tests;
@@ -283,42 +286,33 @@ public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassF
     }
 
     [Fact]
-    public async Task Stop_ResponseLost_EffectCommitsAndLookupResolvesIt()
+    public async Task StopClient_AppliedAndUnknownSession_MapToCommandEvidence()
     {
         var request = await ConfigureAsync();
-        await StartAsync(Guid.NewGuid(), request);
-        var externalOperationId = Guid.NewGuid();
-        await fixture.ConfigureCommandFaultAsync(externalOperationId, loseResponse: true);
+        var client = new WattHarborChargingClient(fixture.Charging, NullLogger<WattHarborChargingClient>.Instance);
+        var equipment = new ProviderEquipmentAddress(request.StationId, request.ChargerId, request.ConnectorId);
+        var started = await client.StartAsync(Guid.NewGuid(), request.ExternalSessionId, equipment, default);
+        Assert.Equal(ProviderCommandKind.Start, started.Value.Kind);
+        var stopKey = Guid.NewGuid();
 
-        await Assert.ThrowsAsync<HttpRequestException>(
-            () => SendStopAsync(externalOperationId, new StopRequest(request.ExternalSessionId)));
+        var stopped = await client.StopAsync(stopKey, request.ExternalSessionId, default);
 
-        var command = await fixture.Charging.GetFromJsonAsync<CommandResult>(
-            $"/commands/by-external-operation/{externalOperationId}");
-        Assert.Equal("applied", command?.Outcome);
-        Assert.Equal("stop", command?.Kind);
-        Assert.False((await fixture.Charging.GetFromJsonAsync<EquipmentResult>(EquipmentPath(request)))?.Occupied);
-    }
+        Assert.True(stopped.IsSuccess);
+        Assert.Equal(ProviderCommandKind.Stop, stopped.Value.Kind);
+        Assert.Equal(ProviderCommandOutcome.Applied, stopped.Value.Outcome);
+        Assert.Equal(started.Value.SessionId, stopped.Value.SessionId);
+        Assert.Equal(stopped.Value, (await client.StopAsync(stopKey, request.ExternalSessionId, default)).Value);
+        Assert.Equal(stopped.Value, (await client.GetCommandByExternalOperationIdAsync(stopKey, default)).Value);
 
-    [Fact]
-    public async Task Stop_AnonymousCallAndInvalidInput_AreRefused()
-    {
-        var stop = new StopRequest(Guid.NewGuid());
-        using var anonymous = new HttpClient { BaseAddress = fixture.Charging.BaseAddress };
-        using var message = new HttpRequestMessage(HttpMethod.Post, "/commands/stop")
-        {
-            Content = JsonContent.Create(stop)
-        };
-        message.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
-        using var unauthorized = await anonymous.SendAsync(message);
-        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        var unknownKey = Guid.NewGuid();
+        var unknown = await client.StopAsync(unknownKey, Guid.NewGuid(), default);
 
-        using var missingHeader = await fixture.Charging.PostAsJsonAsync("/commands/stop", stop);
-        Assert.Equal(HttpStatusCode.BadRequest, missingHeader.StatusCode);
-        using var emptyKey = await SendStopAsync(Guid.Empty, stop);
-        Assert.Equal(HttpStatusCode.BadRequest, emptyKey.StatusCode);
-        using var emptySession = await SendStopAsync(Guid.NewGuid(), new StopRequest(Guid.Empty));
-        Assert.Equal(HttpStatusCode.BadRequest, emptySession.StatusCode);
+        var rejection = Assert.IsType<ProviderRejectedError>(Assert.Single(unknown.Errors));
+        Assert.Equal("session_not_found", rejection.Code);
+        Assert.Equal(unknownKey, rejection.ExternalOperationId);
+        var recorded = (await client.GetCommandByExternalOperationIdAsync(unknownKey, default)).Value;
+        Assert.Equal(ProviderCommandOutcome.Rejected, recorded?.Outcome);
+        Assert.Equal(rejection.CommandId, recorded?.Id);
     }
 
     private async Task<CommandResult> StopAsync(Guid externalOperationId, StopRequest request)

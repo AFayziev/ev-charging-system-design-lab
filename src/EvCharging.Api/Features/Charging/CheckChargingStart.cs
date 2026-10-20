@@ -15,7 +15,7 @@ namespace EvCharging.Api.Features.Charging;
 public sealed record CheckChargingStartCommand(Guid ReservationId, Guid OperationId)
     : IAuthenticatedRequest<CheckChargingStartResponse>;
 
-public sealed record CheckChargingStartResponse(StartOperationResponse Operation, ChargingStartCheckOutcome Outcome);
+public sealed record CheckChargingStartResponse(StartOperationResponse Operation, ChargingCheckOutcome Outcome);
 
 public sealed class CheckChargingStartCommandHandler(
     PlatformDbContext database,
@@ -48,19 +48,19 @@ public sealed class CheckChargingStartCommandHandler(
             return Result.Fail<CheckChargingStartResponse>(new ForbiddenError());
         }
 
-        var outcome = ChargingStartCheckOutcome.Resolved;
+        var outcome = ChargingCheckOutcome.Resolved;
         if (operation.Outcome is CommandOutcome.Pending or CommandOutcome.Uncertain)
         {
             try
             {
-                var result = await bus.InvokeAsync<ChargingStartCheckResult>(
+                var result = await bus.InvokeAsync<ChargingCheckResult>(
                     new CheckChargingStart(operation.Id), cancellationToken, options.Value.Timeout);
                 outcome = result.Outcome;
             }
             catch (TimeoutException exception)
             {
                 logger.LogWarning(exception, "Status check for start {OperationId} timed out", operation.PublicId);
-                outcome = ChargingStartCheckOutcome.Unavailable;
+                outcome = ChargingCheckOutcome.Unavailable;
             }
 
             // The worker may have committed an outcome while this request was waiting.
@@ -71,7 +71,7 @@ public sealed class CheckChargingStartCommandHandler(
         var response = await operation.ToResponseAsync(database, cancellationToken);
         if (operation.Outcome is CommandOutcome.Confirmed or CommandOutcome.Rejected)
         {
-            outcome = ChargingStartCheckOutcome.Resolved;
+            outcome = ChargingCheckOutcome.Resolved;
         }
 
         return Result.Ok(new CheckChargingStartResponse(response, outcome));

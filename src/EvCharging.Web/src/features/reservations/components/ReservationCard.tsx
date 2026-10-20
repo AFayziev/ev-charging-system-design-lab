@@ -4,11 +4,7 @@ import { IconCalendar, IconPlug } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { StationPhoto } from "@/features/stations/components/StationPhoto";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
-import {
-  hasCurrentCharging,
-  isStartUnresolved,
-  type Reservation,
-} from "../api";
+import { hasCurrentCharging, isUnresolved, type Reservation } from "../api";
 import {
   formatReservationSlot,
   getBrowserTimeZone,
@@ -17,7 +13,9 @@ import {
 import { ReservationStatus } from "./ReservationStatus";
 import classes from "./Reservations.module.css";
 import { ChargingStartControls } from "./ChargingStartControls";
+import { ChargingStopControls } from "./ChargingStopControls";
 import { getStartPresentation } from "../start-presentation";
+import { getStopPresentation } from "../stop-presentation";
 
 export function ReservationCard({
   reservation,
@@ -35,7 +33,7 @@ export function ReservationCard({
   const operation = reservation.startOperation;
   const refreshCheckingWindow = useForceUpdate();
   const automaticWindowRemaining =
-    isStartUnresolved(operation) && operation?.automaticChecksEndAt
+    isUnresolved(operation) && operation?.automaticChecksEndAt
       ? Date.parse(operation.automaticChecksEndAt) - Date.now()
       : 0;
   useTimeout(refreshCheckingWindow, Math.max(0, automaticWindowRemaining), {
@@ -48,6 +46,15 @@ export function ReservationCard({
     reservation.state === "active",
     reservation.arrivalDeadline,
   );
+  const stopPresentation = getStopPresentation(reservation.stopOperation);
+  const badge = stopPresentation?.badge
+    ? stopPresentation
+    : startPresentation?.badge
+      ? startPresentation
+      : undefined;
+  const hasSession =
+    operation?.outcome === "confirmed" &&
+    (operation.lifecycle === "active" || operation.lifecycle === "stopping");
   const timeRange = formatReservationSlot(
     reservation.startsAt,
     reservation.endsAt,
@@ -99,13 +106,13 @@ export function ReservationCard({
         <Text size="xs" c="dimmed">
           Your time · {getBrowserTimeZone()}
         </Text>
-        {startPresentation?.badge ? (
+        {badge?.badge ? (
           <Badge
-            color={startPresentation.color}
+            color={badge.color}
             variant="light"
             styles={{ label: { textTransform: "none" } }}
           >
-            {startPresentation.badge}
+            {badge.badge}
           </Badge>
         ) : (
           <ReservationStatus reservation={reservation} />
@@ -122,6 +129,13 @@ export function ReservationCard({
           statusUnavailable={statusUnavailable}
           onRefresh={onRefresh}
           onCancel={onCancel}
+        />
+      )}
+      {hasSession && (
+        <ChargingStopControls
+          reservation={reservation}
+          statusUnavailable={statusUnavailable}
+          onRefresh={onRefresh}
         />
       )}
     </Paper>

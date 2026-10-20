@@ -95,6 +95,108 @@ public sealed class OperationTests
         Assert.Equal(ReservationState.Cancelled, reservation.State);
     }
 
+    [Fact]
+    public void AcceptStop_ActiveSession_MovesSessionToStoppingWithPendingStop()
+    {
+        var session = ActiveSession();
+        var key = Guid.NewGuid();
+
+        var result = Operation.AcceptStop(session, key, Start.AddMinutes(5));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ChargingCommandKind.Stop, result.Value.Kind);
+        Assert.Equal(CommandOutcome.Pending, result.Value.Outcome);
+        Assert.Equal(key, result.Value.IdempotencyKey);
+        Assert.Equal(Start.AddMinutes(5), result.Value.AcceptedAt);
+        Assert.Equal(session.Reservation!.DriverId, result.Value.DriverId);
+        Assert.Equal(SessionLifecycle.Stopping, session.Lifecycle);
+    }
+
+    [Theory]
+    [InlineData(SessionLifecycle.Starting, ChargingStopError.SessionNotActiveCode)]
+    [InlineData(SessionLifecycle.Stopping, ChargingStopError.StopInProgressCode)]
+    public void AcceptStop_SessionNotActive_ReturnsConflictWithoutMutation(SessionLifecycle lifecycle, string code)
+    {
+        var session = lifecycle switch
+        {
+            SessionLifecycle.Starting => ChargingSession.AcceptStart(Booking(), Start).Value,
+            _ => StoppingSession()
+        };
+
+        var result = Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(5));
+
+        Assert.Equal(code, Assert.IsType<ChargingStopError>(Assert.Single(result.Errors)).Code);
+        Assert.Equal(lifecycle, session.Lifecycle);
+    }
+
+    [Fact]
+    public void ConfirmStop_UnresolvedStop_RecordsOutcomeAndKeepsSessionStopping()
+    {
+        var session = ActiveSession();
+        var stop = Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(5)).Value;
+        Assert.True(stop.MarkUncertain().IsSuccess);
+
+        Assert.True(stop.ConfirmStop().IsSuccess);
+
+        Assert.Equal(CommandOutcome.Confirmed, stop.Outcome);
+        Assert.Equal(SessionLifecycle.Stopping, session.Lifecycle);
+        Assert.Equal(
+            ChargingStopError.OperationResolvedCode,
+            Assert.IsType<ChargingStopError>(Assert.Single(stop.RejectStop().Errors)).Code);
+        Assert.Equal(
+            ChargingStopError.OperationResolvedCode,
+            Assert.IsType<ChargingStopError>(Assert.Single(stop.MarkUncertain().Errors)).Code);
+        Assert.Equal(CommandOutcome.Confirmed, stop.Outcome);
+        Assert.Equal(SessionLifecycle.Stopping, session.Lifecycle);
+    }
+
+    [Fact]
+    public void RejectStop_DefinitiveOutcome_ReturnsSessionToActiveAndAllowsAnotherStop()
+    {
+        var session = ActiveSession();
+        var stop = Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(5)).Value;
+
+        Assert.True(stop.RejectStop().IsSuccess);
+
+        Assert.Equal(CommandOutcome.Rejected, stop.Outcome);
+        Assert.Equal(SessionLifecycle.Active, session.Lifecycle);
+        Assert.Equal(
+            ChargingStopError.OperationResolvedCode,
+            Assert.IsType<ChargingStopError>(Assert.Single(stop.ConfirmStop().Errors)).Code);
+        Assert.True(Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(6)).IsSuccess);
+        Assert.Equal(SessionLifecycle.Stopping, session.Lifecycle);
+    }
+
+    [Fact]
+    public void StartOutcomes_AppliedToAStop_AreRefused()
+    {
+        var session = ActiveSession();
+        var stop = Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(5)).Value;
+
+        var result = stop.ConfirmStart(Guid.NewGuid(), "provider-session", Start.AddMinutes(6));
+
+        Assert.Equal(
+            ChargingStartError.OperationResolvedCode,
+            Assert.IsType<ChargingStartError>(Assert.Single(result.Errors)).Code);
+        Assert.Equal(CommandOutcome.Pending, stop.Outcome);
+        Assert.Equal(SessionLifecycle.Stopping, session.Lifecycle);
+    }
+
+    private static ChargingSession ActiveSession()
+    {
+        var session = ChargingSession.AcceptStart(Booking(), Start).Value;
+        var start = Operation.AcceptStart(session, Guid.NewGuid());
+        Assert.True(start.ConfirmStart(Guid.NewGuid(), "provider-session", Start.AddSeconds(1)).IsSuccess);
+        return session;
+    }
+
+    private static ChargingSession StoppingSession()
+    {
+        var session = ActiveSession();
+        Assert.True(Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(1)).IsSuccess);
+        return session;
+    }
+
     private static Reservation Booking() => Reservation.Book(
         new Connector { Id = Guid.NewGuid(), ConnectorType = "Type2", PowerSupply = "AC" },
         Driver.Register("https://test.invalid", "driver", EmailAddress.Create("driver@example.test").Value),

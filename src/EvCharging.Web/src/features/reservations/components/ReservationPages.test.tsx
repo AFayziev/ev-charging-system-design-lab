@@ -11,6 +11,7 @@ import {
   type Reservation,
   type ReservationList,
   type StartOperation,
+  type StopOperation,
 } from "../api";
 import { connectorBusyCode } from "../errors";
 import { ReservationsPage } from "./ReservationsPage";
@@ -89,6 +90,7 @@ const reservation: Reservation = {
   expiredAt: null,
   arrivalDeadline: "2026-10-11T12:40:00Z",
   startOperation: null,
+  stopOperation: null,
 };
 
 it("groups bookings by server state and links to their stations", async () => {
@@ -863,3 +865,128 @@ it("keeps confirmation busy until submission completes and prevents repeated sta
   });
   expect(await screen.findByText("Confirming start")).toBeVisible();
 });
+
+const activeSession: Reservation = {
+  ...reservation,
+  state: "consumed",
+  startOperation: {
+    ...pendingStart,
+    outcome: "confirmed",
+    lifecycle: "active",
+    startedAt: reservation.startsAt,
+  },
+};
+
+const stopOperation = (outcome: StopOperation["outcome"]): StopOperation => ({
+  id: "6d3c2d51-0d9a-4b7c-96bf-1d7a3a7c1f10",
+  sessionId: pendingStart.sessionId,
+  outcome,
+  acceptedAt: "2026-10-11T13:00:00Z",
+});
+
+function serve(current: () => Reservation) {
+  get.mockImplementation(async (url: string) => ({
+    data:
+      url === "/auth/session"
+        ? { signedIn: true, antiforgeryToken: "csrf-token" }
+        : { reservations: [current()], nextAfterId: null },
+  }));
+}
+
+it("requires confirmation to stop an active session and shows the accepted stop", async () => {
+  const user = userEvent.setup();
+  let current = activeSession;
+  serve(() => current);
+  const accepted = stopOperation("pending");
+  post.mockImplementation(async () => {
+    current = {
+      ...activeSession,
+      startOperation: {
+        ...activeSession.startOperation!,
+        lifecycle: "stopping",
+      },
+      stopOperation: accepted,
+    };
+    return { data: accepted };
+  });
+  setup();
+  expect(await screen.findByText("Charging started")).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "Stop charging" }));
+  const dialog = within(
+    await screen.findByRole("dialog", { name: "Stop charging?" }),
+  );
+  expect(post).not.toHaveBeenCalled();
+  await user.click(dialog.getByRole("button", { name: "Keep charging" }));
+  await user.click(screen.getByRole("button", { name: "Stop charging" }));
+  await user.click(
+    within(await screen.findByRole("dialog")).getByRole("button", {
+      name: "Stop charging",
+    }),
+  );
+
+  expect(await screen.findByText("Stopping charging")).toBeVisible();
+  expect(post).toHaveBeenCalledExactlyOnceWith(
+    `/api/reservations/${reservation.id}/stop`,
+    { idempotencyKey: expect.any(String) },
+    { headers: { "X-CSRF-TOKEN": "csrf-token" }, signal: undefined },
+  );
+  expect(screen.getByText("Stopping")).toBeVisible();
+  expect(screen.queryByText("Charging started")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Stop charging" }),
+  ).not.toBeInTheDocument();
+});
+
+it.each([
+  {
+    outcome: "uncertain",
+    badge: "Stop unresolved",
+    title: "Waiting for confirmation",
+    canStop: false,
+  },
+  {
+    outcome: "confirmed",
+    badge: "Stopped · final usage pending",
+    title: "Charging stopped",
+    canStop: false,
+  },
+  {
+    outcome: "rejected",
+    badge: undefined,
+    title: "Charging did not stop",
+    canStop: true,
+  },
+] as const)(
+  "presents a $outcome stop and its available actions",
+  async ({ outcome, badge, title, canStop }) => {
+    const lifecycle = outcome === "rejected" ? "active" : "stopping";
+    get.mockResolvedValue({
+      data: {
+        reservations: [
+          {
+            ...activeSession,
+            startOperation: { ...activeSession.startOperation!, lifecycle },
+            stopOperation: stopOperation(outcome),
+          },
+        ],
+        nextAfterId: null,
+      },
+    });
+    setup();
+
+    expect(await screen.findByText(title)).toBeVisible();
+    if (badge) expect(screen.getByText(badge)).toBeVisible();
+    expect(screen.queryByText("Charging started") !== null).toBe(
+      outcome === "rejected",
+    );
+    const retry = screen.queryByRole("button", { name: "Try stopping again" });
+    expect(retry !== null).toBe(canStop);
+    expect(
+      screen.queryByRole("button", { name: "Stop charging" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start charging" }),
+    ).not.toBeInTheDocument();
+  },
+);
