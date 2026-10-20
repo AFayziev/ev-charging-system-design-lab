@@ -21,7 +21,7 @@ public static class ReservationCreatedHandler
         if (reservation?.State == ReservationState.Active)
         {
             Activity.Current?.SetTag("reservation.public_id", reservation.PublicId.ToString());
-            outgoing.Schedule(new ExpireReservation(reservation.Id), reservation.EndsAt);
+            outgoing.Schedule(new ExpireReservation(reservation.Id), reservation.ArrivalDeadline);
         }
 
         return outgoing;

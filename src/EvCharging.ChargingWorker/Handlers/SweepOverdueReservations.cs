@@ -1,7 +1,7 @@
 using EvCharging.ChargingWorker.Configuration;
-using EvCharging.Domain.Charging;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
+using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Wolverine;
@@ -23,10 +23,9 @@ public static class SweepOverdueReservationsHandler
     {
         var now = clock.GetUtcNow();
         var overdueIds = await database.Reservations
-            .Where(reservation => reservation.State == ReservationState.Active && reservation.EndsAt <= now
-                && !database.Sessions.Any(session => session.ReservationId == reservation.Id
-                    && session.Lifecycle == SessionLifecycle.Starting))
-            .OrderBy(reservation => reservation.EndsAt)
+            .Where(reservation => reservation.State == ReservationState.Active && reservation.ArrivalDeadline <= now
+                && !database.UnresolvedAuthorizedStarts().Any(start => start.Session!.ReservationId == reservation.Id))
+            .OrderBy(reservation => reservation.ArrivalDeadline)
             .ThenBy(reservation => reservation.Id)
             .Select(reservation => reservation.Id)
             .Take(options.Value.SweepBatchSize)

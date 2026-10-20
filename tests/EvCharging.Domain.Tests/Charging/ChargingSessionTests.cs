@@ -45,7 +45,7 @@ public sealed class ChargingSessionTests
         }
         else
         {
-            reservation.ExpireAtSlotEnd(Start.AddHours(1), false);
+            reservation.ExpireAtArrivalDeadline(Start.AddHours(1), false);
         }
 
         var state = reservation.State;

@@ -357,8 +357,9 @@ function ConfiguredBookingForm({
               aria-hidden="true"
             />
             <Text size="xs" c="dimmed">
-              A reservation holds your time slot. Equipment availability can
-              change before you arrive.
+              A reservation holds your time slot until its arrival deadline.
+              Start charging before then, or the reservation expires. Equipment
+              availability can change before you arrive.
             </Text>
           </Group>
         </Stack>

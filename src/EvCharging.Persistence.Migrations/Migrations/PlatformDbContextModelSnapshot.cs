@@ -519,15 +519,15 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_reservations_public_id");
 
+                    b.HasIndex("ArrivalDeadline", "Id")
+                        .HasDatabaseName("ix_reservations_arrival_deadline_id")
+                        .HasFilter("state = 'active'");
+
                     b.HasIndex("ConnectorId", "StartsAt")
                         .HasDatabaseName("ix_reservations_connector_id_starts_at");
 
-                    b.HasIndex("EndsAt", "Id")
-                        .HasDatabaseName("ix_reservations_ends_at_id")
-                        .HasFilter("state = 'active'");
-
-                    b.HasIndex("DriverId", "State", "EndsAt")
-                        .HasDatabaseName("ix_reservations_driver_id_state_ends_at");
+                    b.HasIndex("DriverId", "State", "ArrivalDeadline")
+                        .HasDatabaseName("ix_reservations_driver_id_state_arrival_deadline");
 
                     b.ToTable("reservations", "charging", t =>
                         {

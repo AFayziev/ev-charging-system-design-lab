@@ -41,8 +41,7 @@ public sealed partial class ExpireReservationHandler
         {
             _publicId = reservation.PublicId;
             Activity.Current?.SetTag("reservation.public_id", reservation.PublicId.ToString());
-            var outcomes = await database.ExpireReservationsAsync([reservation], clock.GetUtcNow(), cancellationToken);
-            _outcome = outcomes[reservation.Id];
+            _outcome = await database.ExpireReservationAsync(reservation, clock.GetUtcNow(), cancellationToken);
             if (_outcome == ReservationExpiryOutcome.Expired)
             {
                 return new ReservationExpired(reservation.Id, reservation.ExpiredAt!.Value);

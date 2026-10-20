@@ -132,7 +132,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         if (kind == ReservationNotificationKind.Expired)
         {
             occurredAt = reservation.EndsAt.AddMinutes(1);
-            Assert.Equal(ReservationExpiryOutcome.Expired, reservation.ExpireAtSlotEnd(occurredAt, false));
+            Assert.Equal(ReservationExpiryOutcome.Expired, reservation.ExpireAtArrivalDeadline(occurredAt, false));
         }
         else
         {

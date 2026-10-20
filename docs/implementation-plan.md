@@ -338,7 +338,7 @@ Notification failure leaves accepted reservations intact and remains separately 
 
 ### M06 — Charging start/stop and operator investigation
 
-- [ ] M06.01 Deliver driver start and operation-status interactions for
+- [x] M06.01 Deliver driver start and operation-status interactions for
   WattHarbor, following the [domain start rules](domain.md#51-start-and-expiry)
   and [provider contract](integrations.md#1-provider-contracts). The interactive
   [start confirmation mockup](mockups/start-charging.html) records the UI states
@@ -365,7 +365,7 @@ Notification failure leaves accepted reservations intact and remains separately 
     Make the owner's status action perform a bounded provider lookup without
     resending the start; retain unresolved claims after missing results or failures.
     Depends on M06.01.2.
-  - [ ] M06.01.4 Uncertain start resolution, following
+  - [x] M06.01.4 Uncertain start resolution, following
     [command safety](integrations.md#2-command-safety),
     [start deadlines](domain.md#51-start-and-expiry), and the
     [execution records](architecture.md#92-startstop-execution).
@@ -382,7 +382,7 @@ Notification failure leaves accepted reservations intact and remains separately 
       Recheck eligibility before each attempt. Verify deadline enforcement,
       bounded attempts across redelivery, and no regression of resolved outcomes.
       Depends on M06.01.4.1.
-  - [ ] M06.01.5 No-show expiry: switch automatic expiry to accepted arrival
+  - [x] M06.01.5 No-show expiry: switch automatic expiry to accepted arrival
     deadlines, resolve unexecuted queued starts, and update booking explanations.
     Verify pre-attempt expiry and retained claims for
     unresolved authorized attempts through the application. Verify existing effects

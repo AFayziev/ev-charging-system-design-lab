@@ -136,14 +136,14 @@ public sealed class Reservation : IAuditableEntity
         return Result.Ok();
     }
 
-    public ReservationExpiryOutcome ExpireAtSlotEnd(DateTimeOffset now, bool hasUnresolvedStart)
+    public ReservationExpiryOutcome ExpireAtArrivalDeadline(DateTimeOffset now, bool hasUnresolvedStart)
     {
         if (State != ReservationState.Active)
         {
             return ReservationExpiryOutcome.AlreadyInactive;
         }
 
-        if (now < EndsAt)
+        if (now < ArrivalDeadline)
         {
             return ReservationExpiryOutcome.NotDue;
         }

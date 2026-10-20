@@ -117,17 +117,19 @@ public sealed class ReservationTests
     {
         var reservation = Reservation.Book(Connector, Driver, Now, Now.AddHours(1), Now, Limits).Value;
 
-        Assert.Equal(ReservationExpiryOutcome.NotDue, reservation.ExpireAtSlotEnd(Now.AddMinutes(10), unresolvedStart));
+        Assert.Equal(
+            ReservationExpiryOutcome.NotDue,
+            reservation.ExpireAtArrivalDeadline(Now.AddMinutes(9), unresolvedStart));
         Assert.Null(reservation.ExpiredAt);
         var processedAt = Now.AddHours(1).AddMinutes(5).ToOffset(TimeSpan.FromHours(5));
         Assert.Equal(
             unresolvedStart ? ReservationExpiryOutcome.UnresolvedStart : ReservationExpiryOutcome.Expired,
-            reservation.ExpireAtSlotEnd(processedAt, unresolvedStart));
+            reservation.ExpireAtArrivalDeadline(processedAt, unresolvedStart));
 
         Assert.Equal(expected, reservation.State);
         Assert.Equal(
             unresolvedStart ? ReservationExpiryOutcome.UnresolvedStart : ReservationExpiryOutcome.AlreadyInactive,
-            reservation.ExpireAtSlotEnd(Now.AddHours(2), unresolvedStart));
+            reservation.ExpireAtArrivalDeadline(Now.AddHours(2), unresolvedStart));
         Assert.Equal(unresolvedStart ? (DateTimeOffset?)null : processedAt.ToUniversalTime(), reservation.ExpiredAt);
         Assert.Equal(unresolvedStart ? (TimeSpan?)null : TimeSpan.Zero, reservation.ExpiredAt?.Offset);
         Assert.Null(reservation.CancelledAt);
@@ -142,7 +144,9 @@ public sealed class ReservationTests
         Assert.True(reservation.Cancel(cancelledAt, false).IsSuccess);
         Assert.Equal(ReservationState.Cancelled, reservation.State);
         Assert.True(reservation.Cancel(Now.AddMinutes(30), false).HasError<ReservationCancellationError>());
-        Assert.Equal(ReservationExpiryOutcome.AlreadyInactive, reservation.ExpireAtSlotEnd(Now.AddHours(1), false));
+        Assert.Equal(
+            ReservationExpiryOutcome.AlreadyInactive,
+            reservation.ExpireAtArrivalDeadline(Now.AddHours(1), false));
         Assert.Equal(ReservationState.Cancelled, reservation.State);
         Assert.Equal(cancelledAt.ToUniversalTime(), reservation.CancelledAt);
         Assert.Equal(TimeSpan.Zero, reservation.CancelledAt?.Offset);
@@ -164,7 +168,7 @@ public sealed class ReservationTests
     public void Cancel_ExpiredReservation_RejectsWithoutMutation()
     {
         var reservation = Reservation.Book(Connector, Driver, Now, Now.AddHours(1), Now, Limits).Value;
-        reservation.ExpireAtSlotEnd(Now.AddHours(1), false);
+        reservation.ExpireAtArrivalDeadline(Now.AddHours(1), false);
 
         Assert.True(reservation.Cancel(Now, false).HasError<ReservationCancellationError>());
         Assert.Equal(ReservationState.Expired, reservation.State);

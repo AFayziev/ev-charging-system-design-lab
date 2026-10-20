@@ -13,6 +13,7 @@ using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Auditing;
 using EvCharging.Persistence.Entities;
+using EvCharging.Persistence.Extensions;
 using EvCharging.Testing;
 using JasperFx;
 using Microsoft.EntityFrameworkCore;
@@ -680,6 +681,91 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
 
         Assert.Empty(sent);
         Assert.True(queries.Calls > 0);
+    }
+
+    [Fact]
+    public async Task Expire_QueuedStartNeverAuthorized_RejectsItLocallyAndExpiresReservation()
+    {
+        var operation = await PrepareAsync();
+        _clock.Advance(TimeSpan.FromMinutes(11));
+
+        Assert.Equal(ReservationExpiryOutcome.Expired, await ExpireAsync(operation.Id));
+
+        using var transport = new ProviderTransport((_, _) => throw new InvalidOperationException("No call expected."));
+        await ExecuteAsync(operation.Id, transport);
+        Assert.Equal(0, transport.Calls);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Rejected, saved.Outcome);
+        Assert.Equal(0, saved.AuthorizedAttemptCount);
+        Assert.Equal(SessionLifecycle.Failed, saved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Expired, saved.Session.Reservation!.State);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Expire_AuthorizedStartUnresolved_KeepsClaimUntilALaterCheckSettlesIt(bool interrupted)
+    {
+        var operation = await PrepareAsync();
+        using var cancellation = new CancellationTokenSource();
+        using var start = new ProviderTransport((_, _) =>
+        {
+            if (!interrupted)
+            {
+                throw new HttpRequestException("Lost.");
+            }
+
+            cancellation.Cancel();
+            throw new OperationCanceledException(cancellation.Token);
+        });
+        if (interrupted)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                ExecuteAsync(operation.Id, start, cancellationToken: cancellation.Token));
+        }
+        else
+        {
+            await ExecuteAsync(operation.Id, start);
+        }
+
+        _clock.Advance(TimeSpan.FromMinutes(11));
+
+        Assert.Equal(ReservationExpiryOutcome.UnresolvedStart, await ExpireAsync(operation.Id));
+        await using var database = Database();
+        var retained = await database.Operations.AsNoTracking().Include(value => value.Session!)
+            .ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(SessionLifecycle.Starting, retained.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Active, retained.Session.Reservation!.State);
+
+        // The deadline only stops new requests; evidence of the existing one still settles the start.
+        using var queries = new ProviderTransport((_, _) => Task.FromResult(Applied(operation.PublicId)));
+        using var host = CreateProviderHost(database, queries);
+        await Checker(database, host).HandleAsync(new(operation.Id), CancellationToken.None);
+        var settled = await database.Operations.AsNoTracking().Include(value => value.Session!)
+            .ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Confirmed, settled.Outcome);
+        Assert.Equal(SessionLifecycle.Active, settled.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Consumed, settled.Session.Reservation!.State);
+        Assert.Equal(1, settled.AuthorizedAttemptCount);
+    }
+
+    private async Task<ReservationExpiryOutcome> ExpireAsync(Guid operationId)
+    {
+        await using var database = Database();
+        var operation = await database.Operations.AsNoTracking().Include(value => value.Session)
+            .SingleAsync(value => value.Id == operationId);
+        await using var transaction = await database.Database.BeginTransactionAsync();
+        await database.LockDriverReservationsAsync(operation.DriverId, CancellationToken.None);
+        var reservation = await database.Reservations
+            .SingleAsync(value => value.Id == operation.Session!.ReservationId);
+        var outcome = await database.ExpireReservationAsync(reservation, _clock.GetUtcNow(), CancellationToken.None);
+        await database.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return outcome;
     }
 
     private async Task<StartCharging[]> CheckAsync(Guid operationId, ProviderTransport queries, bool automatic)

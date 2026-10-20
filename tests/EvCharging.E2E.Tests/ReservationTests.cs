@@ -360,9 +360,16 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
         {
             var connector = await NorthConnectorAsync();
             var past = DateTimeOffset.UtcNow.AddHours(-4);
+            // The queued start needs its own connector: only one session can claim a connector.
+            var otherConnector = await Storage.Connectors
+                .Include(value => value.Charger!)
+                .ThenInclude(value => value.Station)
+                .Where(value => value.Charger!.Station!.Name == "South Station")
+                .OrderBy(value => value.Id)
+                .FirstAsync(timeout.Token);
             var bookings = Enumerable.Range(0, 3)
                 .Select(index => Reservation.Book(
-                    connector,
+                    index == 2 ? otherConnector : connector,
                     Driver,
                     past.AddHours(index),
                     past.AddHours(index + 1),
@@ -371,10 +378,16 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
                 .ToArray();
             Storage.Reservations.AddRange(bookings);
             await Storage.SaveChangesAsync(timeout.Token);
-            Storage.Sessions.Add(ChargingSession.AcceptStart(bookings[0], past).Value);
+            await AddUnresolvedStartAsync(bookings[0], past, timeout.Token);
+            var unexecuted = Operation.AcceptStart(
+                ChargingSession.AcceptStart(bookings[2], bookings[2].StartsAt).Value,
+                Guid.NewGuid());
+            Storage.Operations.Add(unexecuted);
             await Storage.SaveChangesAsync(timeout.Token);
             await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
-            await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(3);
+            await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(1);
+            await Expect(page.GetByText("Start unresolved", new() { Exact = true })).ToHaveCountAsync(1);
+            await Expect(page.GetByText("Start pending", new() { Exact = true })).ToHaveCountAsync(1);
 
             var expiryEvents = ObserveReservationEventsAsync(
                 ReservationEventTopology.ExpiredTopic,
@@ -385,7 +398,13 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
             workerStopped = false;
             await Expect(page.GetByText("Expired", new() { Exact = true }))
                 .ToHaveCountAsync(2, new() { Timeout = 60_000 });
-            await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(1);
+            await Expect(page.GetByText("Start unresolved", new() { Exact = true })).ToHaveCountAsync(1);
+            await Expect(page.GetByText("Active reservation", new() { Exact = true })).ToHaveCountAsync(0);
+            var rejected = await Storage.Operations.AsNoTracking().Include(value => value.Session)
+                .SingleAsync(value => value.Id == unexecuted.Id, timeout.Token);
+            Assert.Equal(CommandOutcome.Rejected, rejected.Outcome);
+            Assert.Equal(0, rejected.AuthorizedAttemptCount);
+            Assert.Equal(SessionLifecycle.Failed, rejected.Session!.Lifecycle);
             var audits = await Storage.AuditEntries.Where(entry => entry.Action == AuditAction.Updated
                 && bookings.Select(booking => booking.Id).Contains(entry.ResourceId))
                 .ToListAsync(timeout.Token);
@@ -411,6 +430,22 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
                 await WorkerCommandAsync(KnownResourceCommands.StartCommand, restoreTimeout.Token);
             }
         }
+    }
+
+    /// <summary>Adds a start whose provider request was authorized and whose outcome is still unknown.</summary>
+    private async Task AddUnresolvedStartAsync(
+        Reservation reservation, DateTimeOffset acceptedAt, CancellationToken cancellationToken)
+    {
+        var operation = Operation.AcceptStart(
+            ChargingSession.AcceptStart(reservation, acceptedAt).Value, Guid.NewGuid());
+        Storage.Operations.Add(operation);
+        await Storage.SaveChangesAsync(cancellationToken);
+        await Storage.Operations.Where(value => value.Id == operation.Id).ExecuteUpdateAsync(
+            setters => setters
+                .SetProperty(value => value.AuthorizedAttemptCount, 1)
+                .SetProperty(value => value.StartRequestLimit, 3)
+                .SetProperty(value => value.Outcome, CommandOutcome.Uncertain),
+            cancellationToken);
     }
 
     private async Task WorkerCommandAsync(string command, CancellationToken cancellationToken)
@@ -521,7 +556,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
             connector, owner, start, start.AddHours(1), start, AppHostFixture.BookingLimits).Value;
         if (scenario == "expired")
         {
-            reservation.ExpireAtSlotEnd(start.AddHours(1), false);
+            reservation.ExpireAtArrivalDeadline(start.AddHours(1), false);
         }
 
         Storage.Reservations.Add(reservation);
@@ -710,8 +745,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
                 .ToArray();
             storage.Reservations.AddRange(overdue);
             await storage.SaveChangesAsync();
-            storage.Sessions.Add(ChargingSession.AcceptStart(overdue[0], past).Value);
-            await storage.SaveChangesAsync();
+            await AddUnresolvedStartAsync(overdue[0], past, timeout.Token);
             var upcoming = DateTimeOffset.UtcNow.AddHours(2);
             for (int index = 0; index < AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver; index++)
             {

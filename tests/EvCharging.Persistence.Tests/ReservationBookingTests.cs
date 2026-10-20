@@ -107,7 +107,7 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
             await using var transaction = await context.Database.BeginTransactionAsync();
             await context.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
             var loaded = await context.Reservations.SingleAsync(value => value.Id == reservation.Id);
-            await context.ExpireReservationsAsync([loaded], DateTimeOffset.UtcNow, CancellationToken.None);
+            await context.ExpireReservationAsync(loaded, DateTimeOffset.UtcNow, CancellationToken.None);
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
         }
@@ -144,7 +144,7 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         }
         else
         {
-            await first.ExpireReservationsAsync([loaded], transitionedAt, CancellationToken.None);
+            await first.ExpireReservationAsync(loaded, transitionedAt, CancellationToken.None);
         }
 
         var competing = CompeteAsync();
@@ -168,9 +168,11 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
             var current = await context.Reservations.SingleAsync(value => value.Id == reservation.Id);
             if (cancellationFirst)
             {
-                var outcomes = await context.ExpireReservationsAsync(
-                    [current], DateTimeOffset.UtcNow, CancellationToken.None);
-                Assert.Equal(ReservationExpiryOutcome.AlreadyInactive, outcomes[current.Id]);
+                var outcome = await context.ExpireReservationAsync(
+                    current,
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None);
+                Assert.Equal(ReservationExpiryOutcome.AlreadyInactive, outcome);
             }
             else
             {

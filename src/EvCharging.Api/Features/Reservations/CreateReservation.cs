@@ -3,7 +3,6 @@ using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using EvCharging.Api.Errors;
 using EvCharging.Contracts.Events.Reservations;
-using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
@@ -113,8 +112,8 @@ public sealed class CreateReservationCommandHandler(
         Guid driverId, DateTimeOffset now, CancellationToken cancellationToken) =>
         database.Reservations.CountAsync(
             existing => existing.DriverId == driverId && existing.State == ReservationState.Active
-                && (existing.EndsAt > now || database.Sessions.Any(session => session.ReservationId == existing.Id
-                    && session.Lifecycle == SessionLifecycle.Starting)),
+                && (existing.ArrivalDeadline > now
+                    || database.UnresolvedAuthorizedStarts().Any(start => start.Session!.ReservationId == existing.Id)),
             cancellationToken);
 
     private async Task<Result<ReservationResponse>> SaveReservationAsync(
