@@ -731,7 +731,7 @@ it.each([
   },
 );
 
-it("reuses the same submission identity after an ambiguous failure", async () => {
+it("reuses the same submission identity after an unconfirmed failure", async () => {
   vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
   const user = userEvent.setup();
   get.mockImplementation(async (url: string) => ({

@@ -1,8 +1,10 @@
+using EvCharging.ChargingWorker.Configuration;
 using EvCharging.ChargingWorker.Providers;
 using EvCharging.Contracts.Charging;
 using EvCharging.Domain.Charging;
 using EvCharging.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Wolverine;
 using Wolverine.Attributes;
 
@@ -12,6 +14,7 @@ public sealed class CheckChargingStopCommandHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
     TimeProvider clock,
+    IOptions<ChargingExecutionOptions> options,
     IMessageBus bus,
     ILogger<CheckChargingStopCommandHandler> logger)
 {
@@ -60,12 +63,21 @@ public sealed class CheckChargingStopCommandHandler(
         if (lookup.Value is not { } command)
         {
             await CommandExecution.ResendAsync(
-                bus, logger, operation, attempt, number => new StopCharging(operation.Id, number));
+                database,
+                clock,
+                bus,
+                logger,
+                operation,
+                attempt,
+                options.Value.AutomaticStatusCheckInterval,
+                number => new StopCharging(operation.Id, number),
+                cancellationToken);
             return Unresolved(operation, ChargingCheckOutcome.Unresolved);
         }
 
         await CommandExecution.ResolveAsync(
             database,
+            clock,
             logger,
             operation,
             unresolved => command.Outcome == ProviderCommandOutcome.Rejected

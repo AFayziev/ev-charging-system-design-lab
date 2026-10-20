@@ -97,7 +97,11 @@ ambiguous response.
 A snapshot with no active session does not establish safe repetition: a queued
 request might execute later. A stop is evidenced only by its own command record:
 an ended session does not show that this stop ended it, and a missing record permits
-the same bounded same-key resend as a start.
+the same bounded same-key resend as a start. A request whose response was
+never recorded (for example, its worker died mid-request) and has no provider
+record is closed as uncertain by the next automatic check, once it is older than
+one check interval, and resent the same way; a record found for it resolves the
+command and closes the request. Neither applies to AmpTrail.
 
 Another AmpTrail effect request requires definitive rejection evidence and
 the [domain eligibility rules](domain.md#5-reservations). Outcome queries are

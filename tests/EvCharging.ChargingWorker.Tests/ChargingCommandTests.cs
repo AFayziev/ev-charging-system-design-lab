@@ -237,7 +237,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
     [InlineData("unmatched")]
     [InlineData("interrupted")]
     [InlineData("server-error")]
-    public async Task Start_AmbiguousOrInterruptedEffect_RetainsClaimAndNeverRepeatsOnRedelivery(string failure)
+    public async Task Start_UncertainOrInterruptedEffect_RetainsClaimAndNeverRepeatsOnRedelivery(string failure)
     {
         var operation = await PrepareAsync();
         using var cancellation = new CancellationTokenSource();
@@ -788,6 +788,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
             database,
             host.Services.GetRequiredService<ChargingProviderClientFactory>(),
             _clock,
+            Options.Create(TestExecutionOptions()),
             bus ?? _scope!.ServiceProvider.GetRequiredService<IMessageBus>(),
             NullLogger<CheckChargingStartCommandHandler>.Instance);
 

@@ -90,7 +90,7 @@ export function ChargingStopControls({
               setOpened(true);
             }}
           >
-            {submission.ambiguous
+            {submission.unconfirmed
               ? "Retry stop request"
               : stop?.outcome === "rejected" || mutation.isError
                 ? "Try stopping again"
@@ -109,7 +109,7 @@ export function ChargingStopControls({
             {content.text}
           </Alert>
         )}
-        {submission.ambiguous && sessionActive && (
+        {submission.unconfirmed && sessionActive && (
           <Alert
             color="orange"
             title="Stop request not confirmed"
@@ -120,7 +120,7 @@ export function ChargingStopControls({
             request.
           </Alert>
         )}
-        {sessionActive && !submission.ambiguous && failure && (
+        {sessionActive && !submission.unconfirmed && failure && (
           <Alert
             color="red"
             title={failure.title}

@@ -413,17 +413,29 @@ Notification failure leaves accepted reservations intact and remains separately 
     no driver status action; it awaits automatic checks and operator investigation.
     Verify overruns blocking later starts through the application.
     Depends on M06.02.3.
-- [ ] M06.04 Deliver assigned-operator session/attempt investigation and audited
-  reconciliation requests, including exhausted recovery and unresolved outcomes.
-  Expose execution attempts, provider identifiers, outcomes, failure summaries,
-  checking state, and exhausted automatic work. Make the unresolved operation's
-  public reference available in the driver view and support lookup by that
-  reference for assigned-operator investigation. Operator reconciliation requests
-  use the durable worker path with bounded admission, rather than directly resending effects or releasing
-  claims without evidence. Verify assignment denial, audited requests, repeated
-  requests, provider unavailability, and retained uncertainty when evidence is absent.
-  Depends on M04.02 and M06.01–M06.02.
-- [ ] M06.05 Exercise the WattHarbor flow through crash after external effect,
+- [ ] M06.04 Deliver recovery after exhausted automatic checks and
+  assigned-operator session/attempt investigation with audited reconciliation
+  requests, including unresolved outcomes. Depends on M04.02 and M06.01–M06.02.
+  Sub-items are sequenced as follows:
+  - [ ] M06.04.1 Automatic recovery sweep: give an unresolved operation whose
+    checking window ended (for example, while the worker was down or the provider
+    unavailable) a fresh bounded batch of checks, through one re-arm operation on
+    the operation with a bounded number of rounds. Run it periodically in the
+    worker, like reservation expiry. Document the bound and interval in the lab
+    parameters. Resends stay limited by the request limit. Verify recovery after
+    a worker outage longer than the window, bounded rounds, and no change to
+    settled operations.
+  - [ ] M06.04.2 Operator investigation: expose execution attempts, provider
+    identifiers, outcomes, failure summaries, checking state, and exhausted
+    automatic work to assigned operators. Make the unresolved operation's public
+    reference available in the driver view and support lookup by that reference.
+    Verify assignment denial and retained uncertainty when evidence is absent.
+  - [ ] M06.04.3 Audited reconciliation requests: operator requests re-arm the
+    checks through the durable worker path with bounded admission, rather than
+    directly resending effects or releasing claims without evidence. Verify
+    audited and repeated requests and provider unavailability.
+    Depends on M06.04.1 and M06.04.2.
+- [x] M06.05 Exercise the WattHarbor flow through crash after external effect,
   provider restart, rate limiting, and circuit opening, including attempts left
   unfinished by an interrupted request. Verify no SQL transaction spans an
   external call and uncertain commits resolve by operation identity.

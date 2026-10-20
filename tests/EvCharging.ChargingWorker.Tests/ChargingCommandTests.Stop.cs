@@ -110,7 +110,7 @@ public sealed partial class ChargingCommandTests
     }
 
     [Fact]
-    public async Task Stop_AmbiguousEffect_RetainsStoppingAndNeverRepeatsOnRedelivery()
+    public async Task Stop_UncertainEffect_RetainsStoppingAndNeverRepeatsOnRedelivery()
     {
         var stop = await PrepareStopAsync();
         using var transport = new ProviderTransport(
@@ -279,6 +279,85 @@ public sealed partial class ChargingCommandTests
     }
 
     [Fact]
+    public async Task Stop_OutcomeCommitInterrupted_IsResolvedByTheStopsOwnRecordWithoutRepeatingEffect()
+    {
+        var stop = await PrepareStopAsync();
+        using var transport = new ProviderTransport((_, _) => Task.FromResult(Applied(stop.PublicId, "stop")));
+        await using (var database = Database(new InterruptOutcomeSave()))
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => ExecuteStopAsync(stop.Id, transport, database));
+        }
+
+        await ExecuteStopAsync(stop.Id, transport);
+        Assert.Equal(1, transport.Calls);
+        await using (var observed = Database())
+        {
+            Assert.Equal(
+                CommandOutcome.Pending,
+                (await observed.Operations.AsNoTracking().SingleAsync(value => value.Id == stop.Id)).Outcome);
+        }
+
+        using var queries = new ProviderTransport((_, _) => Task.FromResult(Applied(stop.PublicId, "stop")));
+        Assert.Empty(await CheckStopAsync(stop.Id, queries));
+
+        await using var settled = Database();
+        var saved = await settled.Operations.Include(value => value.Session!)
+            .SingleAsync(value => value.Id == stop.Id);
+        Assert.Equal(CommandOutcome.Confirmed, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Stopping, saved.Session!.Lifecycle);
+        var attempt = await settled.Attempts.SingleAsync(value => value.OperationId == stop.Id);
+        Assert.NotNull(attempt.FinishedAt);
+        Assert.Equal(CommandOutcome.Confirmed, attempt.Outcome);
+        Assert.Equal(CommandExecution.UnrecordedResponseCode, attempt.FailureCode);
+    }
+
+    [Fact]
+    public async Task CheckStop_UnrecordedResponseWithoutProviderRecord_ClosesItAndResends()
+    {
+        var stop = await PrepareUnrecordedStopAsync();
+        _clock.Advance(TestExecutionOptions().AutomaticStatusCheckInterval);
+        using var queries = new ProviderTransport(
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)));
+
+        var sent = await CheckStopAsync(stop.Id, queries);
+
+        Assert.Equal([new StopCharging(stop.Id, 2)], sent);
+        await using var database = Database();
+        var attempt = await database.Attempts.AsNoTracking().SingleAsync(value => value.OperationId == stop.Id);
+        Assert.NotNull(attempt.FinishedAt);
+        Assert.Equal(CommandExecution.UnrecordedResponseCode, attempt.FailureCode);
+        Assert.Equal(
+            CommandOutcome.Uncertain,
+            (await database.Operations.AsNoTracking().SingleAsync(value => value.Id == stop.Id)).Outcome);
+    }
+
+    [Theory]
+    [InlineData("lookup-unavailable")]
+    [InlineData("young")]
+    public async Task CheckStop_UnrecordedResponseWithoutEvidenceOfLoss_LeavesItUntouched(string scenario)
+    {
+        var stop = await PrepareUnrecordedStopAsync();
+        if (scenario == "lookup-unavailable")
+        {
+            _clock.Advance(TestExecutionOptions().AutomaticStatusCheckInterval);
+        }
+
+        using var queries = new ProviderTransport((_, _) => Task.FromResult(new HttpResponseMessage(
+            scenario == "young" ? HttpStatusCode.NotFound : HttpStatusCode.ServiceUnavailable)));
+
+        var sent = await CheckStopAsync(stop.Id, queries);
+
+        Assert.Empty(sent);
+        await using var database = Database();
+        Assert.Null((await database.Attempts.AsNoTracking().SingleAsync(value => value.OperationId == stop.Id))
+            .FinishedAt);
+        Assert.Equal(
+            CommandOutcome.Pending,
+            (await database.Operations.AsNoTracking().SingleAsync(value => value.Id == stop.Id)).Outcome);
+    }
+
+    [Fact]
     public async Task CheckStop_EndedSessionWithoutTheStopsRecord_DoesNotConfirm()
     {
         var stop = await PrepareStopAsync();
@@ -296,6 +375,23 @@ public sealed partial class ChargingCommandTests
         Assert.Equal(
             CommandOutcome.Uncertain,
             (await database.Operations.AsNoTracking().SingleAsync(value => value.Id == stop.Id)).Outcome);
+    }
+
+    /// <summary>A stop whose request was authorized but whose response was never recorded: pending, with an unfinished attempt.</summary>
+    private async Task<Operation> PrepareUnrecordedStopAsync()
+    {
+        var stop = await PrepareStopAsync();
+        using var lost = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+        await ExecuteStopAsync(stop.Id, lost);
+        await using var database = Database();
+        await database.Attempts.Where(value => value.OperationId == stop.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(value => value.FinishedAt, (DateTimeOffset?)null)
+                .SetProperty(value => value.FailureCode, (string?)null)
+                .SetProperty(value => value.Outcome, (CommandOutcome?)null));
+        await database.Operations.Where(value => value.Id == stop.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(value => value.Outcome, CommandOutcome.Pending));
+        return stop;
     }
 
     private async Task<Operation> PrepareStopAsync()
@@ -320,6 +416,16 @@ public sealed partial class ChargingCommandTests
         CancellationToken cancellationToken = default)
     {
         await using var database = Database();
+        await ExecuteStopAsync(operationId, transport, database, attemptNumber, cancellationToken);
+    }
+
+    private async Task ExecuteStopAsync(
+        Guid operationId,
+        ProviderTransport transport,
+        PlatformDbContext database,
+        int attemptNumber = 1,
+        CancellationToken cancellationToken = default)
+    {
         using var host = CreateProviderHost(database, transport);
         using var scope = _messaging!.Services.CreateScope();
         var handler = new StopChargingCommandHandler(
@@ -342,6 +448,7 @@ public sealed partial class ChargingCommandTests
                 database,
                 host.Services.GetRequiredService<ChargingProviderClientFactory>(),
                 _clock,
+                Options.Create(TestExecutionOptions()),
                 bus,
                 NullLogger<CheckChargingStopCommandHandler>.Instance)
                 .HandleAsync(new(operationId), CancellationToken.None));

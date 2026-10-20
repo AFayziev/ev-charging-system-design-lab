@@ -28,6 +28,7 @@ internal static class CommandExecution
 {
     public const string TransportFailureCode = "provider_transport_failure";
     public const string InvalidResponseCode = "provider_response_unmatched";
+    public const string UnrecordedResponseCode = "provider_response_unrecorded";
 
     public static Task<Operation?> LoadOperationAsync(
         this PlatformDbContext database, Guid id, CancellationToken cancellationToken) =>
@@ -148,9 +149,13 @@ internal static class CommandExecution
             operation.Outcome);
     }
 
-    /// <summary>Applies provider evidence found by a status check, unless the operation is already settled.</summary>
+    /// <summary>
+    /// Applies provider evidence found by a status check, unless the operation is already settled. An attempt whose
+    /// response was never recorded is closed with the result.
+    /// </summary>
     public static async Task ResolveAsync(
         PlatformDbContext database,
+        TimeProvider clock,
         ILogger logger,
         Operation unresolved,
         Func<Operation, Result> transition,
@@ -170,6 +175,16 @@ internal static class CommandExecution
                     + string.Join(", ", transitioned.Errors));
             }
 
+            var latest = await database.Attempts.Where(value => value.OperationId == operation.Id)
+                .OrderByDescending(value => value.Number)
+                .FirstAsync(cancellationToken);
+            if (latest.FinishedAt is null)
+            {
+                latest.FinishedAt = clock.GetUtcNow();
+                latest.FailureCode = UnrecordedResponseCode;
+                latest.Outcome = operation.Outcome;
+            }
+
             await database.SaveChangesAsync(cancellationToken);
         }
 
@@ -182,20 +197,34 @@ internal static class CommandExecution
     }
 
     /// <summary>
-    /// The provider has no record of the latest ambiguous request, so the same operation key is sent again.
+    /// The provider has no record of the latest uncertain request, so the same operation key is sent again.
     /// A request refused for access establishes nothing about the earlier ones, so it ends resending.
+    /// A request whose response was never recorded and that has no provider record is closed as uncertain, once it
+    /// is older than a status check interval: a younger one may still be in flight.
     /// Authorization rechecks eligibility and the request limit; overlapping checks claim one attempt number.
     /// </summary>
     public static async Task ResendAsync(
+        PlatformDbContext database,
+        TimeProvider clock,
         IMessageBus bus,
         ILogger logger,
         Operation operation,
         Attempt latest,
-        Func<int, object> createRequest)
+        TimeSpan unrecordedAfter,
+        Func<int, object> createRequest,
+        CancellationToken cancellationToken)
     {
-        if (operation.Outcome != CommandOutcome.Uncertain || latest.FinishedAt is null
-            || latest.FailureCode is not (TransportFailureCode or InvalidResponseCode)
-            || latest.Number >= operation.RequestLimit)
+        if (latest.Number >= operation.RequestLimit)
+        {
+            return;
+        }
+
+        bool resendable = latest.FinishedAt is null
+            ? clock.GetUtcNow() - latest.AuthorizedAt >= unrecordedAfter
+                && await CloseUnrecordedAsync(database, clock, logger, operation.Id, latest.Number, cancellationToken)
+            : operation.Outcome == CommandOutcome.Uncertain
+                && latest.FailureCode is TransportFailureCode or InvalidResponseCode or UnrecordedResponseCode;
+        if (!resendable)
         {
             return;
         }
@@ -206,6 +235,47 @@ internal static class CommandExecution
             operation.Kind,
             operation.PublicId,
             latest.Number + 1);
+    }
+
+    /// <summary>
+    /// Closes the latest attempt as uncertain when it is still unfinished, so the next request can be authorized.
+    /// A response recorded in the meantime, or any change to the operation, leaves it as it is.
+    /// </summary>
+    private static async Task<bool> CloseUnrecordedAsync(
+        PlatformDbContext database,
+        TimeProvider clock,
+        ILogger logger,
+        Guid operationId,
+        int attemptNumber,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        var driverId = await database.Operations.Where(value => value.Id == operationId)
+            .Select(value => value.DriverId)
+            .SingleAsync(cancellationToken);
+        await database.LockDriverReservationsAsync(driverId, cancellationToken);
+        var operation = await database.LoadOperationAsync(operationId, cancellationToken)
+            ?? throw new InvalidOperationException("The checked operation is missing.");
+        var attempt = await database.Attempts.SingleAsync(
+            value => value.OperationId == operationId && value.Number == attemptNumber, cancellationToken);
+        if (attempt.FinishedAt is not null || operation.AuthorizedAttemptCount != attemptNumber
+            || operation.Outcome is not (CommandOutcome.Pending or CommandOutcome.Uncertain)
+            || operation.MarkUncertain().IsFailed)
+        {
+            return false;
+        }
+
+        attempt.Outcome = operation.Outcome;
+        attempt.FailureCode = UnrecordedResponseCode;
+        attempt.FinishedAt = clock.GetUtcNow();
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        logger.LogInformation(
+            "{Kind} {OperationId} request {AttemptNumber} has no recorded response and is treated as uncertain",
+            operation.Kind,
+            operation.PublicId,
+            attemptNumber);
+        return true;
     }
 
     /// <summary>Runs an automatic check inside the operation's checking window.</summary>
@@ -319,7 +389,7 @@ internal static class CommandExecution
             attempt.ResponseStatusCode = (int?)evidence.StatusCode;
             attempt.ResponseBody = evidence.ResponseBody;
             // An access denial establishes non-execution of this request only, so it cannot settle a command
-            // whose earlier attempts were ambiguous.
+            // whose earlier attempts were uncertain.
             bool deniedRetry = evidence.CommandId is null && attempt.Number > 1;
             return deniedRetry ? ProviderEvidence.Uncertain : ProviderEvidence.Rejected;
         }

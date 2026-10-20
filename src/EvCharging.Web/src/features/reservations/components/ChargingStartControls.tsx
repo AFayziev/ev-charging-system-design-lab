@@ -149,7 +149,7 @@ export function ChargingStartControls({
               setOpened(true);
             }}
           >
-            {submission.ambiguous
+            {submission.unconfirmed
               ? "Retry start request"
               : operation?.outcome === "rejected" || mutation.isError
                 ? "Try starting again"
@@ -169,7 +169,7 @@ export function ChargingStartControls({
         )}
         {active &&
           !blocked &&
-          !submission.ambiguous &&
+          !submission.unconfirmed &&
           !statusUnavailable &&
           onCancel && (
             <Button
@@ -238,7 +238,7 @@ export function ChargingStartControls({
                 " The latest status check did not provide a definite result."}
             </Alert>
           )}
-        {submission.ambiguous && !blocked && (
+        {submission.unconfirmed && !blocked && (
           <Alert
             color="orange"
             title="Start request not confirmed"
@@ -249,7 +249,7 @@ export function ChargingStartControls({
             request.
           </Alert>
         )}
-        {!blocked && !submission.ambiguous && failure && (
+        {!blocked && !submission.unconfirmed && failure && (
           <Alert
             color={connectorBusy ? "orange" : "red"}
             title={connectorBusy ? "Connector is still in use" : failure.title}

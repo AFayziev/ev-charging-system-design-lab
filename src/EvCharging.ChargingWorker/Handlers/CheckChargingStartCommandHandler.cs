@@ -1,10 +1,12 @@
 using System.Globalization;
+using EvCharging.ChargingWorker.Configuration;
 using EvCharging.ChargingWorker.Providers;
 using EvCharging.Contracts.Charging;
 using EvCharging.Domain.Charging;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Wolverine;
 using Wolverine.Attributes;
 
@@ -14,6 +16,7 @@ public sealed class CheckChargingStartCommandHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
     TimeProvider clock,
+    IOptions<ChargingExecutionOptions> options,
     IMessageBus bus,
     ILogger<CheckChargingStartCommandHandler> logger)
 {
@@ -70,7 +73,15 @@ public sealed class CheckChargingStartCommandHandler(
             if (resend && evidence.Outcome == ChargingCheckOutcome.Unresolved)
             {
                 await CommandExecution.ResendAsync(
-                    bus, logger, operation, attempt, number => new StartCharging(operation.Id, number));
+                    database,
+                    clock,
+                    bus,
+                    logger,
+                    operation,
+                    attempt,
+                    options.Value.AutomaticStatusCheckInterval,
+                    number => new StartCharging(operation.Id, number),
+                    cancellationToken);
             }
 
             return new(evidence.Outcome);
@@ -78,6 +89,7 @@ public sealed class CheckChargingStartCommandHandler(
 
         await CommandExecution.ResolveAsync(
             database,
+            clock,
             logger,
             operation,
             unresolved => evidence.Command is { Outcome: ProviderCommandOutcome.Rejected }

@@ -10,16 +10,16 @@ import { getHttpStatus } from "@/lib/http-errors";
 export function useSubmissionIdentity(currentOperationId: string | null) {
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const [unconfirmedAgainst, setUnconfirmedAgainst] = useState<string | null>();
-  const ambiguous =
+  const unconfirmed =
     unconfirmedAgainst !== undefined &&
     unconfirmedAgainst === currentOperationId;
   return {
     requestKey,
-    ambiguous,
-    // A definite failure, or an ambiguous one the server has not yet superseded.
-    showsFailure: unconfirmedAgainst === undefined || ambiguous,
+    unconfirmed,
+    // A definite failure, or an unconfirmed one the server has not yet superseded.
+    showsFailure: unconfirmedAgainst === undefined || unconfirmed,
     prepare: () => {
-      if (!ambiguous) setRequestKey(crypto.randomUUID());
+      if (!unconfirmed) setRequestKey(crypto.randomUUID());
     },
     succeeded: () => setUnconfirmedAgainst(undefined),
     failed: (error: unknown) => {
