@@ -450,14 +450,46 @@ recoverable without authorizing conflicting starts. Final completion depends on 
 
 ### M07 — Charging progress, history, and completion
 
-- [ ] M07.01 Deliver timestamped driver progress using simulator observations,
-  gateway-routed authenticated callbacks/recovery polling, and progress queries.
-  Introduce durable Kafka append, provider/connector partitioning, stable event
-  identities/sequences, and independent observation-worker consumer groups for
-  MongoDB history/latest views and SQL evidence. Add source-time freshness,
-  sequence-conditional updates, checkpoints, canonical units, stalled-session
-  detection, and bounded browser polling. Verify progress and visible staleness
-  end to end. Depends on M06.01.
+- [ ] M07.01 Deliver timestamped driver progress from charging-provider
+  observations. The provider is a black box that honors the documented contract;
+  the work is on the platform side. Depends on M06.01. Sub-items are sequenced as
+  follows:
+  - [ ] M07.01.1 Observation contract and ingestion boundary: document the
+    WattHarbor observation contract (source event identity, connector sequence,
+    occurrence time, state, power, cumulative energy, callback and snapshot shapes,
+    retry and acknowledgement rules). Add the authenticated gateway-routed callback
+    endpoint, payload validation, an adapter that normalizes provider payloads to
+    canonical units, a versioned envelope, and a durable Kafka append partitioned
+    by provider and connector, acknowledged only after confirmation. Verify with
+    contract-shaped payloads: authentication denial, invalid payloads, no
+    acknowledgement when the append fails, duplicate delivery, and normalization.
+  - [ ] M07.01.2 WattHarbor contract conformance: the simulator emits sequenced
+    observations for active sessions that survive restart, delivers callbacks with
+    bounded same-identity retry, and returns a snapshot carrying the same identity
+    and sequence. It receives its callback target and credentials through a
+    simulation control call, so the platform needs no knowledge of its internals.
+    Add duplicate, older-sequence, and interrupted-telemetry faults. Verify with
+    provider contract tests and the flow through the real ingestion boundary.
+    Depends on M07.01.1.
+  - [ ] M07.01.3 Progress view and query: independent observation-worker consumer
+    group that deduplicates by source identity, applies sequence-conditional
+    updates to MongoDB history and latest views, and checkpoints after the durable
+    write. Serve a progress query from the latest view. Verify duplicates,
+    out-of-order events, and catch-up after worker restart.
+    Depends on M07.01.1.
+  - [ ] M07.01.4 Driver charging session page: show energy, power, elapsed time,
+    the power-over-time chart, source-time freshness (`Last reported charging`
+    when stale), bounded polling, and the stopping state. Verify end to end with
+    the simulator on desktop and phone viewports.
+    Depends on M07.01.2 and M07.01.3.
+  - [ ] M07.01.5 Session evidence, stalled detection, and recovery polling:
+    independent consumer group committing deduplication, state, and outbox in one
+    relational transaction. Stalled-session detection submits durable
+    reconciliation work to the charging worker, which polls the provider snapshot
+    and submits it through the gateway with service credentials. Verify that
+    interrupted telemetry makes the view stale rather than stopped, that polling
+    restores freshness, and that replay does not refresh timestamps.
+    Depends on M07.01.2 and M07.01.3.
 - [ ] M07.02 Deliver completed-session final usage and completion notifications.
   Match provider/session evidence, validate cumulative usage, conditionally
   freeze completion facts, and commit outgoing completion events with SQL state.
