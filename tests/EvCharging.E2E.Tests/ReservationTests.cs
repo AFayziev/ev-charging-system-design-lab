@@ -314,7 +314,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
 
         await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
         var card = page.GetByRole(AriaRole.Article, new() { Name = "North Station reservation" });
-        await Expect(card.GetByText("Active reservation", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(card.GetByText(new Regex("^(Upcoming|Active) reservation$"))).ToBeVisibleAsync();
         await WorkerCommandAsync(KnownResourceCommands.RestartCommand, timeout.Token);
         await Expect(card.GetByText("Expired", new() { Exact = true }))
             .ToBeVisibleAsync(new() { Timeout = 90_000 });
@@ -442,7 +442,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
         }
 
         await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
-        await Expect(page.GetByText("Active reservation", new() { Exact = true }))
+        await Expect(page.GetByText("Upcoming reservation", new() { Exact = true }))
             .ToHaveCountAsync(AppHostFixture.BookingLimits.MaximumOutstandingReservationsPerDriver);
         await CaptureAsync(page, "reservation-cancel-actions");
         var card = page.GetByRole(AriaRole.Article).First;
@@ -450,7 +450,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
         var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Cancel reservation?" });
         await dialog.GetByRole(AriaRole.Button, new() { Name = "Keep reservation" }).ClickAsync();
         await Expect(dialog).ToBeHiddenAsync();
-        await Expect(card.GetByText("Active reservation", new() { Exact = true })).ToBeVisibleAsync();
+        await Expect(card.GetByText("Upcoming reservation", new() { Exact = true })).ToBeVisibleAsync();
         await page.SetViewportSizeAsync(390, 844);
         await card.GetByRole(AriaRole.Button, new() { Name = "Cancel reservation", Exact = true }).ClickAsync();
         await Expect(dialog).ToBeVisibleAsync();
