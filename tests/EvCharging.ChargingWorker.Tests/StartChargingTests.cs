@@ -26,6 +26,7 @@ using Wolverine;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.Persistence.Durability;
 using Wolverine.Postgresql;
+using Wolverine.Tracking;
 using Xunit;
 
 namespace EvCharging.ChargingWorker.Tests;
@@ -37,12 +38,14 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
     private const string IntegrationKey = "worker-test";
     private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
     private IHost? _messaging;
+    private IServiceScope? _scope;
 
     public async Task InitializeAsync()
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Services
             .AddDbContext<PlatformDbContext>(options => options.UseNpgsql(fixture.GetDataSource("charging_messaging")));
+        builder.Services.AddSingleton<StartRecorder>();
         builder.UseWolverine(options =>
         {
             options.Discovery.DisableConventionalDiscovery();
@@ -53,13 +56,17 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
             options.Policies.UseDurableLocalQueues();
             options.PublishMessage<CheckChargingStart>().ToLocalQueue("automatic-check-tests");
+            options.PublishMessage<StartCharging>().ToLocalQueue("resend-tests");
+            options.Discovery.IncludeType<StartChargingRecorderHandler>();
         });
         _messaging = builder.Build();
         await _messaging.StartAsync();
+        _scope = _messaging.Services.CreateScope();
     }
 
     public async Task DisposeAsync()
     {
+        _scope?.Dispose();
         if (_messaging is not null)
         {
             await _messaging.StopAsync();
@@ -93,7 +100,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
                 value => value.OperationId == operation.Id, cancellationToken);
             var saved = await observed.Operations.SingleAsync(value => value.Id == operation.Id, cancellationToken);
             Assert.Equal(1, saved.AuthorizedAttemptCount);
-            Assert.Equal(3, saved.EffectAttemptLimit);
+            Assert.Equal(3, saved.StartRequestLimit);
             Assert.Equal(attempt.AuthorizedAt.AddMinutes(3), saved.AutomaticChecksEndAt);
             Assert.Equal(2, (await ScheduledChecksAsync(operation.Id)).Length);
             Assert.Null(attempt.FinishedAt);
@@ -155,11 +162,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         using var queries = new ProviderTransport(
             (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)));
         using var host = CreateProviderHost(database, queries);
-        var handler = new CheckChargingStartCommandHandler(
-            database,
-            host.Services.GetRequiredService<ChargingProviderClientFactory>(),
-            _clock,
-            NullLogger<CheckChargingStartCommandHandler>.Instance);
+        var handler = Checker(database, host);
 
         await handler.HandleAsync(new(operation.Id, Automatic: true), CancellationToken.None);
         Assert.Equal(2, queries.Calls);
@@ -202,11 +205,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             throw new OperationCanceledException(cancellationToken);
         });
         using var host = CreateProviderHost(database, queries);
-        var handler = new CheckChargingStartCommandHandler(
-            database,
-            host.Services.GetRequiredService<ChargingProviderClientFactory>(),
-            _clock,
-            NullLogger<CheckChargingStartCommandHandler>.Instance);
+        var handler = Checker(database, host);
 
         if (windowExpires)
         {
@@ -260,7 +259,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         if (failure == "interrupted")
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                ExecuteAsync(operation.Id, transport, cancellation.Token));
+                ExecuteAsync(operation.Id, transport, cancellationToken: cancellation.Token));
         }
         else
         {
@@ -446,11 +445,7 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             return Task.FromResult(response);
         });
         using var host = CreateProviderHost(database, transport);
-        var handler = new CheckChargingStartCommandHandler(
-            database,
-            host.Services.GetRequiredService<ChargingProviderClientFactory>(),
-            _clock,
-            NullLogger<CheckChargingStartCommandHandler>.Instance);
+        var handler = Checker(database, host);
         var result = await handler.HandleAsync(new(operation.Id), CancellationToken.None);
         Assert.Equal(checkOutcome, result.Outcome);
         var saved = await database.Operations.AsNoTracking().Include(value => value.Session!)
@@ -477,6 +472,234 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
         }
     }
 
+    [Fact]
+    public async Task Start_LostResponse_RetryReusesKeyAndPayloadAndConfirmsWithoutSecondEffect()
+    {
+        var operation = await PrepareAsync();
+        var requests = new List<(string Key, string Body)>();
+        using var transport = new ProviderTransport(async (request, cancellationToken) =>
+        {
+            requests.Add((
+                request.Headers.GetValues("Idempotency-Key").Single(),
+                await request.Content!.ReadAsStringAsync(cancellationToken)));
+            return requests.Count == 1 ? throw new HttpRequestException("Lost.") : Applied(operation.PublicId);
+        });
+
+        await ExecuteAsync(operation.Id, transport);
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 2);
+
+        Assert.Equal(2, requests.Count);
+        Assert.Equal(requests[0], requests[1]);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Confirmed, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Active, saved.Session!.Lifecycle);
+        Assert.Equal(2, saved.AuthorizedAttemptCount);
+        var attempts = await database.Attempts.Where(value => value.OperationId == operation.Id)
+            .OrderBy(value => value.Number)
+            .ToListAsync();
+        Assert.Equal([CommandOutcome.Uncertain, CommandOutcome.Confirmed], attempts.Select(value => value.Outcome));
+        Assert.All(attempts, value => Assert.NotNull(value.FinishedAt));
+        Assert.Equal(attempts[0].ProviderConnectorId, attempts[1].ProviderConnectorId);
+        Assert.Equal(attempts[0].SessionPublicId, attempts[1].SessionPublicId);
+        Assert.Equal(attempts[0].OperationPublicId, attempts[1].OperationPublicId);
+    }
+
+    [Fact]
+    public async Task Start_RepeatedAmbiguity_StopsAtPersistedEffectLimitAcrossRedelivery()
+    {
+        var operation = await PrepareAsync();
+        using var transport = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+
+        foreach (int number in new[] { 1, 2, 2, 3, 3, 4 })
+        {
+            await ExecuteAsync(operation.Id, transport, attemptNumber: number);
+        }
+
+        Assert.Equal(3, transport.Calls);
+        await using var database = Database();
+        var saved = await database.Operations.AsNoTracking().SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Uncertain, saved.Outcome);
+        Assert.Equal(3, saved.AuthorizedAttemptCount);
+        Assert.Equal(3, saved.StartRequestLimit);
+        Assert.Equal(3, await database.Attempts.CountAsync(value => value.OperationId == operation.Id));
+    }
+
+    [Fact]
+    public async Task Start_RetryMessageOutOfOrderOrRedelivered_DoesNotSpendBudget()
+    {
+        var operation = await PrepareAsync();
+        int calls = 0;
+        using var transport = new ProviderTransport((_, _) => ++calls == 1
+            ? throw new HttpRequestException("Lost.")
+            : Task.FromResult(Applied(operation.PublicId)));
+        await ExecuteAsync(operation.Id, transport);
+
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 3);
+        Assert.Equal(1, transport.Calls);
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 2);
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 2);
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 3);
+
+        Assert.Equal(2, transport.Calls);
+        await using var database = Database();
+        var saved = await database.Operations.AsNoTracking().SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Confirmed, saved.Outcome);
+        Assert.Equal(2, saved.AuthorizedAttemptCount);
+    }
+
+    [Fact]
+    public async Task Start_RetryAfterArrivalDeadline_AuthorizesNothingAndKeepsStartUncertain()
+    {
+        var operation = await PrepareAsync();
+        using var transport = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+        await ExecuteAsync(operation.Id, transport);
+
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 2);
+
+        Assert.Equal(1, transport.Calls);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Uncertain, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Starting, saved.Session!.Lifecycle);
+        Assert.Equal(ReservationState.Active, saved.Session.Reservation!.State);
+        Assert.Equal(1, saved.AuthorizedAttemptCount);
+        Assert.Equal(1, await database.Attempts.CountAsync(value => value.OperationId == operation.Id));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.Conflict)]
+    public async Task Start_RetryRejected_OnlyCodedRejectionSettlesTheStart(HttpStatusCode status)
+    {
+        var operation = await PrepareAsync();
+        int calls = 0;
+        using var transport = new ProviderTransport((_, _) =>
+        {
+            if (++calls == 1)
+            {
+                throw new HttpRequestException("Lost.");
+            }
+
+            return Task.FromResult(new HttpResponseMessage(status)
+            {
+                Content = status == HttpStatusCode.Conflict ? JsonContent.Create(
+                    new
+                    {
+                        status = (int)status,
+                        code = "connector_unavailable",
+                        commandId = Guid.NewGuid(),
+                        externalOperationId = operation.PublicId
+                    },
+                    mediaType: new("application/problem+json")) : new StringContent("")
+            });
+        });
+        await ExecuteAsync(operation.Id, transport);
+
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 2);
+
+        Assert.Equal(2, transport.Calls);
+        await using var database = Database();
+        var saved = await database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.Id == operation.Id);
+        bool settled = status == HttpStatusCode.Conflict;
+        Assert.Equal(settled ? CommandOutcome.Rejected : CommandOutcome.Uncertain, saved.Outcome);
+        Assert.Equal(settled ? SessionLifecycle.Failed : SessionLifecycle.Starting, saved.Session!.Lifecycle);
+        var retry = await database.Attempts
+            .SingleAsync(value => value.OperationId == operation.Id && value.Number == 2);
+        Assert.NotNull(retry.FinishedAt);
+        Assert.Equal(settled ? null : (int)status, retry.ResponseStatusCode);
+    }
+
+    [Fact]
+    public async Task Start_ResolvedByCheckBeforeRetry_DoesNotRepeatTheEffect()
+    {
+        var operation = await PrepareAsync();
+        using var transport = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+        await ExecuteAsync(operation.Id, transport);
+        await using var database = Database();
+        using var queries = new ProviderTransport((_, _) => Task.FromResult(Applied(operation.PublicId)));
+        using var host = CreateProviderHost(database, queries);
+        var checker = Checker(database, host);
+        await checker.HandleAsync(new(operation.Id), CancellationToken.None);
+
+        await ExecuteAsync(operation.Id, transport, attemptNumber: 2);
+
+        Assert.Equal(1, transport.Calls);
+        var saved = await database.Operations.AsNoTracking().SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Confirmed, saved.Outcome);
+        Assert.Equal(1, saved.AuthorizedAttemptCount);
+    }
+
+    [Fact]
+    public async Task CheckStart_NoProviderRecord_ResendsTheSameOperationAsTheNextRequest()
+    {
+        var operation = await PrepareAsync();
+        using var lost = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+        await ExecuteAsync(operation.Id, lost);
+        using var queries = new ProviderTransport(
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)));
+
+        var sent = await CheckAsync(operation.Id, queries, automatic: true);
+
+        Assert.Equal([new StartCharging(operation.Id, 2)], sent);
+        Assert.Equal(2, queries.Calls);
+    }
+
+    [Theory]
+    [InlineData("manual")]
+    [InlineData("lookup-unavailable")]
+    [InlineData("limit-used")]
+    [InlineData("denied-retry")]
+    public async Task CheckStart_ResendNotPermitted_OnlyLooksUp(string scenario)
+    {
+        var operation = await PrepareAsync();
+        using var lost = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+        await ExecuteAsync(operation.Id, lost);
+        if (scenario == "limit-used")
+        {
+            await ExecuteAsync(operation.Id, lost, attemptNumber: 2);
+            await ExecuteAsync(operation.Id, lost, attemptNumber: 3);
+        }
+
+        if (scenario == "denied-retry")
+        {
+            using var denied = new ProviderTransport(
+                (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)));
+            await ExecuteAsync(operation.Id, denied, attemptNumber: 2);
+        }
+
+        using var queries = new ProviderTransport((_, _) => Task.FromResult(new HttpResponseMessage(
+            scenario == "lookup-unavailable" ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.NotFound)));
+
+        var sent = await CheckAsync(operation.Id, queries, automatic: scenario != "manual");
+
+        Assert.Empty(sent);
+        Assert.True(queries.Calls > 0);
+    }
+
+    private async Task<StartCharging[]> CheckAsync(Guid operationId, ProviderTransport queries, bool automatic)
+    {
+        await using var database = Database();
+        using var host = CreateProviderHost(database, queries);
+        var messaging = _messaging!;
+        await messaging.TrackActivity().Timeout(TimeSpan.FromSeconds(15)).ExecuteAndWaitAsync(
+            bus => Checker(database, host, bus).HandleAsync(new(operationId, automatic), CancellationToken.None));
+        return messaging.Services.GetRequiredService<StartRecorder>().For(operationId);
+    }
+
+    private CheckChargingStartCommandHandler Checker(PlatformDbContext database, IHost host, IMessageBus? bus = null) =>
+        new(
+            database,
+            host.Services.GetRequiredService<ChargingProviderClientFactory>(),
+            _clock,
+            bus ?? _scope!.ServiceProvider.GetRequiredService<IMessageBus>(),
+            NullLogger<CheckChargingStartCommandHandler>.Instance);
+
     private async Task<CheckChargingStart[]> ScheduledChecksAsync(Guid operationId)
     {
         var envelopes = await _messaging!.Services.GetRequiredService<IMessageStore>().Admin.AllIncomingAsync();
@@ -489,16 +712,20 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
     }
 
     private async Task ExecuteAsync(
-        Guid operationId, ProviderTransport transport, CancellationToken cancellationToken = default)
+        Guid operationId,
+        ProviderTransport transport,
+        int attemptNumber = 1,
+        CancellationToken cancellationToken = default)
     {
         await using var database = Database();
-        await ExecuteAsync(operationId, transport, database, cancellationToken);
+        await ExecuteAsync(operationId, transport, database, attemptNumber, cancellationToken);
     }
 
     private async Task ExecuteAsync(
         Guid operationId,
         ProviderTransport transport,
         PlatformDbContext database,
+        int attemptNumber = 1,
         CancellationToken cancellationToken = default)
     {
         using var host = CreateProviderHost(database, transport);
@@ -509,14 +736,14 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
             _clock,
             Options.Create(new ChargingExecutionOptions
             {
-                MaximumEffectAttempts = 3,
+                MaximumStartRequests = 3,
                 MaximumConcurrentStarts = 2,
-                MaximumAutomaticChecks = 2,
-                AutomaticCheckInterval = TimeSpan.FromMinutes(1)
+                MaximumAutomaticStatusChecks = 2,
+                AutomaticStatusCheckInterval = TimeSpan.FromMinutes(1)
             }),
             scope.ServiceProvider.GetRequiredService<IDbContextOutbox>(),
             NullLogger<StartChargingCommandHandler>.Instance);
-        await handler.HandleAsync(new(operationId), cancellationToken);
+        await handler.HandleAsync(new(operationId, attemptNumber), cancellationToken);
     }
 
     private static IHost CreateProviderHost(PlatformDbContext database, ProviderTransport transport)
@@ -608,6 +835,21 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) :
                 rejection = (string?)null
             })
     };
+
+    public sealed class StartRecorder
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<StartCharging> _messages = new();
+
+        public void Add(StartCharging message) => _messages.Enqueue(message);
+
+        public StartCharging[] For(Guid operationId) =>
+            [.. _messages.Where(value => value.OperationId == operationId)];
+    }
+
+    public sealed class StartChargingRecorderHandler(StartRecorder recorder)
+    {
+        public void Handle(StartCharging message) => recorder.Add(message);
+    }
 
     private sealed class ProviderTransport(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler

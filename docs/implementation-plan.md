@@ -357,7 +357,7 @@ Notification failure leaves accepted reservations intact and remains separately 
     and bounded timeouts. Verify matching results and retained provider state.
     Depends on M06.01.1.
   - [x] M06.01.3 Worker execution: consume accepted start work, recheck eligibility,
-    persist attempts and effect budgets, call the provider outside SQL transactions,
+    persist attempts and start request limits, call the provider outside SQL transactions,
     and apply matching confirmed/rejected outcomes atomically. Record ambiguous
     outcomes as uncertain. Verify the confirmed/rejected driver flows and claim
     handling, including definitive access denial on the initial provider request.
@@ -377,7 +377,7 @@ Notification failure leaves accepted reservations intact and remains separately 
       Verify lost-response resolution, missing results, outages, and repeated
       checks through the public integration; retain uncertainty and claims after
       missing results or later 401/403 responses. No query counters or lookup history.
-    - [ ] M06.01.4.2 Safe WattHarbor effect retries: reuse the operation, key, and
+    - [x] M06.01.4.2 Safe WattHarbor effect retries: reuse the operation, key, and
       saved payload with one retry owner and the existing persisted effect limit.
       Recheck eligibility before each attempt. Verify deadline enforcement,
       bounded attempts across redelivery, and no regression of resolved outcomes.

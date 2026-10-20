@@ -6,6 +6,7 @@ using EvCharging.Persistence;
 using EvCharging.Persistence.Entities;
 using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
+using Wolverine;
 using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
@@ -14,6 +15,7 @@ public sealed class CheckChargingStartCommandHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
     TimeProvider clock,
+    IMessageBus bus,
     ILogger<CheckChargingStartCommandHandler> logger)
 {
     [NonTransactional]
@@ -23,7 +25,7 @@ public sealed class CheckChargingStartCommandHandler(
     {
         if (!message.Automatic)
         {
-            return await CheckAsync(message.OperationId, cancellationToken);
+            return await CheckAsync(message.OperationId, resend: false, cancellationToken);
         }
 
         var endsAt = await database.Operations.AsNoTracking()
@@ -40,7 +42,7 @@ public sealed class CheckChargingStartCommandHandler(
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, window.Token);
         try
         {
-            return await CheckAsync(message.OperationId, bounded.Token);
+            return await CheckAsync(message.OperationId, resend: true, bounded.Token);
         }
         catch (OperationCanceledException) when (window.IsCancellationRequested
             && !cancellationToken.IsCancellationRequested)
@@ -52,6 +54,7 @@ public sealed class CheckChargingStartCommandHandler(
 
     private async Task<ChargingStartCheckResult> CheckAsync(
         Guid operationId,
+        bool resend,
         CancellationToken cancellationToken)
     {
         var operation = await database.Operations.AsNoTracking()
@@ -81,6 +84,11 @@ public sealed class CheckChargingStartCommandHandler(
                 "Status check for start {OperationId} returned {CheckOutcome}",
                 operation.PublicId,
                 evidence.Outcome);
+            if (resend && evidence.Outcome == ChargingStartCheckOutcome.Unresolved)
+            {
+                await ResendAsync(operation, attempt);
+            }
+
             return new(evidence.Outcome);
         }
 
@@ -111,6 +119,26 @@ public sealed class CheckChargingStartCommandHandler(
             operation.PublicId,
             operation.Outcome);
         return new(ChargingStartCheckOutcome.Resolved);
+    }
+
+    // The provider has no record of the latest ambiguous request, so the same operation key is sent again.
+    // Authorization rechecks eligibility and the request limit; overlapping checks claim one attempt number.
+    private async Task ResendAsync(Operation operation, Attempt latest)
+    {
+        // A request refused for access establishes nothing about the earlier ones, so it ends resending.
+        if (operation.Outcome != CommandOutcome.Uncertain || latest.FinishedAt is null
+            || latest.FailureCode is not (StartChargingCommandHandler.TransportFailureCode
+                or StartChargingCommandHandler.InvalidResponseCode)
+            || latest.Number >= operation.StartRequestLimit)
+        {
+            return;
+        }
+
+        await bus.PublishAsync(new StartCharging(operation.Id, latest.Number + 1));
+        logger.LogInformation(
+            "Status check found no provider record for start {OperationId}; resending as request {AttemptNumber}",
+            operation.PublicId,
+            latest.Number + 1);
     }
 
     private async Task<Evidence> ReadEvidenceAsync(Attempt attempt, CancellationToken cancellationToken)

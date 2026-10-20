@@ -11,8 +11,8 @@ internal static class ApplicationServiceExtensions
             .BindConfiguration("ChargingExecution")
             .ValidateDataAnnotations()
             .Validate(
-                options => options.AutomaticCheckInterval > TimeSpan.Zero
-                    && options.AutomaticCheckInterval <= TimeSpan.FromMinutes(1),
+                options => options.AutomaticStatusCheckInterval > TimeSpan.Zero
+                    && options.AutomaticStatusCheckInterval <= TimeSpan.FromMinutes(1),
                 "The automatic check interval must be positive and at most one minute.")
             .ValidateOnStart();
         services.AddOptions<MessagingFailureOptions>()

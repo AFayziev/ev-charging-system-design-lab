@@ -19,7 +19,7 @@ public sealed class Operation : IAuditableEntity
     public CommandOutcome Outcome { get; private set; }
     public DateTimeOffset AcceptedAt { get; private set; }
     public int AuthorizedAttemptCount { get; private set; }
-    public int? EffectAttemptLimit { get; private set; }
+    public int? StartRequestLimit { get; private set; }
     public DateTimeOffset? AutomaticChecksEndAt { get; private set; }
 
     public Result ScheduleAutomaticChecks(DateTimeOffset endsAt)

@@ -23,13 +23,13 @@ public sealed class StartChargingCommandHandler(
     IDbContextOutbox outbox,
     ILogger<StartChargingCommandHandler> logger)
 {
-    private const string TransportFailureCode = "provider_transport_failure";
-    private const string InvalidResponseCode = "provider_response_unmatched";
+    internal const string TransportFailureCode = "provider_transport_failure";
+    internal const string InvalidResponseCode = "provider_response_unmatched";
 
     [NonTransactional]
     public async Task HandleAsync(StartCharging message, CancellationToken cancellationToken)
     {
-        var attempt = await AuthorizeAsync(message.OperationId, cancellationToken);
+        var attempt = await AuthorizeAsync(message, cancellationToken);
         if (attempt is null)
         {
             return;
@@ -46,41 +46,83 @@ public sealed class StartChargingCommandHandler(
         await ApplyOutcomeAsync(attempt, result, cancellationToken);
     }
 
-    private async Task<Attempt?> AuthorizeAsync(Guid operationId, CancellationToken cancellationToken)
+    private async Task<Attempt?> AuthorizeAsync(StartCharging message, CancellationToken cancellationToken)
     {
+        var operationId = message.OperationId;
+        int attemptNumber = message.AttemptNumber;
+        bool isRetry = attemptNumber > 1;
+        Attempt? Skipped(string reason)
+        {
+            logger.LogInformation(
+                "Start request {AttemptNumber} for operation {OperationId} was not authorized: {Reason}",
+                attemptNumber,
+                operationId,
+                reason);
+            return null;
+        }
+
         var driverId = await database.Operations.Where(value => value.Id == operationId)
             .Select(value => (Guid?)value.DriverId)
             .SingleOrDefaultAsync(cancellationToken);
         if (driverId is null)
         {
-            return null;
+            return Skipped("the operation does not exist");
         }
 
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
         await database.LockDriverReservationsAsync(driverId.Value, cancellationToken);
         var operation = await LoadOperationAsync(operationId, cancellationToken);
+        // A message authorizes only its own numbered attempt, so redelivery cannot spend extra budget.
         if (operation is null || operation.Kind != ChargingCommandKind.Start
-            || operation.Outcome != CommandOutcome.Pending || operation.AuthorizedAttemptCount != 0)
+            || operation.AuthorizedAttemptCount != attemptNumber - 1
+            || operation.Outcome != (isRetry ? CommandOutcome.Uncertain : CommandOutcome.Pending)
+            || isRetry && operation.AuthorizedAttemptCount >= operation.StartRequestLimit)
         {
-            return null;
+            return Skipped("the operation is not awaiting this request");
+        }
+
+        Attempt? previous = null;
+        if (isRetry)
+        {
+            previous = await database.Attempts.AsNoTracking()
+                .SingleAsync(
+                    value => value.OperationId == operation.Id && value.Number == operation.AuthorizedAttemptCount,
+                    cancellationToken);
+            if (previous.FinishedAt is null)
+            {
+                return Skipped("the previous request has not finished");
+            }
         }
 
         var session = operation.Session ?? throw new InvalidOperationException("Session must be loaded.");
         var reservation = session.Reservation ?? throw new InvalidOperationException("Reservation must be loaded.");
         if (session.Lifecycle != SessionLifecycle.Starting || reservation.DriverId != operation.DriverId)
         {
-            return null;
+            return Skipped("the session is no longer starting");
         }
 
-        var mapping = await LoadMappingAsync(session.ConnectorId, cancellationToken);
-        if (mapping is null)
+        // A retry repeats the saved payload; it never remaps equipment or providers.
+        Guid providerId;
+        string? integrationKey;
+        ProviderEquipmentAddress address;
+        if (previous is null)
         {
-            throw new InvalidOperationException("The connector has no provider mapping.");
+            var mapping = await LoadMappingAsync(session.ConnectorId, cancellationToken)
+                ?? throw new InvalidOperationException("The connector has no provider mapping.");
+            var chargingProvider = mapping.ProviderCharger?.ProviderStation?.ChargingProvider
+                ?? throw new InvalidOperationException("The charging provider must be loaded.");
+            providerId = chargingProvider.Id;
+            integrationKey = chargingProvider.IntegrationKey;
+            address = mapping.ToProviderAddress();
+        }
+        else
+        {
+            providerId = previous.ChargingProviderId;
+            integrationKey = previous.IntegrationKey;
+            address = new(previous.ProviderStationId, previous.ProviderChargerId, previous.ProviderConnectorId);
         }
 
-        var chargingProvider = mapping.ProviderCharger?.ProviderStation?.ChargingProvider
-            ?? throw new InvalidOperationException("The charging provider must be loaded.");
-        providers.ValidateIntegration(chargingProvider.IntegrationKey);
+        providers.ValidateIntegration(integrationKey);
 
         bool ownsClaim = !await database.Sessions.AnyAsync(
             value => value.ConnectorId == session.ConnectorId && value.Id != session.Id
@@ -89,11 +131,22 @@ public sealed class StartChargingCommandHandler(
             cancellationToken);
         if (!ownsClaim)
         {
-            return null;
+            return Skipped("another session holds the connector");
         }
 
         var authorizedAt = clock.GetUtcNow();
         var eligibility = reservation.ValidateChargingStart(authorizedAt);
+        if (eligibility.IsFailed && isRetry)
+        {
+            // An earlier attempt may have had effect, so ineligibility ends retrying without rejecting the start.
+            logger.LogInformation(
+                "Retry {AttemptNumber} of start {OperationId} is no longer eligible: {Errors}",
+                attemptNumber,
+                operation.PublicId,
+                string.Join(", ", eligibility.Errors));
+            return null;
+        }
+
         if (eligibility.IsFailed)
         {
             var rejection = operation.RejectStart();
@@ -111,29 +164,29 @@ public sealed class StartChargingCommandHandler(
 
         int claimed = await database.Operations
             .Where(value => value.Id == operation.Id && value.Kind == ChargingCommandKind.Start
-                && value.Outcome == CommandOutcome.Pending && value.AuthorizedAttemptCount == 0)
+                && value.Outcome == operation.Outcome && value.AuthorizedAttemptCount == attemptNumber - 1
+                && (!isRetry || value.AuthorizedAttemptCount < value.StartRequestLimit))
             .ExecuteUpdateAsync(
                 setters => setters
-                    .SetProperty(value => value.AuthorizedAttemptCount, 1)
+                    .SetProperty(value => value.AuthorizedAttemptCount, attemptNumber)
                     .SetProperty(
-                        value => value.EffectAttemptLimit,
-                        options.Value.MaximumEffectAttempts),
+                        value => value.StartRequestLimit,
+                        value => isRetry ? value.StartRequestLimit : options.Value.MaximumStartRequests),
                 cancellationToken);
         if (claimed == 0)
         {
-            return null;
+            return Skipped("a concurrent delivery claimed the request");
         }
 
         // The batch claim bypasses tracking. Reload before any subsequent tracked write.
         await database.Entry(operation).ReloadAsync(cancellationToken);
-        var address = mapping.ToProviderAddress();
         var attempt = new Attempt
         {
             OperationId = operation.Id,
             Number = operation.AuthorizedAttemptCount,
             AuthorizedAt = authorizedAt,
-            ChargingProviderId = chargingProvider.Id,
-            IntegrationKey = chargingProvider.IntegrationKey!,
+            ChargingProviderId = providerId,
+            IntegrationKey = integrationKey!,
             ProviderStationId = address.StationId,
             ProviderChargerId = address.ChargerId,
             ProviderConnectorId = address.ConnectorId,
@@ -141,9 +194,21 @@ public sealed class StartChargingCommandHandler(
             SessionPublicId = session.PublicId
         };
         database.Attempts.Add(attempt);
+        if (isRetry)
+        {
+            await database.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            logger.LogInformation(
+                "Authorized retry attempt {AttemptId} ({AttemptNumber}) for start {OperationId}",
+                attempt.Id,
+                attemptNumber,
+                operation.PublicId);
+            return attempt;
+        }
+
         var policy = options.Value;
         // One extra interval lets the final scheduled check run before the window closes.
-        var endsAt = authorizedAt + policy.AutomaticCheckInterval * (policy.MaximumAutomaticChecks + 1);
+        var endsAt = authorizedAt + policy.AutomaticStatusCheckInterval * (policy.MaximumAutomaticStatusChecks + 1);
         var scheduling = operation.ScheduleAutomaticChecks(endsAt);
         if (scheduling.IsFailed)
         {
@@ -155,11 +220,11 @@ public sealed class StartChargingCommandHandler(
         }
 
         outbox.Enroll(database);
-        for (int number = 1; number <= policy.MaximumAutomaticChecks; number++)
+        for (int number = 1; number <= policy.MaximumAutomaticStatusChecks; number++)
         {
             await outbox.ScheduleAsync(
                 new CheckChargingStart(operation.Id, Automatic: true),
-                authorizedAt + policy.AutomaticCheckInterval * number,
+                authorizedAt + policy.AutomaticStatusCheckInterval * number,
                 new DeliveryOptions { DeliverBy = endsAt });
         }
 
@@ -200,7 +265,10 @@ public sealed class StartChargingCommandHandler(
             && rejected.First().ExternalOperationId == attempt.OperationPublicId)
         {
             var evidence = rejected.First();
-            transition = operation.RejectStart();
+            // An access denial establishes non-execution of this request only, so it cannot settle a start
+            // whose earlier attempts were ambiguous.
+            bool deniedRetry = evidence.CommandId is null && attempt.Number > 1;
+            transition = deniedRetry ? operation.MarkUncertain() : operation.RejectStart();
             attempt.ProviderCommandId = evidence.CommandId;
             attempt.FailureCode = evidence.Code;
             attempt.ResponseStatusCode = (int?)evidence.StatusCode;

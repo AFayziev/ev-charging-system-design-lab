@@ -136,10 +136,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("driver_id")
                         .HasAnnotation("Audit:Included", true);
 
-                    b.Property<int?>("EffectAttemptLimit")
-                        .HasColumnType("integer")
-                        .HasColumnName("effect_attempt_limit");
-
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uuid")
                         .HasColumnName("idempotency_key");
@@ -165,6 +161,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("session_id")
                         .HasAnnotation("Audit:Included", true);
 
+                    b.Property<int?>("StartRequestLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("start_request_limit");
+
                     b.HasKey("Id")
                         .HasName("pk_operations");
 
@@ -181,7 +181,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.ToTable("operations", "charging", t =>
                         {
-                            t.HasCheckConstraint("ck_operations_effect_budget", "authorized_attempt_count >= 0 AND (effect_attempt_limit IS NULL AND authorized_attempt_count = 0 OR effect_attempt_limit IS NOT NULL AND effect_attempt_limit > 0 AND authorized_attempt_count <= effect_attempt_limit)");
+                            t.HasCheckConstraint("ck_operations_start_request_budget", "authorized_attempt_count >= 0 AND (start_request_limit IS NULL AND authorized_attempt_count = 0 OR start_request_limit IS NOT NULL AND start_request_limit > 0 AND authorized_attempt_count <= start_request_limit)");
                         });
 
                     b.HasAnnotation("Audit:ResourceType", "Operation");
