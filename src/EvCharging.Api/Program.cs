@@ -2,9 +2,11 @@ using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using EvCharging.Api.Features.Charging;
 using EvCharging.Api.Features.Drivers;
+using EvCharging.Api.Features.Observations;
 using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
+using EvCharging.Api.Streaming;
 using EvCharging.Messaging;
 using EvCharging.Persistence.Extensions;
 using Wolverine.EntityFrameworkCore;
@@ -12,8 +14,10 @@ using Wolverine.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.AddApiAuthentication();
+builder.AddObservationSourceAuthentication();
 builder.AddHttpApiDefaults("/api");
 builder.AddPlatformPersistence();
+builder.AddObservationStream();
 builder.AddMessaging(
     options =>
     {
@@ -25,11 +29,12 @@ builder.AddMessaging(
     });
 builder.Services.AddApplicationServices();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddValidation();
+builder.Services.AddApplicationValidation();
 
 var app = builder.Build();
 
 app.UseHttpApiDefaults();
+app.UseObservationPayloadBuffering();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -38,5 +43,6 @@ app.MapStations();
 app.MapDrivers();
 app.MapReservations();
 app.MapCharging();
+app.MapObservations();
 
 app.Run();

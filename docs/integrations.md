@@ -131,9 +131,10 @@ Provider identity namespaces event and external IDs. Clients apply the
 [domain ordering and measurement rules](domain.md#8-time-identity-and-ordering).
 
 Provider callbacks target the platform gateway, which routes them to authenticated
-observation ingestion. Recovery polling calls provider APIs directly; the charging
-worker submits raw evidence and normalized fields through the gateway to the same
-ingestion path.
+observation ingestion. Each provider integration authenticates its callbacks with its
+own credential, and the credential, not the payload, establishes the integration.
+Recovery polling calls provider APIs directly; the charging worker submits raw
+evidence and normalized fields through the gateway to the same ingestion path.
 Callbacks are acknowledged only after durable stream acceptance. Unacknowledged
 delivery is retried with the same event identity under bounded scenario settings;
 an ambiguous acknowledgement can therefore produce duplicates. Polling retrieves

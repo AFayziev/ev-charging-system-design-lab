@@ -30,12 +30,14 @@ var notificationMessageMigrations = builder.AddMessageStorageMigration(
     "notification", databaseAccess.Migration, databaseAccess.Provisioning);
 
 var gatewayOidcSecret = builder.AddPersistentSecret("gateway-oidc-secret");
+var wattHarborCallbackKey = builder.AddPersistentSecret("wattharbor-callback-key");
 var identity = builder.AddIdentityProvider(gatewayOidcSecret);
 
 var documents = builder.AddDocumentDatabase();
 var cacheStore = builder.AddCache();
 var broker = builder.AddMessageBroker();
 var stream = builder.AddObservationStream();
+var streamProvisioning = builder.AddObservationStreamProvisioning(stream);
 var searchIndex = builder.AddSearchIndex();
 var (storage, storageAccessKey, storageSecretKey) = builder.AddObjectStorage();
 
@@ -62,7 +64,14 @@ api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
     .WithReference(broker)
     .WaitFor(broker)
     .WithReference(stream)
-    .WaitFor(stream);
+    .WaitFor(stream)
+    .WaitForCompletion(streamProvisioning)
+    .WithEnvironment("ObservationStream__Topic", EvCharging.AppHost.ResourceExtensions.ObservationTopic)
+    .WithEnvironment(
+        $"ObservationSources__Sources__{chargingProviders.WattHarborIntegrationKey}__Client", "WattHarbor")
+    .WithEnvironment(
+        $"ObservationSources__Sources__{chargingProviders.WattHarborIntegrationKey}__ApiKeys__0",
+        wattHarborCallbackKey);
 
 var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
@@ -215,7 +224,7 @@ foreach (var worker in new[] { charging, observation, search, cache, media })
 
 foreach (var consumer in new[] { observation, search, cache })
 {
-    consumer.WithReference(stream).WaitFor(stream);
+    consumer.WithReference(stream).WaitFor(stream).WaitForCompletion(streamProvisioning);
 }
 
 observation.WithReference(documents).WaitFor(documents);

@@ -37,6 +37,11 @@ internal static class ApplicationServiceExtensions
         return services;
     }
 
+    // Validation metadata is generated for the assembly that calls AddValidation, so the call lives here
+    // for this assembly's endpoint parameter types.
+    public static IServiceCollection AddApplicationValidation(this IServiceCollection services) =>
+        services.AddValidation();
+
     public static WolverineOptions AddApplicationHandlers(this WolverineOptions options)
     {
         options.Policies.Add<UserContextPolicy>();

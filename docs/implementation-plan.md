@@ -57,7 +57,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M04 | Station browsing and operator edits | M03 | Done |
 | M05 | Reservations, expiry, and notifications | M04.01 | In progress |
 | M06 | Charging start/stop and operator investigation | M05.02; cancellation races require M05.03 | In progress |
-| M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | Planned |
+| M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | In progress |
 | M08 | Live updates and cached views | M07.01 | Planned |
 | M09 | Search and station discovery | M04.01, M05.01; availability requires M07.01 | Planned |
 | M10 | Station media, session summaries, and diagnostics | M04.02, M05.01; summaries require M07.02 | Planned |
@@ -454,7 +454,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   observations. The provider is a black box that honors the documented contract;
   the work is on the platform side. Depends on M06.01. Sub-items are sequenced as
   follows:
-  - [ ] M07.01.1 Observation contract and ingestion boundary: document the
+  - [x] M07.01.1 Observation contract and ingestion boundary: document the
     WattHarbor observation contract (source event identity, occurrence time as
     the only ordering field, state, power, cumulative energy, callback and
     snapshot shapes, retry and acknowledgement rules). Add the authenticated gateway-routed callback

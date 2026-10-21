@@ -5,6 +5,8 @@ namespace EvCharging.AppHost;
 internal static class ResourceExtensions
 {
     internal const string PostgresImageTag = "18.6-bookworm";
+    internal const string KafkaImageTag = "4.3.1";
+    internal const string ObservationTopic = "observations";
 
     public static ReferenceExpression AddBrowserOrigin(
         this IDistributedApplicationBuilder builder,
@@ -129,7 +131,7 @@ internal static class ResourceExtensions
         builder.AddKafka("kafka")
             .WithImageRegistry("docker.io")
             .WithImage("apache/kafka")
-            .WithImageTag("4.3.1")
+            .WithImageTag(KafkaImageTag)
             .WithDataVolume()
             // Apache Kafka needs explicit KRaft settings alongside Aspire's listener configuration.
             .WithEnvironment("KAFKA_NODE_ID", "1")
@@ -142,6 +144,28 @@ internal static class ResourceExtensions
             .WithEnvironment("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1")
             .WithEnvironment("CLUSTER_ID", "MkU3OEVBNTcwNTJENDM2Qk")
             .WithLocalKafkaUI();
+
+    // The topic definitions live in infra/kafka/topics.txt; ObservationTopic must name its entry.
+    public static IResourceBuilder<ContainerResource> AddObservationStreamProvisioning(
+        this IDistributedApplicationBuilder builder,
+        IResourceBuilder<KafkaServerResource> stream)
+    {
+        var endpoint = stream.Resource.InternalEndpoint;
+        var provisioning = builder.AddDockerfile("kafka-provisioning", "../../infra/kafka")
+            .WithBuildArg("KAFKA_IMAGE", $"docker.io/apache/kafka:{KafkaImageTag}")
+            .WithEnvironment(
+                "BOOTSTRAP_SERVER",
+                ReferenceExpression.Create(
+                    $"{endpoint.Property(EndpointProperty.Host)}:{endpoint.Property(EndpointProperty.Port)}"))
+            .WaitFor(stream);
+
+        if (builder.ExecutionContext.IsRunMode)
+        {
+            provisioning.WithImageTag("local");
+        }
+
+        return provisioning;
+    }
 
     public static IResourceBuilder<ElasticsearchResource> AddSearchIndex(this IDistributedApplicationBuilder builder) =>
         builder.AddElasticsearch("elasticsearch", password: builder.AddPersistentSecret("elasticsearch-password"))

@@ -1,0 +1,2 @@
+# topic  partitions  retention.ms
+observations 6 604800000

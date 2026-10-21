@@ -362,6 +362,16 @@ business transitions also protect against independently submitted duplicate work
 [EF Core integration](https://wolverinefx.net/guide/durability/efcore/),
 [RabbitMQ reliability](https://www.rabbitmq.com/docs/reliability)
 
+#### Observation stream
+
+| Area | Choice |
+|---|---|
+| Topic | One observations topic with six partitions and seven-day retention, defined in `infra/kafka/topics.txt` and created by the one-shot `kafka-provisioning` resource before the API and observation consumers start; existing topics keep their partition count |
+| Partition key | Integration key and provider station, charger and connector address |
+| Producer | Idempotent, `acks=all`, bounded delivery timeout, configured through the Aspire Confluent producer settings; its health check is disabled so a stream outage fails callbacks without removing the API from gateway rotation |
+| Callback credential | One API key per provider integration in the `ObservationSources` settings, supplied by a persistent AppHost secret; the key identifies the integration and several keys may be active for rotation. ASP.NET Core provides no API-key scheme, so a small authentication handler validates the key |
+| Raw payload | Callback routes buffer the bounded body because Minimal API binding offers no access to the parsed text |
+
 ### 1.5 Storage and delivery
 
 The local storage service runs as a single-node container.
