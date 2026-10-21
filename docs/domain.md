@@ -337,12 +337,13 @@ idempotency does not make provider effects safe to repeat.
 
 ### 8.3 Ordering and recovery
 
-Source event identity distinguishes duplicate delivery. Higher connector sequences
-can update current state; older unique observations remain history. Historical
-evidence can fill a missing session fact without regressing equipment state.
-Receipt/partition order alone does not prove newer physical evidence. The
-[integration contract](integrations.md#3-observations-and-recovery) defines sequence
-scope and continuity.
+Source event identity distinguishes duplicate delivery. An observation with a newer
+source occurrence time can update current state; an equal or older unique
+observation remains history. Historical evidence can fill a missing session fact
+without regressing equipment state. Receipt/partition order alone does not prove
+newer physical evidence. The
+[integration contract](integrations.md#3-observations-and-recovery) defines the
+provider ordering fields.
 
 Retry repeats logical work; redelivery repeats message delivery; replay reprocesses
 retained history. Reconciliation resolves outcomes using external evidence.

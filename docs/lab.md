@@ -652,7 +652,7 @@ public API and the resulting platform state.
 | Arrival deadline passes with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled |
 | Start applies but response is lost | One logical operation; visible uncertainty resolves against provider evidence without blind resubmission |
 | Worker dies after effect before acknowledgement | Redelivery retains operation/attempt identity; SQL mutations deduplicate and provider ambiguity follows its contract |
-| Duplicate/late observations | Historical evidence retained; current state follows sequence policy |
+| Duplicate/late observations | Historical evidence retained; current state follows source-time ordering |
 | Replay into a replacement view | Validated rebuilt projection; no charging commands or notifications |
 | Telemetry stops | Timestamped state becomes stale; silence does not imply stopped or offline |
 | Stop confirmed before final usage | Session waits for final evidence; completion and summary use matching frozen facts |

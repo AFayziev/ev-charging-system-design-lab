@@ -308,7 +308,7 @@ scheduling and durable message recovery.
 
 1. Authenticate the source and validate payload size, shape, IDs, and timestamps.
 2. Build a versioned envelope with raw payload, normalized fields, provider/source
-   identity, connector sequence, and occurrence/receipt times.
+   identity, and occurrence/receipt times.
 3. Append durably to the observation stream before acknowledging the callback.
 4. Independent consumer groups materialize documents, latest views, aggregates,
    and lifecycle evidence.
@@ -324,7 +324,9 @@ Each consumer group owns its store and checkpoint; offsets advance after durable
 effects. Relational lifecycle processing commits deduplication, state, and outbox
 together. Document, cache, and search consumers use idempotent, version-conditional
 updates; their effects are not atomic with the relational store or with each other.
-The document latest view is the fallback after cache loss.
+Every store is fed by its own consumer group directly from the stream; none feeds
+another. Cached progress is written by the cache worker's group. The document
+latest view is only the read fallback after cache loss.
 
 Consumer lag is visible and limited by stream retention. Aggregation state has
 recoverable checkpoints. Replay uses isolated consumers and rebuild targets,

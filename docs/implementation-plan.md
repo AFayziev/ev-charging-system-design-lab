@@ -455,24 +455,24 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   the work is on the platform side. Depends on M06.01. Sub-items are sequenced as
   follows:
   - [ ] M07.01.1 Observation contract and ingestion boundary: document the
-    WattHarbor observation contract (source event identity, connector sequence,
-    occurrence time, state, power, cumulative energy, callback and snapshot shapes,
-    retry and acknowledgement rules). Add the authenticated gateway-routed callback
+    WattHarbor observation contract (source event identity, occurrence time as
+    the only ordering field, state, power, cumulative energy, callback and
+    snapshot shapes, retry and acknowledgement rules). Add the authenticated gateway-routed callback
     endpoint, payload validation, an adapter that normalizes provider payloads to
     canonical units, a versioned envelope, and a durable Kafka append partitioned
     by provider and connector, acknowledged only after confirmation. Verify with
     contract-shaped payloads: authentication denial, invalid payloads, no
     acknowledgement when the append fails, duplicate delivery, and normalization.
-  - [ ] M07.01.2 WattHarbor contract conformance: the simulator emits sequenced
+  - [ ] M07.01.2 WattHarbor contract conformance: the simulator emits timestamped
     observations for active sessions that survive restart, delivers callbacks with
     bounded same-identity retry, and returns a snapshot carrying the same identity
-    and sequence. It receives its callback target and credentials through a
+    and occurrence time. It receives its callback target and credentials through a
     simulation control call, so the platform needs no knowledge of its internals.
-    Add duplicate, older-sequence, and interrupted-telemetry faults. Verify with
+    Add duplicate, older-timestamp, and interrupted-telemetry faults. Verify with
     provider contract tests and the flow through the real ingestion boundary.
     Depends on M07.01.1.
   - [ ] M07.01.3 Progress view and query: independent observation-worker consumer
-    group that deduplicates by source identity, applies sequence-conditional
+    group that deduplicates by source identity, applies time-conditional
     updates to MongoDB history and latest views, and checkpoints after the durable
     write. Serve a progress query from the latest view. Verify duplicates,
     out-of-order events, and catch-up after worker restart.

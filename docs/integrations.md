@@ -122,14 +122,12 @@ Distinct platform connectors must map to independently usable provider capacity.
 Each lab provider provides:
 
 - Source event IDs unique within that provider.
-- Monotonic sequences scoped to its connector.
-- Provider session identity, source occurrence time, physical state, and
-  cumulative session energy where applicable.
+- Provider session identity, source occurrence time (the only ordering field),
+  physical state, and cumulative session energy where applicable.
 - Matching terminal state and an explicitly final energy reading for ended sessions.
-- Event identity, sequence continuity, sessions, and command outcomes retained
-  across restart.
+- Event identity, sessions, and command outcomes retained across restart.
 
-Provider identity namespaces connector sequences and external IDs. Clients apply the
+Provider identity namespaces event and external IDs. Clients apply the
 [domain ordering and measurement rules](domain.md#8-time-identity-and-ordering).
 
 Provider callbacks target the platform gateway, which routes them to authenticated
@@ -178,3 +176,17 @@ unless the selected service documents and verifies it. Technical configuration,
 sender setup, and extension options are recorded in
 [notification adapters](lab.md#18-notification-adapters);
 implementation and hosted verification are tracked in the [plan](implementation-plan.md).
+
+## 5. Known deviations from real providers
+
+The lab keeps provider contracts simple enough to exercise component interactions.
+These simplifications may differ from typical real charging providers:
+
+- **Commands.** WattHarbor answers synchronously and deduplicates by key. Real
+  providers commonly acknowledge a command and report its result later, often
+  without an idempotency key. AmpTrail ([plan](implementation-plan.md), M14) is the
+  representative shape, and the same-key resend above is specific to WattHarbor.
+- **Session origin.** Every session starts through a platform command. Sessions
+  started at the charger and unknown provider sessions are not modelled.
+- **Reservations.** They exist only on the platform and are not reserved at the
+  provider, so availability can change before the driver arrives.
