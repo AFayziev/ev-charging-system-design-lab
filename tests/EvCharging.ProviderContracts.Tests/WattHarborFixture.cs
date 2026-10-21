@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace EvCharging.ProviderContracts.Tests;
@@ -13,8 +14,10 @@ public sealed class WattHarborFixture : IAsyncLifetime
     private DistributedApplication? _app;
     private HttpClient? _charging;
     private HttpClient? _controls;
+    private CallbackReceiver? _receiver;
 
     private DistributedApplication App => _app ?? throw new InvalidOperationException("The provider has not started.");
+    public CallbackReceiver Receiver => _receiver ?? throw new InvalidOperationException("The receiver is not ready.");
     public HttpClient Charging => _charging ?? throw new InvalidOperationException("The charging client is not ready.");
 
     public async Task InitializeAsync()
@@ -35,6 +38,12 @@ public sealed class WattHarborFixture : IAsyncLifetime
             }
         }
 
+        // Short cadence and retry delays keep the observation scenarios fast.
+        builder.CreateResourceBuilder<ProjectResource>("wattharbor-provider-api")
+            .WithEnvironment("Telemetry__Interval", "00:00:00.300")
+            .WithEnvironment("Telemetry__DeliveryPollInterval", "00:00:00.100")
+            .WithEnvironment("Telemetry__RetryDelay", "00:00:00.100");
+        _receiver = await CallbackReceiver.StartAsync();
         _app = await builder.BuildAsync(timeout.Token);
         try
         {
@@ -43,6 +52,11 @@ public sealed class WattHarborFixture : IAsyncLifetime
                 .WaitForResourceHealthyAsync("wattharbor-provider-api", timeout.Token);
             _charging = await CreateClientAsync("charging-worker", "charging-client-secret");
             _controls = await CreateClientAsync("simulation-control", "simulation-client-secret");
+            using var target = await _controls.PutAsJsonAsync(
+                "/simulation/callbacks/observations",
+                new CallbackTarget(_receiver.Url.ToString(), CallbackReceiver.ApiKey),
+                timeout.Token);
+            target.EnsureSuccessStatusCode();
         }
         catch
         {
@@ -84,10 +98,36 @@ public sealed class WattHarborFixture : IAsyncLifetime
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task ConfigureTelemetryFaultAsync(
+        Guid externalSessionId, bool duplicate = false, bool deliverOutOfOrder = false, bool interrupt = false)
+    {
+        var controls = _controls ?? throw new InvalidOperationException("The control client is not ready.");
+        using var response = await controls.PutAsJsonAsync(
+            $"/simulation/sessions/{externalSessionId}/telemetry",
+            new TelemetryFault(duplicate, deliverOutOfOrder, interrupt));
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>Restarts the provider process; its stored sessions and callback target remain.</summary>
+    public async Task RestartProviderAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var commands = App.Services.GetRequiredService<ResourceCommandService>();
+        var result = await commands.ExecuteCommandAsync(
+            "wattharbor-provider-api", KnownResourceCommands.RestartCommand, timeout.Token);
+        Assert.True(result.Success, result.Message);
+        await App.ResourceNotifications.WaitForResourceHealthyAsync("wattharbor-provider-api", timeout.Token);
+    }
+
     public async Task DisposeAsync()
     {
         _charging?.Dispose();
         _controls?.Dispose();
+        if (_receiver is not null)
+        {
+            await _receiver.DisposeAsync();
+        }
+
         if (_app is not null)
         {
             await _app.DisposeAsync();
@@ -96,5 +136,7 @@ public sealed class WattHarborFixture : IAsyncLifetime
     }
 
     private sealed record EquipmentSettings(decimal PowerKw, bool Enabled);
+    private sealed record CallbackTarget(string Url, string ApiKey);
+    private sealed record TelemetryFault(bool Duplicate, bool DeliverOutOfOrder, bool Interrupt);
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string AccessToken);
 }

@@ -3,6 +3,7 @@ using EvCharging.WattHarborProviderApi.Features.Commands;
 using EvCharging.WattHarborProviderApi.Features.Equipment;
 using EvCharging.WattHarborProviderApi.Features.Sessions;
 using EvCharging.WattHarborProviderApi.Features.Simulation;
+using EvCharging.WattHarborProviderApi.Features.Telemetry;
 using EvCharging.WattHarborProviderApi.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +23,10 @@ builder.Services.AddScoped<GetSessionQueryHandler>();
 builder.Services.AddScoped<GetSessionByExternalSessionIdQueryHandler>();
 builder.Services.AddScoped<GetConnectorQueryHandler>();
 builder.Services.AddScoped<ConfigureConnectorCommandHandler>();
+builder.Services.AddScoped<GetSessionSnapshotQueryHandler>();
+builder.Services.AddScoped<ConfigureObservationCallbackCommandHandler>();
+builder.Services.AddSingleton<TelemetryFaults>();
+builder.AddObservationTelemetry();
 
 var app = builder.Build();
 
@@ -36,6 +41,8 @@ var publicApi = app.MapGroup("")
 publicApi.MapCommandEndpoints();
 publicApi.MapSessionEndpoints();
 app.MapCommandFaultEndpoints();
+app.MapTelemetryFaultEndpoints();
+app.MapObservationCallbackEndpoints();
 app.MapEquipmentEndpoints();
 
 app.Run();

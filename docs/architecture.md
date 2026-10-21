@@ -157,8 +157,8 @@ operation.
 | Operations, attempts, inbox/outbox, notification attempts | Relational primary | Investigation views |
 | Gateway authentication tickets and token state | Relational primary, dedicated session records | Shared by gateway replicas; authoritative reads bypass replicas and disposable cache |
 | File ownership, processing state, publication references | Relational primary | Object delivery and media views |
-| Accepted raw/normalized observation envelopes | Durable stream | Independent consumer groups |
-| Provider-shaped documents, observation history, latest observations | Document database projections | Cache and diagnostic queries |
+| Accepted normalized observation envelopes | Durable stream | Independent consumer groups |
+| Observation history, latest observations | Document database projections | Cache and diagnostic queries |
 | Hot query results | Cache | Reconstructable from owning stores |
 | Station text, location, capabilities, advisory availability | Search index | Rebuildable discovery index |
 | Originals, media variants, summaries, diagnostic bytes | Object storage | CDN or private signed transfers |
@@ -307,16 +307,16 @@ scheduling and durable message recovery.
 ## 8. Observation ingestion and streams
 
 1. Authenticate the source and validate payload size, shape, IDs, and timestamps.
-2. Build a versioned envelope with raw payload, normalized fields, provider/source
-   identity, and occurrence/receipt times.
-3. Append durably to the observation stream before acknowledging the callback.
+2. Build a versioned envelope with normalized fields, provider/source identity,
+   and occurrence/receipt times.
+3. Append durably to the observation stream before acknowledging the callback. A
+   callback can carry several observations; all are appended before acknowledgement.
 4. Independent consumer groups materialize documents, latest views, aggregates,
    and lifecycle evidence.
 
-Stream partitions use provider and connector identity. Bounded raw payloads stay
-in the envelope so document-database failure cannot lose accepted data. Large
-diagnostics use object storage. Unconfirmed appends receive no success
-acknowledgement; ambiguous appends can yield duplicates handled by source identity.
+Stream partitions use provider and connector identity. Large diagnostics use
+object storage. Unconfirmed appends receive no success acknowledgement; ambiguous
+appends can yield duplicates handled by source identity.
 Callback retry and polling behavior are defined in
 [integrations](integrations.md#3-observations-and-recovery).
 

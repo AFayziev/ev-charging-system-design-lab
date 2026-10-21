@@ -7,6 +7,8 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
     internal DbSet<ProviderCommand> Commands => Set<ProviderCommand>();
     internal DbSet<ProviderSession> Sessions => Set<ProviderSession>();
     internal DbSet<ProviderConnector> Connectors => Set<ProviderConnector>();
+    internal DbSet<ProviderObservation> Observations => Set<ProviderObservation>();
+    internal DbSet<CallbackTarget> CallbackTargets => Set<CallbackTarget>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,7 +50,74 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
         connectors.HasOne<ProviderCommand>().WithMany()
             .HasForeignKey(connector => connector.ActiveCommandId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        var observations = modelBuilder.Entity<ProviderObservation>();
+        observations.ToTable("observations");
+        observations.HasKey(observation => observation.Id);
+        observations.HasIndex(observation => observation.EventId).IsUnique();
+        observations.HasIndex(observation => new { observation.SessionId, observation.OccurredAt });
+        observations.HasIndex(observation => new { observation.DeliveryStatus, observation.NextAttemptAt });
+        observations.Property(observation => observation.State).HasConversion<string>().HasMaxLength(20);
+        observations.Property(observation => observation.DeliveryStatus).HasConversion<string>().HasMaxLength(20);
+        observations.Property(observation => observation.PowerKw).HasPrecision(10, 3);
+        observations.Property(observation => observation.EnergyWh).HasPrecision(14, 3);
+        observations.HasOne(observation => observation.Session).WithMany()
+            .HasForeignKey(observation => observation.SessionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var callbackTargets = modelBuilder.Entity<CallbackTarget>();
+        callbackTargets.ToTable("callback_targets");
+        callbackTargets.HasKey(target => target.Id);
+        callbackTargets.Property(target => target.Id).ValueGeneratedNever();
+        callbackTargets.Property(target => target.Url).HasMaxLength(2048);
+        callbackTargets.Property(target => target.ApiKey).HasMaxLength(256);
     }
+
+    /// <summary>
+    /// Locks the session row so an emission and a stop cannot interleave. The lock lasts until the open
+    /// transaction ends, so the caller must have started one.
+    /// </summary>
+    internal async Task<ProviderSession?> LockSessionAsync(
+        Guid externalSessionId,
+        CancellationToken cancellationToken)
+    {
+        RequireTransaction();
+        return (await Sessions
+            .FromSql($"SELECT * FROM sessions WHERE external_session_id = {externalSessionId} FOR UPDATE")
+            .ToListAsync(cancellationToken))
+            .SingleOrDefault();
+    }
+
+    /// <summary>
+    /// Share-locks active sessions so none can end while a reading is written; sessions a stop holds are skipped.
+    /// The lock lasts until the open transaction ends, so the caller must have started one.
+    /// </summary>
+    internal Task<List<ProviderSession>> LockActiveSessionsAsync(CancellationToken cancellationToken)
+    {
+        RequireTransaction();
+        return Sessions
+            .FromSql($"SELECT * FROM sessions WHERE ended_at IS NULL FOR SHARE SKIP LOCKED")
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+    }
+
+    // Outside a transaction a row lock is released as its own statement ends, so it would protect nothing.
+    private void RequireTransaction()
+    {
+        if (Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A session row lock requires an open transaction.");
+        }
+    }
+
+    internal async Task SaveCallbackTargetAsync(CallbackTarget target, CancellationToken cancellationToken) =>
+        await Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO callback_targets (id, url, api_key)
+            VALUES ({target.Id}, {target.Url}, {target.ApiKey})
+            ON CONFLICT (id) DO UPDATE SET url = EXCLUDED.url, api_key = EXCLUDED.api_key
+            """,
+            cancellationToken);
 
     internal async Task<bool> TryClaimCommandAsync(ProviderCommand command, CancellationToken cancellationToken) =>
         await Database.ExecuteSqlInterpolatedAsync(

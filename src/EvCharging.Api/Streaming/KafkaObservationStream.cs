@@ -15,25 +15,18 @@ internal sealed class KafkaObservationStream(
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
-    public async Task AppendAsync(ObservationEnvelope envelope, CancellationToken cancellationToken)
+    public async Task AppendAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
     {
-        var message = new Message<string, string>
-        {
-            // One partition per connector keeps a connector's observations in receipt order. The key is a
-            // JSON array so provider identifiers containing separators cannot produce the same key.
-            Key = JsonSerializer.Serialize(
-                new[] { envelope.IntegrationKey, envelope.StationId, envelope.ChargerId, envelope.ConnectorId }),
-            Value = JsonSerializer.Serialize(envelope, EnvelopeJson)
-        };
-
         try
         {
-            var delivery = await producer.ProduceAsync(options.Value.Topic, message, cancellationToken);
-            if (delivery.Status != PersistenceStatus.Persisted)
+            // Every produce call is made before any is awaited, so each partition keeps the input order.
+            var deliveries = envelopes.Select(envelope => ProduceAsync(envelope, cancellationToken)).ToArray();
+            var results = await Task.WhenAll(deliveries);
+            if (results.FirstOrDefault(delivery => delivery.Status != PersistenceStatus.Persisted) is { } unconfirmed)
             {
                 throw new ObservationStreamException(
                     "The observation stream did not confirm the append.",
-                    new InvalidOperationException($"Delivery status was {delivery.Status}."));
+                    new InvalidOperationException($"Delivery status was {unconfirmed.Status}."));
             }
         }
         catch (KafkaException exception)
@@ -41,4 +34,18 @@ internal sealed class KafkaObservationStream(
             throw new ObservationStreamException("The observation stream rejected the append.", exception);
         }
     }
+
+    private Task<DeliveryResult<string, string>> ProduceAsync(
+        ObservationEnvelope envelope, CancellationToken cancellationToken) =>
+        producer.ProduceAsync(
+            options.Value.Topic,
+            new Message<string, string>
+            {
+                // One partition per connector keeps a connector's observations in receipt order. The key is a
+                // JSON array so provider identifiers containing separators cannot produce the same key.
+                Key = JsonSerializer.Serialize(
+                    new[] { envelope.IntegrationKey, envelope.StationId, envelope.ChargerId, envelope.ConnectorId }),
+                Value = JsonSerializer.Serialize(envelope, EnvelopeJson)
+            },
+            cancellationToken);
 }

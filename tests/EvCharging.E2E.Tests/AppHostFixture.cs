@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
@@ -123,6 +124,7 @@ public sealed class AppHostFixture : IAsyncLifetime
     }
 
     private sealed record ProviderEquipment(decimal PowerKw, bool Enabled);
+    private sealed record ProviderCallbackTarget(string Url, string ApiKey);
     private sealed record ProviderCommandFault(Guid ExternalSessionId, bool LoseResponse, int? LookupStatusCode);
     private sealed record ProviderToken([property: JsonPropertyName("access_token")] string AccessToken);
 
@@ -175,11 +177,42 @@ public sealed class AppHostFixture : IAsyncLifetime
                 BookingLimits.ArrivalAllowance.ToString("c", CultureInfo.InvariantCulture));
         UseEphemeralVolumes(builder);
 
+        var callbackKey = await builder.Resources.OfType<ParameterResource>()
+            .Single(parameter => parameter.Name == "wattharbor-callback-key")
+            .GetValueAsync(cancellationToken) ?? throw new InvalidOperationException("The callback key is required.");
+
         _app = await builder.BuildAsync(cancellationToken);
         await App.StartAsync(cancellationToken);
         await App.ResourceNotifications.WaitForResourceHealthyAsync("gateway", cancellationToken);
         await App.ResourceNotifications.WaitForResourceHealthyAsync("frontend", cancellationToken);
+        await RegisterWattHarborCallbackAsync(
+            new Uri(App.GetEndpoint("gateway", "http"), "/api/callbacks/wattharbor/observations"),
+            callbackKey,
+            cancellationToken);
     }
+
+    // The provider is told where to deliver and with which key; the platform knows nothing of its internals.
+    private async Task RegisterWattHarborCallbackAsync(Uri url, string apiKey, CancellationToken cancellationToken)
+    {
+        using var controls = await CreateWattHarborControlClientAsync(cancellationToken);
+        using var response = await controls.PutAsJsonAsync(
+            "/simulation/callbacks/observations",
+            new ProviderCallbackTarget(url.ToString(), apiKey),
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<IReadOnlyList<JsonElement>> ReadObservationsAsync(
+        Guid externalSessionId,
+        Func<IReadOnlyList<JsonElement>, bool> condition,
+        CancellationToken cancellationToken) =>
+        await ObservationStreamReader.ReadUntilAsync(
+            await App.GetConnectionStringAsync("kafka", cancellationToken)
+                ?? throw new InvalidOperationException("The Kafka connection string is required."),
+            "observations",
+            externalSessionId,
+            condition,
+            cancellationToken);
 
     private static void UseEphemeralVolumes(IDistributedApplicationBuilder builder)
     {

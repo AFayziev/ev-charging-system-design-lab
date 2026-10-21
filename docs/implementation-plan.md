@@ -463,7 +463,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
     by provider and connector, acknowledged only after confirmation. Verify with
     contract-shaped payloads: authentication denial, invalid payloads, no
     acknowledgement when the append fails, duplicate delivery, and normalization.
-  - [ ] M07.01.2 WattHarbor contract conformance: the simulator emits timestamped
+  - [x] M07.01.2 WattHarbor contract conformance: the simulator emits timestamped
     observations for active sessions that survive restart, delivers callbacks with
     bounded same-identity retry, and returns a snapshot carrying the same identity
     and occurrence time. It receives its callback target and credentials through a

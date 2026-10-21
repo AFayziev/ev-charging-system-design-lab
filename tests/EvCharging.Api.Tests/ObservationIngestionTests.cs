@@ -24,11 +24,12 @@ public sealed class ObservationIngestionTests
     private const string ApiKey = "wattharbor-test-key";
     private const string OtherClientKey = "amptrail-test-key";
     private const string IntegrationKey = "wattharbor-lab";
+    private const int MaximumBatchSize = 3;
     private static readonly Guid EventId = Guid.Parse("0c0e5e57-3a0b-4b53-a2ff-5f1f0b1d0d01");
     private static readonly Guid SessionId = Guid.Parse("7a1f6a8e-6a58-4d4e-8c6b-0b1b8f2c9a02");
 
     [Fact]
-    public async Task ReportObservation_WithoutOrWithWrongKey_IsRejectedBeforeAppend()
+    public async Task ReportObservations_WithoutOrWithWrongKey_IsRejectedBeforeAppend()
     {
         await using var host = await ObservationHost.StartAsync();
 
@@ -41,7 +42,7 @@ public sealed class ObservationIngestionTests
     }
 
     [Fact]
-    public async Task ReportObservation_KeyOfAnotherClient_IsForbidden()
+    public async Task ReportObservations_KeyOfAnotherClient_IsForbidden()
     {
         await using var host = await ObservationHost.StartAsync();
 
@@ -52,17 +53,17 @@ public sealed class ObservationIngestionTests
     }
 
     [Fact]
-    public async Task ReportObservation_ValidPayload_AppendsNormalizedEnvelopeBeforeAcknowledging()
+    public async Task ReportObservations_ValidPayload_AppendsNormalizedEnvelopeBeforeAcknowledging()
     {
         await using var host = await ObservationHost.StartAsync();
-        var body = Body(energyWh: 12_500, occurredAt: "2026-10-21T10:00:00+05:00");
+        var body = Body(Reading(energyWh: 12_500, occurredAt: "2026-10-21T10:00:00+05:00"));
 
         using var response = await host.PostAsync(body, ApiKey);
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
-        var accepted = await response.Content.ReadFromJsonAsync<ObservationAcceptedResponse>();
+        var accepted = await response.Content.ReadFromJsonAsync<ObservationsAcceptedResponse>();
         var envelope = Assert.Single(host.Stream.Appended);
-        Assert.Equal(accepted?.ObservationId, envelope.ObservationId);
+        Assert.Equal([envelope.ObservationId], accepted?.ObservationIds);
         Assert.Equal(ObservationEnvelope.CurrentSchemaVersion, envelope.SchemaVersion);
         Assert.Equal(IntegrationKey, envelope.IntegrationKey);
         Assert.Equal(EventId, envelope.SourceEventId);
@@ -72,31 +73,51 @@ public sealed class ObservationIngestionTests
         Assert.Equal(ObservationState.Charging, envelope.State);
         Assert.Equal(new DateTimeOffset(2026, 10, 21, 5, 0, 0, TimeSpan.Zero), envelope.OccurredAt);
         Assert.Equal(TimeSpan.Zero, envelope.ReceivedAt.Offset);
-        Assert.Equal(body, envelope.RawPayload);
     }
 
     [Fact]
-    public async Task ReportObservation_RepeatedEvent_AppendsEachDeliveryAndAcknowledges()
+    public async Task ReportObservations_Batch_AppendsEveryObservationInOrderWithDistinctIds()
+    {
+        await using var host = await ObservationHost.StartAsync();
+        var events = Enumerable.Range(0, MaximumBatchSize).Select(_ => Guid.NewGuid()).ToArray();
+        var body = Body(events.Select((id, index) => Reading(
+            eventId: id, occurredAt: $"2026-10-21T10:00:0{index}Z", energyWh: 1_000 * (index + 1)))
+            .ToArray());
+
+        using var response = await host.PostAsync(body, ApiKey);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var accepted = await response.Content.ReadFromJsonAsync<ObservationsAcceptedResponse>();
+        Assert.Equal(events, host.Stream.Appended.Select(envelope => envelope.SourceEventId));
+        Assert.Equal(host.Stream.Appended.Select(envelope => envelope.ObservationId), accepted?.ObservationIds);
+        Assert.Equal(MaximumBatchSize, accepted?.ObservationIds.Distinct().Count());
+        Assert.Equal([1m, 2m, 3m], host.Stream.Appended.Select(envelope => envelope.EnergyKWh));
+    }
+
+    [Fact]
+    public async Task ReportObservations_RepeatedEvent_AppendsEachDeliveryAndAcknowledges()
     {
         await using var host = await ObservationHost.StartAsync();
         var body = Body();
 
         using var first = await host.PostAsync(body, ApiKey);
         using var second = await host.PostAsync(body, ApiKey);
+        using var twiceInOneBatch = await host.PostAsync(Body(Reading(), Reading()), ApiKey);
 
         Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
         Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
-        Assert.Equal(2, host.Stream.Appended.Count);
+        Assert.Equal(HttpStatusCode.Accepted, twiceInOneBatch.StatusCode);
+        Assert.Equal(4, host.Stream.Appended.Count);
         Assert.All(host.Stream.Appended, envelope => Assert.Equal(EventId, envelope.SourceEventId));
     }
 
     [Fact]
-    public async Task ReportObservation_UnconfirmedAppend_IsNotAcknowledged()
+    public async Task ReportObservations_UnconfirmedAppend_IsNotAcknowledged()
     {
         await using var host = await ObservationHost.StartAsync();
         host.Stream.Failure = new ObservationStreamException("down", new InvalidOperationException("broker"));
 
-        using var response = await host.PostAsync(Body(), ApiKey);
+        using var response = await host.PostAsync(Body(Reading(), Reading(eventId: Guid.NewGuid())), ApiKey);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Empty(host.Stream.Appended);
@@ -109,11 +130,11 @@ public sealed class ObservationIngestionTests
     [InlineData("eventId", "00000000-0000-0000-0000-000000000000", "EventId")]
     [InlineData("occurredAt", "0001-01-01T00:00:00+00:00", "OccurredAt")]
     [InlineData("isFinalEnergy", true, "IsFinalEnergy")]
-    public async Task ReportObservation_InvalidPayload_IsRejectedWithFieldErrors(
+    public async Task ReportObservations_InvalidObservation_IsRejectedWithFieldErrors(
         string field, object value, string expectedError)
     {
         await using var host = await ObservationHost.StartAsync();
-        var body = Body(field, value);
+        var body = Body(Reading(field, value));
 
         using var response = await host.PostAsync(body, ApiKey);
 
@@ -121,16 +142,59 @@ public sealed class ObservationIngestionTests
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Contains(
             problem.GetProperty("errors").EnumerateObject(),
-            error => string.Equals(error.Name, expectedError, StringComparison.OrdinalIgnoreCase));
+            error => error.Name.EndsWith(expectedError, StringComparison.OrdinalIgnoreCase));
         Assert.Empty(host.Stream.Appended);
     }
 
     [Fact]
-    public async Task ReportObservation_IncompleteOrOversizedPayload_IsRejected()
+    public async Task ReportObservations_OneInvalidObservation_RejectsTheWholeBatch()
     {
         await using var host = await ObservationHost.StartAsync();
-        var incomplete = """{"eventId":"0c0e5e57-3a0b-4b53-a2ff-5f1f0b1d0d01"}""";
-        var oversized = Body("stationId", new string('x', 20_000));
+        var body = Body(Reading(eventId: Guid.NewGuid()), Reading("powerKw", -1, Guid.NewGuid()));
+
+        using var response = await host.PostAsync(body, ApiKey);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains(
+            problem.GetProperty("errors").EnumerateObject(),
+            error => error.Name.Contains("[1]", StringComparison.Ordinal)
+                && error.Name.EndsWith("PowerKw", StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(host.Stream.Appended);
+    }
+
+    [Fact]
+    public async Task ReportObservations_EmptyOrOversizedBatch_IsRejected()
+    {
+        await using var host = await ObservationHost.StartAsync();
+        var tooMany = Enumerable.Range(0, MaximumBatchSize + 1).Select(_ => Reading(eventId: Guid.NewGuid())).ToArray();
+
+        using var empty = await host.PostAsync("""{"observations":[]}""", ApiKey);
+        using var oversized = await host.PostAsync(Body(tooMany), ApiKey);
+
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, oversized.StatusCode);
+        Assert.Empty(host.Stream.Appended);
+    }
+
+    [Fact]
+    public async Task ReportObservations_NullObservation_IsRejectedAsInvalid()
+    {
+        await using var host = await ObservationHost.StartAsync();
+        var body = $$"""{"observations":[null,{{JsonSerializer.Serialize(Reading())}}]}""";
+
+        using var response = await host.PostAsync(body, ApiKey);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(host.Stream.Appended);
+    }
+
+    [Fact]
+    public async Task ReportObservations_IncompleteOrOversizedBody_IsRejected()
+    {
+        await using var host = await ObservationHost.StartAsync();
+        var incomplete = """{"observations":[{"eventId":"0c0e5e57-3a0b-4b53-a2ff-5f1f0b1d0d01"}]}""";
+        var oversized = Body(Reading("stationId", new string('x', 20_000)));
 
         using var missing = await host.PostAsync(incomplete, ApiKey);
         using var large = await host.PostAsync(oversized, ApiKey);
@@ -140,15 +204,19 @@ public sealed class ObservationIngestionTests
         Assert.Empty(host.Stream.Appended);
     }
 
-    private static string Body(
+    private static string Body(params Dictionary<string, object?>[] readings) =>
+        JsonSerializer.Serialize(new { observations = readings.Length == 0 ? [Reading()] : readings });
+
+    private static Dictionary<string, object?> Reading(
         string? field = null,
         object? value = null,
+        Guid? eventId = null,
         decimal energyWh = 5_000,
         string occurredAt = "2026-10-21T10:00:00Z")
     {
         var values = new Dictionary<string, object?>
         {
-            ["eventId"] = EventId,
+            ["eventId"] = eventId ?? EventId,
             ["externalSessionId"] = SessionId,
             ["stationId"] = "station-1",
             ["chargerId"] = "charger-1",
@@ -164,7 +232,7 @@ public sealed class ObservationIngestionTests
             values[field] = value;
         }
 
-        return JsonSerializer.Serialize(values);
+        return values;
     }
 
     private sealed class FakeObservationStream : IObservationStream
@@ -173,14 +241,14 @@ public sealed class ObservationIngestionTests
 
         public Exception? Failure { get; set; }
 
-        public Task AppendAsync(ObservationEnvelope envelope, CancellationToken cancellationToken)
+        public Task AppendAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
         {
             if (Failure is not null)
             {
                 throw Failure;
             }
 
-            Appended.Add(envelope);
+            Appended.AddRange(envelopes);
             return Task.CompletedTask;
         }
     }
@@ -205,8 +273,10 @@ public sealed class ObservationIngestionTests
             builder.Configuration[$"ObservationSources:Sources:{IntegrationKey}:ApiKeys:0"] = ApiKey;
             builder.Configuration["ObservationSources:Sources:amptrail-lab:Client"] = "AmpTrail";
             builder.Configuration["ObservationSources:Sources:amptrail-lab:ApiKeys:0"] = OtherClientKey;
+            builder.Configuration["ObservationIngestion:MaximumBatchSize"] = MaximumBatchSize.ToString();
             builder.AddApiAuthentication();
             builder.AddObservationSourceAuthentication();
+            builder.AddObservationIngestion();
             builder.AddHttpApiDefaults();
             builder.Services.AddApplicationValidation();
             builder.Services.AddSingleton<IObservationStream>(stream);
@@ -216,12 +286,11 @@ public sealed class ObservationIngestionTests
                 options.AddApplicationHandlers();
                 options.Durability.Mode = DurabilityMode.MediatorOnly;
                 options.Discovery.DisableConventionalDiscovery()
-                    .IncludeType<ReportWattHarborObservationCommandHandler>();
+                    .IncludeType<ReportWattHarborObservationsCommandHandler>();
             });
 
             var app = builder.Build();
             app.UseHttpApiDefaults();
-            app.UseObservationPayloadBuffering();
             app.UseAuthentication();
             app.UseAuthorization();
             app.MapObservations();

@@ -77,9 +77,9 @@ internal sealed class StopChargingCommandHandler(
 
     private async Task ApplyStopAsync(ProviderCommand command, CancellationToken cancellationToken)
     {
+        // The row lock orders the stop after any in-flight emission; the end time is taken only once it is held.
+        var session = await database.LockSessionAsync(command.ExternalSessionId, cancellationToken);
         var now = clock.GetUtcNow();
-        var session = await database.Sessions.SingleOrDefaultAsync(
-            session => session.ExternalSessionId == command.ExternalSessionId, cancellationToken);
         if (session is null)
         {
             command.Reject(ProviderErrorCodes.SessionNotFound, now);
@@ -90,6 +90,7 @@ internal sealed class StopChargingCommandHandler(
         if (await database.TryEndSessionAsync(session.Id, now, cancellationToken))
         {
             await database.ReleaseConnectorAsync(session, cancellationToken);
+            database.Observations.Add(ProviderObservation.Stopped(session, now));
         }
 
         command.Apply(session, now);

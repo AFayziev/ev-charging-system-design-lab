@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using EvCharging.Api.Streaming;
 using EvCharging.Contracts.Observations;
 using FluentResults;
+using Microsoft.Extensions.Options;
 
 namespace EvCharging.Api.Features.Observations;
 
@@ -71,40 +72,66 @@ public enum WattHarborObservationState
     Stopped
 }
 
-public sealed record ObservationAcceptedResponse(Guid ObservationId);
+/// <summary>Observations reported together. They are accepted or rejected as a whole.</summary>
+public sealed record WattHarborObservationBatchRequest : IValidatableObject
+{
+    [Required, MinLength(1)]
+    public required IReadOnlyList<WattHarborObservationRequest> Observations { get; init; }
 
-public sealed record ReportWattHarborObservationCommand(
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Observations.Any(observation => observation is null))
+        {
+            yield return new ValidationResult("Every observation must be an object.", [nameof(Observations)]);
+        }
+
+        var options = validationContext.GetRequiredService<IOptions<ObservationIngestionOptions>>().Value;
+        if (Observations.Count > options.MaximumBatchSize)
+        {
+            yield return new ValidationResult(
+                $"At most {options.MaximumBatchSize} observations can be reported together.",
+                [nameof(Observations)]);
+        }
+    }
+}
+
+public sealed record ObservationsAcceptedResponse(IReadOnlyList<Guid> ObservationIds);
+
+public sealed record ReportWattHarborObservationsCommand(
     string IntegrationKey,
-    WattHarborObservationRequest Observation,
-    string RawPayload);
+    IReadOnlyList<WattHarborObservationRequest> Observations);
 
 internal sealed class ObservationStreamUnavailableError()
     : Error("The observation stream did not confirm the append.");
 
-public sealed class ReportWattHarborObservationCommandHandler(
+public sealed class ReportWattHarborObservationsCommandHandler(
     IObservationStream stream,
     TimeProvider clock,
-    ILogger<ReportWattHarborObservationCommandHandler> logger)
+    ILogger<ReportWattHarborObservationsCommandHandler> logger)
 {
-    public async Task<Result<ObservationAcceptedResponse>> HandleAsync(
-        ReportWattHarborObservationCommand command, CancellationToken cancellationToken)
+    public async Task<Result<ObservationsAcceptedResponse>> HandleAsync(
+        ReportWattHarborObservationsCommand command, CancellationToken cancellationToken)
     {
-        var envelope = command.ToEnvelope(Guid.CreateVersion7(), clock.GetUtcNow());
+        var receivedAt = clock.GetUtcNow();
+        var envelopes = command.Observations
+            .Select(observation => observation.ToEnvelope(command.IntegrationKey, Guid.CreateVersion7(), receivedAt))
+            .ToArray();
         try
         {
-            await stream.AppendAsync(envelope, cancellationToken);
+            await stream.AppendAsync(envelopes, cancellationToken);
         }
         catch (ObservationStreamException exception)
         {
             logger.LogWarning(
                 exception,
-                "Observation {SourceEventId} from {IntegrationKey} was not confirmed by the stream.",
-                envelope.SourceEventId,
-                envelope.IntegrationKey);
-            return Result.Fail<ObservationAcceptedResponse>(new ObservationStreamUnavailableError());
+                "{Count} observations from {IntegrationKey} were not confirmed by the stream.",
+                envelopes.Length,
+                command.IntegrationKey);
+            return Result.Fail<ObservationsAcceptedResponse>(new ObservationStreamUnavailableError());
         }
 
-        return Result.Ok(new ObservationAcceptedResponse(envelope.ObservationId));
+        var observationIds = envelopes.Select(envelope => envelope.ObservationId).ToArray();
+        return Result.Ok(new ObservationsAcceptedResponse(observationIds));
     }
 }
 
@@ -113,13 +140,15 @@ internal static class ObservationMappings
     private const decimal WattHoursPerKilowattHour = 1000m;
 
     public static ObservationEnvelope ToEnvelope(
-        this ReportWattHarborObservationCommand command, Guid observationId, DateTimeOffset receivedAt)
+        this WattHarborObservationRequest observation,
+        string integrationKey,
+        Guid observationId,
+        DateTimeOffset receivedAt)
     {
-        var observation = command.Observation;
         return new ObservationEnvelope(
             ObservationEnvelope.CurrentSchemaVersion,
             observationId,
-            command.IntegrationKey,
+            integrationKey,
             observation.EventId,
             observation.ExternalSessionId,
             observation.StationId,
@@ -130,8 +159,7 @@ internal static class ObservationMappings
             observation.State.ToObservationState(),
             observation.PowerKw,
             observation.EnergyWh / WattHoursPerKilowattHour,
-            observation.IsFinalEnergy,
-            command.RawPayload);
+            observation.IsFinalEnergy);
     }
 
     private static ObservationState ToObservationState(this WattHarborObservationState state) => state switch

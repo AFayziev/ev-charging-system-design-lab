@@ -8,7 +8,7 @@ using Xunit;
 
 namespace EvCharging.ProviderContracts.Tests;
 
-public sealed class WattHarborProviderTests(WattHarborFixture fixture) : IClassFixture<WattHarborFixture>
+public sealed partial class WattHarborProviderTests(WattHarborFixture fixture) : IClassFixture<WattHarborFixture>
 {
     [Fact]
     public async Task Start_ReplayAndLookups_ReturnSameCommandAndSession()

@@ -13,7 +13,7 @@ are defined in [architecture](architecture.md).
 | Response | Authoritative success or rejection with Problem Details | Queued acknowledgement; applied/rejected result obtained asynchronously |
 | Provider command idempotency | Same key and payload return existing command/result without another effect | No effect deduplication; repeated submissions can create additional effects |
 | Queries | Command outcome and matching provider session | Command outcome and matching provider session |
-| Measurement units | kW and cumulative session kWh | W and cumulative session Wh |
+| Measurement units | kW and cumulative session Wh | W and cumulative session Wh |
 | Payload format | WattHarbor schema | AmpTrail schema |
 
 Both preserve caller-owned operation and session identifiers in command/session records.
@@ -55,6 +55,7 @@ Request and response schemas are defined by the provider's generated OpenAPI doc
 | `GET /commands/by-external-operation/{externalOperationId}` | Resolve a command by the caller's operation ID |
 | `GET /sessions/{id}` | Read the matching provider session |
 | `GET /sessions/by-external-session/{externalSessionId}` | Resolve a session by the caller's session ID |
+| `GET /sessions/by-external-session/{externalSessionId}/snapshot` | Read the session's latest recorded observation, carrying the event identity and occurrence time its callback used |
 | `GET /stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Read equipment availability and rated power |
 
 A successful start establishes that charging was applied. Rejected starts and stops
@@ -88,6 +89,8 @@ outcome, including rejections.
 |---|---|
 | `PUT /simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Configure simulated equipment while preserving existing occupancy |
 | `PUT /simulation/commands/{externalOperationId}` | Configure temporary command-scoped response loss and outcome-lookup failures, which a stop can also match by its session ID; requires the simulation control role |
+| `PUT /simulation/callbacks/observations` | Set the callback URL and key the provider delivers observations with |
+| `PUT /simulation/sessions/{externalSessionId}/telemetry` | Configure temporary duplicate delivery, older-before-newer delivery, or interrupted delivery for one session's observations |
 
 ## 2. Command safety
 
@@ -133,10 +136,12 @@ Provider identity namespaces event and external IDs. Clients apply the
 Provider callbacks target the platform gateway, which routes them to authenticated
 observation ingestion. Each provider integration authenticates its callbacks with its
 own credential, and the credential, not the payload, establishes the integration.
-Recovery polling calls provider APIs directly; the charging worker submits raw
-evidence and normalized fields through the gateway to the same ingestion path.
-Callbacks are acknowledged only after durable stream acceptance. Unacknowledged
-delivery is retried with the same event identity under bounded scenario settings;
+Recovery polling calls provider APIs directly; the charging worker submits the
+polled observations through the gateway to the same ingestion path.
+A callback can carry several observations, within a configured limit. It is
+acknowledged only after every observation has durable stream acceptance, and one
+invalid observation rejects the whole callback. Unacknowledged delivery is retried
+as a whole with the same event identities under bounded scenario settings;
 an ambiguous acknowledgement can therefore produce duplicates. Polling retrieves
 current/session evidence when callbacks are interrupted. A current snapshot is
 not a reconstruction of every missed historical observation.

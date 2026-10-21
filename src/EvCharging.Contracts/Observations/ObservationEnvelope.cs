@@ -18,7 +18,6 @@ namespace EvCharging.Contracts.Observations;
 /// <param name="PowerKw">The instantaneous power in kilowatts.</param>
 /// <param name="EnergyKWh">The cumulative session energy in kilowatt-hours.</param>
 /// <param name="IsFinalEnergy">Whether the energy is the provider's explicitly final reading.</param>
-/// <param name="RawPayload">The bounded provider payload as received.</param>
 public sealed record ObservationEnvelope(
     int SchemaVersion,
     Guid ObservationId,
@@ -33,8 +32,7 @@ public sealed record ObservationEnvelope(
     ObservationState State,
     decimal PowerKw,
     decimal EnergyKWh,
-    bool IsFinalEnergy,
-    string RawPayload)
+    bool IsFinalEnergy)
 {
     public const int CurrentSchemaVersion = 1;
 }

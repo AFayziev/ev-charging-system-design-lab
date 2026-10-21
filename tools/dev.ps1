@@ -64,19 +64,29 @@ function Get-RunningAppHost {
     return $matchingHosts | Select-Object -First 1
 }
 
+function Get-ResourceInstances {
+    param([string]$AppHost, [string]$Resource)
+
+    # Replicated resources are named '<resource>-<suffix>', which `aspire describe <resource>` does not resolve.
+    $description = Invoke-Aspire -AppHost $AppHost -Arguments @(
+        'describe', '--apphost', $AppHost, '--format', 'Json'
+    ) | Out-String | ConvertFrom-Json -AsHashtable
+    return @($description['resources'] |
+        Where-Object { $_['name'] -match "^$([regex]::Escape($Resource))(-[a-z]{8})?$" })
+}
+
 function Get-ResourceOrigin {
     param([string]$AppHost, [string]$Resource)
 
-    $description = Invoke-Aspire -AppHost $AppHost -Arguments @(
-        'describe', $Resource, '--apphost', $AppHost, '--format', 'Json'
-    ) | Out-String | ConvertFrom-Json -AsHashtable
-    $urls = @($description['resources'] | ForEach-Object { $_['urls'] } | Where-Object {
-        -not $_['isInternal'] -and ([uri]$_['url']).Scheme -in @('http', 'https')
-    })
-    if ($urls.Count -ne 1) {
-        throw "Expected one public HTTP endpoint for '$Resource'; found $($urls.Count)."
+    $origins = @(Get-ResourceInstances $AppHost $Resource |
+        ForEach-Object { $_['urls'] } |
+        Where-Object { -not $_['isInternal'] -and ([uri]$_['url']).Scheme -in @('http', 'https') } |
+        ForEach-Object { ([uri]$_['url']).GetLeftPart([UriPartial]::Authority) } |
+        Select-Object -Unique)
+    if ($origins.Count -ne 1) {
+        throw "Expected one public HTTP origin for '$Resource'; found $($origins.Count)."
     }
-    return ([uri]$urls[0]['url']).GetLeftPart([UriPartial]::Authority)
+    return $origins[0]
 }
 
 function Start-AppHost {
@@ -107,10 +117,33 @@ function Get-WattHarborAuthentication {
     }
     $secrets = $secretJson | Where-Object { $_ -notmatch '^//' } | Out-String | ConvertFrom-Json -AsHashtable
     $clientSecret = $secrets['Parameters:charging-client-secret']
-    if (-not $clientSecret -or -not $metadata.token_endpoint) {
-        throw 'The provider token endpoint and charging-client secret are required.'
+    $simulationClientSecret = $secrets['Parameters:simulation-client-secret']
+    if (-not $clientSecret -or -not $simulationClientSecret -or -not $metadata.token_endpoint) {
+        throw 'The provider token endpoint and the charging-client and simulation-client secrets are required.'
     }
-    return @{ TokenEndpoint = $metadata.token_endpoint; ClientSecret = $clientSecret }
+    return @{
+        TokenEndpoint = $metadata.token_endpoint
+        ClientSecret = $clientSecret
+        SimulationClientSecret = $simulationClientSecret
+    }
+}
+
+function Register-WattHarborCallback {
+    param([string]$ProviderOrigin, [hashtable]$Authentication, [string]$GatewayOrigin, [string]$CallbackKey)
+
+    # The provider receives its callback target and key through its simulation control, never from the platform.
+    $token = Invoke-RestMethod -Method Post -Uri $Authentication.TokenEndpoint -TimeoutSec 10 -Body @{
+        grant_type = 'client_credentials'
+        client_id = 'simulation-control'
+        client_secret = $Authentication.SimulationClientSecret
+    }
+    $body = @{
+        url = "$GatewayOrigin/api/callbacks/wattharbor/observations"
+        apiKey = $CallbackKey
+    } | ConvertTo-Json
+    Invoke-RestMethod -Method Put -Uri "$ProviderOrigin/simulation/callbacks/observations" -TimeoutSec 10 `
+        -Headers @{ Authorization = "Bearer $($token.access_token)" } -ContentType 'application/json' -Body $body |
+        Out-Null
 }
 
 function Wait-ForShutdown {
@@ -152,6 +185,8 @@ try {
         $providerEndpoints[$provider] = Get-ResourceOrigin $providers $resource
     }
 
+    $providerAuthentication = $null
+    $callbackKey = $null
     $platformHost = Get-RunningAppHost $platform
     if ($platformHost) {
         foreach ($provider in $providerEndpoints.Keys) {
@@ -164,9 +199,12 @@ try {
     }
     else {
         $providerAuthentication = Get-WattHarborAuthentication
+        # A running AppHost never reveals its generated secrets, so the launcher chooses the callback key itself.
+        $callbackKey = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
         $platformParameters = @{
             'Parameters__wattharbor-provider-token-endpoint' = $providerAuthentication.TokenEndpoint
             'Parameters__wattharbor-provider-client-secret' = $providerAuthentication.ClientSecret
+            'Parameters__wattharbor-callback-key' = $callbackKey
         }
         foreach ($provider in $providerEndpoints.Keys) {
             $platformParameters["Parameters__$provider-provider-url"] = $providerEndpoints[$provider]
@@ -184,6 +222,14 @@ try {
     Invoke-Aspire -AppHost $platform -Arguments @(
         'describe', 'frontend', '--apphost', $platform
     ) | Out-Host
+    if ($callbackKey) {
+        # The provider persists the target, so a reused platform keeps the registration of its own launch.
+        Register-WattHarborCallback `
+            -ProviderOrigin $providerEndpoints['wattharbor'] `
+            -Authentication $providerAuthentication `
+            -GatewayOrigin (Get-ResourceOrigin $platform 'gateway') `
+            -CallbackKey $callbackKey
+    }
     $completed = $true
 
     if (-not $Detach) {

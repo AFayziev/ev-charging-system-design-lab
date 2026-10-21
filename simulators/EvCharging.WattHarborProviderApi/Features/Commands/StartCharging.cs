@@ -133,6 +133,7 @@ internal sealed class StartChargingCommandHandler(
         }
 
         database.Sessions.Attach(session);
+        database.Observations.Add(ProviderObservation.Charging(session, session.StartedAt));
         command.Apply(session, session.StartedAt);
     }
 }

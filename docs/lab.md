@@ -369,8 +369,8 @@ business transitions also protect against independently submitted duplicate work
 | Topic | One observations topic with six partitions and seven-day retention, defined in `infra/kafka/topics.txt` and created by the one-shot `kafka-provisioning` resource before the API and observation consumers start; existing topics keep their partition count |
 | Partition key | Integration key and provider station, charger and connector address |
 | Producer | Idempotent, `acks=all`, bounded delivery timeout, configured through the Aspire Confluent producer settings; its health check is disabled so a stream outage fails callbacks without removing the API from gateway rotation |
+| Batch limit | A callback carries at most `ObservationIngestion:MaximumBatchSize` observations (default 100); the request size limit follows from it |
 | Callback credential | One API key per provider integration in the `ObservationSources` settings, supplied by a persistent AppHost secret; the key identifies the integration and several keys may be active for rotation. ASP.NET Core provides no API-key scheme, so a small authentication handler validates the key |
-| Raw payload | Callback routes buffer the bounded body because Minimal API binding offers no access to the parsed text |
 
 ### 1.5 Storage and delivery
 
@@ -510,7 +510,9 @@ with these choices:
 | Transport | HTTP/JSON start and command/session lookup endpoints; typed `HttpClient` through `IHttpClientFactory`, with bounded timeouts |
 | Idempotency | Platform operation public ID as the stable provider key across attempts; retain and compare the original effect payload |
 | Atomicity | Command result, simulated session and connector claim commit in one provider transaction |
-| Fault controls | Authenticated, deterministic faults scoped to a command; apply-then-lose-response faults interrupt the response after commit, without requiring persisted fault history |
+| Fault controls | Authenticated, deterministic faults scoped to a command or a session's telemetry; apply-then-lose-response faults interrupt the response after commit. Faults are temporary and not persisted |
+| Observations | Recorded in the provider database at the [normal simulator cadence](#22-default-timings), so sessions and their readings survive restart. The first and final readings accompany start and stop, and no reading follows the final one. Energy is in Wh on the wire |
+| Callback delivery | Recorded observations are delivered in batches to a target set through simulation control and kept across restart. Failed batches are retried with the same event identities under bounded settings, and stale observations are not delivered. Simulators exclude Messaging, so this is a small provider-side loop rather than an outbox |
 
 Endpoint tables separate the [public provider API](integrations.md#public-provider-api)
 from the [internal simulation API](integrations.md#internal-simulation-api).

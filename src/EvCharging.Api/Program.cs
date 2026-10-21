@@ -18,6 +18,7 @@ builder.AddObservationSourceAuthentication();
 builder.AddHttpApiDefaults("/api");
 builder.AddPlatformPersistence();
 builder.AddObservationStream();
+builder.AddObservationIngestion();
 builder.AddMessaging(
     options =>
     {
@@ -34,7 +35,6 @@ builder.Services.AddApplicationValidation();
 var app = builder.Build();
 
 app.UseHttpApiDefaults();
-app.UseObservationPayloadBuffering();
 app.UseAuthentication();
 app.UseAuthorization();
 

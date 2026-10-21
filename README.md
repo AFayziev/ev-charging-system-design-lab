@@ -126,8 +126,25 @@ isolated startup in Git worktrees. Detached sessions are stopped with the
    aspire run --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj --launch-profile http
    ```
 
-4. Open the platform dashboard's `frontend` HTTP endpoint.
-5. Stop each AppHost with `Ctrl+C`; named data volumes persist.
+4. Tell the WattHarbor provider where to deliver observations. The provider
+   receives its callback target through simulation control; without it, charging
+   progress never reaches the platform. Use a `simulation-control` token from the
+   provider's token endpoint (client secret `Parameters:simulation-client-secret`
+   in the provider AppHost's user secrets), with the platform gateway's HTTP
+   endpoint and the platform's callback key (`aspire secret get
+   Parameters:wattharbor-callback-key --apphost src/EvCharging.AppHost/EvCharging.AppHost.csproj`):
+
+   ```sh
+   curl -X PUT "<WattHarbor HTTP endpoint>/simulation/callbacks/observations" \
+     -H "Authorization: Bearer <simulation-control token>" -H "Content-Type: application/json" \
+     -d '{"url":"<gateway HTTP endpoint>/api/callbacks/wattharbor/observations","apiKey":"<callback key>"}'
+   ```
+
+   The target persists in the provider database. `tools/dev.ps1` registers it whenever it starts
+   the platform, with a key it chooses for that run.
+
+5. Open the platform dashboard's `frontend` HTTP endpoint.
+6. Stop each AppHost with `Ctrl+C`; named data volumes persist.
 
 - Each AppHost manages its own resources and dashboard. Platform startup does not
   start the lab providers.

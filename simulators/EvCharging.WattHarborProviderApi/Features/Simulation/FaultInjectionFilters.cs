@@ -1,5 +1,6 @@
 using EvCharging.WattHarborProviderApi.Features.Commands;
 using EvCharging.WattHarborProviderApi.Features.Sessions;
+using EvCharging.WattHarborProviderApi.Features.Telemetry;
 
 namespace EvCharging.WattHarborProviderApi.Features.Simulation;
 
@@ -44,7 +45,8 @@ internal static class FaultInjectionFilters
         var parameters = factory.MethodInfo.GetParameters();
         bool lookup = parameters.Any(parameter =>
             parameter.ParameterType == typeof(GetCommandByExternalOperationIdQueryHandler)
-            || parameter.ParameterType == typeof(GetSessionByExternalSessionIdQueryHandler));
+            || parameter.ParameterType == typeof(GetSessionByExternalSessionIdQueryHandler)
+            || parameter.ParameterType == typeof(GetSessionSnapshotQueryHandler));
         if (!lookup)
         {
             return next;
