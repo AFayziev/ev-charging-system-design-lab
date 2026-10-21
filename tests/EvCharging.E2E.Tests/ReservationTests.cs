@@ -448,14 +448,14 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
             cancellationToken);
     }
 
-    private async Task WorkerCommandAsync(string command, CancellationToken cancellationToken)
+    private async Task WorkerCommandAsync(
+        string command, CancellationToken cancellationToken, string worker = "charging-worker")
     {
-        var result = await fixture.App.ResourceCommands.ExecuteCommandAsync(
-            "charging-worker", command, cancellationToken);
+        var result = await fixture.App.ResourceCommands.ExecuteCommandAsync(worker, command, cancellationToken);
         Assert.True(result.Success, result.Message);
         string[] states = command == KnownResourceCommands.StopCommand
             ? [KnownResourceStates.Exited, KnownResourceStates.Finished] : [KnownResourceStates.Running];
-        await fixture.App.ResourceNotifications.WaitForResourceAsync("charging-worker", states, cancellationToken);
+        await fixture.App.ResourceNotifications.WaitForResourceAsync(worker, states, cancellationToken);
     }
 
     [Fact]

@@ -3,7 +3,12 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="EvCharging.ObservationWorker.Tests" />
+    <PackageReference Include="Aspire.Confluent.Kafka" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Resilience" />
+    <ProjectReference Include="../EvCharging.Contracts/EvCharging.Contracts.csproj" />
+    <ProjectReference Include="../EvCharging.DocumentStore/EvCharging.DocumentStore.csproj" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>
 </Project>

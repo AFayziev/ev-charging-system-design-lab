@@ -42,6 +42,7 @@ Tests (each project is run separately):
 dotnet test tests/EvCharging.Domain.Tests
 dotnet test tests/EvCharging.Api.Tests
 dotnet test tests/EvCharging.ChargingWorker.Tests
+dotnet test tests/EvCharging.ObservationWorker.Tests   # MongoDB via Testcontainers
 dotnet test tests/EvCharging.Persistence.Tests         # PostgreSQL via Testcontainers
 dotnet test tests/EvCharging.Gateway.Tests             # PostgreSQL via Testcontainers
 dotnet test tests/EvCharging.ProviderContracts.Tests   # starts the provider AppHost
@@ -65,7 +66,8 @@ Shared libraries:
 - `Contracts`: API and messaging contracts.
 - `Domain`: entities and pure policies, with no persistence concerns.
 - `Persistence`: EF mappings for the charging schema, consumed by the API and workers.
-- `Persistence.Migrations` and `Gateway.Migrations`: own migrations and seed data, and run as one-shot resources with schema-owning credentials. Runtime roles have narrower permissions.
+- `DocumentStore`: MongoDB observation documents and collections, written by the observation worker and read by the API.
+- `Persistence.Migrations` and `Gateway.Migrations`: own migrations and seed data, and run as one-shot resources with schema-owning credentials. Runtime roles have narrower permissions. `DocumentStore.Migrations` is the one-shot that creates the MongoDB indexes.
 - `Messaging`: Wolverine configuration and routing, with inbox/outbox. Excluded from the provider simulators.
 - `ServiceDefaults`: discovery, HTTP resilience, OpenTelemetry, health. Every app and provider host calls `AddServiceDefaults`.
 

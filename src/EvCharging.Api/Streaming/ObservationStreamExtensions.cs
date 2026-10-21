@@ -1,3 +1,5 @@
+using EvCharging.Contracts.Observations;
+
 namespace EvCharging.Api.Streaming;
 
 internal static class ObservationStreamExtensions

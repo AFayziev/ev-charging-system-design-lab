@@ -340,8 +340,9 @@ idempotency does not make provider effects safe to repeat.
 Source event identity distinguishes duplicate delivery. An observation with a newer
 source occurrence time can update current state; an equal or older unique
 observation remains history. Historical evidence can fill a missing session fact
-without regressing equipment state. Receipt/partition order alone does not prove
-newer physical evidence. The
+without regressing equipment state. An observation dated ahead of its receipt
+beyond the configured tolerance stays history, so it cannot outrank later
+readings. Receipt/partition order alone does not prove newer physical evidence. The
 [integration contract](integrations.md#3-observations-and-recovery) defines the
 provider ordering fields.
 

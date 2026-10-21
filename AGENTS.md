@@ -53,6 +53,8 @@ implementation progress is recorded in the plan.
 | `EvCharging.AmpTrailProviderApi` | Resource | AmpTrail lab provider with queued acknowledgement and no effect deduplication |
 | `EvCharging.Contracts` | Library | Shared API and messaging contracts and canonical role types |
 | `EvCharging.Domain` | Library | Business entities, value objects, measurements, and pure business policies |
+| `EvCharging.DocumentStore` | Library | MongoDB observation history and latest-view documents, collections, and indexes for the observation worker and API |
+| `EvCharging.DocumentStore.Migrations` | Resource | One-shot creation of the document store's indexes before its consumers start |
 | `EvCharging.Persistence` | Library | Charging-schema EF mappings, database access, auditing, and persistence-owned records for API/worker consumers |
 | `EvCharging.Persistence.Migrations` | Resource | Charging-schema EF migrations, message-store provisioning, design-time tooling, sample-data seeding/reset, and one-shot migrations using schema-owning credentials |
 | `EvCharging.ServiceDefaults` | Library | Shared discovery, HTTP resilience, OpenTelemetry, and health checks |

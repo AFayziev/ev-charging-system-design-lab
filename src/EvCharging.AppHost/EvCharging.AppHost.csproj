@@ -24,6 +24,7 @@
     <ProjectReference Include="../EvCharging.Gateway/EvCharging.Gateway.csproj" />
     <ProjectReference Include="../EvCharging.Gateway.Migrations/EvCharging.Gateway.Migrations.csproj" />
     <ProjectReference Include="../EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />
+    <ProjectReference Include="../EvCharging.DocumentStore.Migrations/EvCharging.DocumentStore.Migrations.csproj" />
     <ProjectReference Include="../EvCharging.Api/EvCharging.Api.csproj" />
     <ProjectReference Include="../EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
     <ProjectReference Include="../EvCharging.ObservationWorker/EvCharging.ObservationWorker.csproj" />

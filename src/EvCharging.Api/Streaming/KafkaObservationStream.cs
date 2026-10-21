@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Confluent.Kafka;
 using EvCharging.Contracts.Observations;
 using Microsoft.Extensions.Options;
@@ -10,11 +9,6 @@ internal sealed class KafkaObservationStream(
     IProducer<string, string> producer,
     IOptions<ObservationStreamOptions> options) : IObservationStream
 {
-    private static readonly JsonSerializerOptions EnvelopeJson = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-    };
-
     public async Task AppendAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
     {
         try
@@ -45,7 +39,7 @@ internal sealed class KafkaObservationStream(
                 // JSON array so provider identifiers containing separators cannot produce the same key.
                 Key = JsonSerializer.Serialize(
                     new[] { envelope.IntegrationKey, envelope.StationId, envelope.ChargerId, envelope.ConnectorId }),
-                Value = JsonSerializer.Serialize(envelope, EnvelopeJson)
+                Value = JsonSerializer.Serialize(envelope, ObservationEnvelope.SerializerOptions)
             },
             cancellationToken);
 }

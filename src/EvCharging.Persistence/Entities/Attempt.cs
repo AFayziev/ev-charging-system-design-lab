@@ -6,6 +6,7 @@ public sealed class Attempt
 {
     public Guid Id { get; set; }
     public Guid OperationId { get; set; }
+    public Operation? Operation { get; set; }
     public int Number { get; set; }
     public DateTimeOffset AuthorizedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }

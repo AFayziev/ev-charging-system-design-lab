@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace EvCharging.Contracts.Observations;
 
 /// <summary>
@@ -35,4 +38,17 @@ public sealed record ObservationEnvelope(
     bool IsFinalEnergy)
 {
     public const int CurrentSchemaVersion = 1;
+
+    /// <summary>The stream wire format, shared by the producer and every consumer.</summary>
+    public static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
+
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
+        };
+        options.MakeReadOnly(populateMissingResolver: true);
+        return options;
+    }
 }

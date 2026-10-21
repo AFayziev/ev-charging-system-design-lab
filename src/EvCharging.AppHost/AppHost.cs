@@ -227,7 +227,17 @@ foreach (var consumer in new[] { observation, search, cache })
     consumer.WithReference(stream).WaitFor(stream).WaitForCompletion(streamProvisioning);
 }
 
-observation.WithReference(documents).WaitFor(documents);
+var documentMigrations = builder.AddProject<Projects.EvCharging_DocumentStore_Migrations>(
+    "document-store-migrations",
+    launchProfileName: null)
+    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithReference(documents)
+    .WaitFor(documents);
+
+observation.WithReference(documents)
+    .WaitFor(documents)
+    .WaitForCompletion(documentMigrations)
+    .WithEnvironment("ObservationStream__Topic", EvCharging.AppHost.ResourceExtensions.ObservationTopic);
 foreach (var reader in new[] { search, cache })
 {
     reader.WithReference(databaseAccess.Read);

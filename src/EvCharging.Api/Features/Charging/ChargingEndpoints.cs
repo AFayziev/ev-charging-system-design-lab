@@ -16,7 +16,22 @@ internal static class ChargingEndpoints
         routes.MapPost("/start", Start);
         routes.MapPost("/start/{operationId:guid}/check", Check);
         routes.MapPost("/stop", Stop);
+        routes.MapGet("/progress", Progress);
         return app;
+    }
+
+    private static async Task<Results<Ok<ChargingProgressResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult>>
+        Progress(Guid id, IMessageBus bus, CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<ChargingProgressResponse>>(
+            new GetChargingProgressRequest(id), cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
     }
 
     private static async Task<Results<

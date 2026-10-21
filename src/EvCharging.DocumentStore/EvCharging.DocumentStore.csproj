@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="Aspire.MongoDB.Driver" />
+    <ProjectReference Include="../EvCharging.Contracts/EvCharging.Contracts.csproj" />
+  </ItemGroup>
+</Project>

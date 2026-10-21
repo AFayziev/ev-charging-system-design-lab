@@ -372,6 +372,16 @@ business transitions also protect against independently submitted duplicate work
 | Batch limit | A callback carries at most `ObservationIngestion:MaximumBatchSize` observations (default 100); the request size limit follows from it |
 | Callback credential | One API key per provider integration in the `ObservationSources` settings, supplied by a persistent AppHost secret; the key identifies the integration and several keys may be active for rotation. ASP.NET Core provides no API-key scheme, so a small authentication handler validates the key |
 
+#### Observation views
+
+| Area | Choice |
+|---|---|
+| Consumer | The observation worker reads the topic as its own consumer group with the Confluent client, in batches (`ObservationProcessing:BatchSize`, `BatchWait`). Offsets are stored only after the batch is written |
+| Documents | Two MongoDB collections in the `observations` database: history, one document per source event, and latest, one document per provider session. The API reads the latest view for the progress query. The indexes are created by the one-shot `document-store-migrations` resource before the worker starts |
+| Writes | Idempotent bulk writes with majority, journaled acknowledgement. The latest view is replaced only by a strictly newer occurrence time |
+| Future readings | A reading dated more than `ObservationProcessing:FutureTolerance` ahead of its receipt stays history |
+| Unprocessable messages | An invalid or unsupported-version envelope is logged and skipped. Stream and document-store failures are retried with exponential backoff and no attempt limit using a `Microsoft.Extensions.Resilience` pipeline |
+
 ### 1.5 Storage and delivery
 
 The local storage service runs as a single-node container.
@@ -587,7 +597,7 @@ These are overridable experiment settings, not production availability targets.
 | Setting | Default | Meaning |
 |---|---|---|
 | Telemetry interval | 2 seconds | Normal simulator cadence |
-| Freshness limit | 10 seconds | Greater source-observation age is stale |
+| Freshness limit | 10 seconds | Greater source-observation age is stale (`ChargingProgress:FreshnessLimit`) |
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
 | Command request limit | 3 total requests per start or stop | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and command eligibility |

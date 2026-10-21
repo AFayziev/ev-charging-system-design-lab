@@ -7,6 +7,7 @@ using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
 using EvCharging.Api.Streaming;
+using EvCharging.DocumentStore;
 using EvCharging.Messaging;
 using EvCharging.Persistence.Extensions;
 using Wolverine.EntityFrameworkCore;
@@ -19,6 +20,8 @@ builder.AddHttpApiDefaults("/api");
 builder.AddPlatformPersistence();
 builder.AddObservationStream();
 builder.AddObservationIngestion();
+builder.AddDocumentStore();
+builder.AddChargingProgress();
 builder.AddMessaging(
     options =>
     {

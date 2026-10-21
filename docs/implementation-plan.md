@@ -471,7 +471,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
     Add duplicate, older-timestamp, and interrupted-telemetry faults. Verify with
     provider contract tests and the flow through the real ingestion boundary.
     Depends on M07.01.1.
-  - [ ] M07.01.3 Progress view and query: independent observation-worker consumer
+  - [x] M07.01.3 Progress view and query: independent observation-worker consumer
     group that deduplicates by source identity, applies time-conditional
     updates to MongoDB history and latest views, and checkpoints after the durable
     write. Serve a progress query from the latest view. Verify duplicates,
@@ -479,7 +479,11 @@ recoverable without authorizing conflicting starts. Final completion depends on 
     Depends on M07.01.1.
   - [ ] M07.01.4 Driver charging session page: show energy, power, elapsed time,
     the power-over-time chart, source-time freshness (`Last reported charging`
-    when stale), bounded polling, and the stopping state. Verify end to end with
+    when stale), bounded polling, and the stopping state. Polling and the chart
+    stay incremental: a request does not return the whole observation history,
+    and an unchanged session costs a small response. Decide how a session with
+    no reading yet is shown, since the progress query reports it as not stale.
+    Verify end to end with
     the simulator on desktop and phone viewports.
     Depends on M07.01.2 and M07.01.3.
   - [ ] M07.01.5 Session evidence, stalled detection, and recovery polling:
