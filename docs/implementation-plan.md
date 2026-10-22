@@ -450,7 +450,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
 
 ### M07 — Charging progress, history, and completion
 
-- [ ] M07.01 Deliver timestamped driver progress from charging-provider
+- [x] M07.01 Deliver timestamped driver progress from charging-provider
   observations. The provider is a black box that honors the documented contract;
   the work is on the platform side. Depends on M06.01. Sub-items are sequenced as
   follows:
@@ -486,28 +486,31 @@ recoverable without authorizing conflicting starts. Final completion depends on 
     Verify end to end with
     the simulator on desktop and phone viewports.
     Depends on M07.01.2 and M07.01.3.
-  - [ ] M07.01.5 Session evidence, stalled detection, and recovery polling:
-    independent consumer group committing deduplication, state, and outbox in one
-    relational transaction. Stalled-session detection submits durable
-    reconciliation work to the charging worker, which polls the provider snapshot
-    and submits it through the gateway with service credentials. Verify that
-    interrupted telemetry makes the view stale rather than stopped, that polling
-    restores freshness, and that replay does not refresh timestamps.
+  - [x] M07.01.5 Session evidence consumer: independent consumer group committing
+    deduplication, state, and outbox in one relational transaction. Verify that
+    replay and duplicate delivery do not refresh timestamps or repeat transitions.
     Depends on M07.01.2 and M07.01.3.
 - [ ] M07.02 Deliver completed-session final usage and completion notifications.
   Match provider/session evidence, validate cumulative usage, conditionally
   freeze completion facts, and commit outgoing completion events with SQL state.
   Verify stop-before-usage, early terminal evidence, and late contradictions.
-  Depends on M06.02, M07.01, and M05.04 for notification delivery.
-- [ ] M07.03 Deliver assigned-operator observation history and anomaly inspection
+  Depends on M06.02, M07.01.5, and M05.04 for notification delivery.
+- [ ] M07.03 Deliver stalled-session detection and recovery polling:
+  stalled-session detection submits durable reconciliation work to the charging
+  worker, which polls the provider snapshot and submits it through the gateway
+  with service credentials. Verify that interrupted telemetry makes the view
+  stale rather than stopped, that polling restores freshness and supplies missing
+  final usage for a `Stopping` session, and that replay does not refresh
+  timestamps. Depends on M07.01.5 and M07.02.
+- [ ] M07.04 Deliver assigned-operator observation history and anomaly inspection
   alongside SQL attempts and provider evidence. Verify authorization, timestamp
   skew, duplicate/out-of-order observations, and missing/decreasing energy in
   these views. Depends on M06.04 and M07.01.
-- [ ] M07.04 Exercise progress/completion through stream outage and ambiguous
+- [ ] M07.05 Exercise progress/completion through stream outage and ambiguous
   append, observation-worker loss/stall, MongoDB outage, and offset recovery.
   Add isolated observation-view replay/rebuild and verify it preserves source
   times without sending charging commands or notifications.
-  Depends on M07.01 and M07.02.
+  Depends on M07.01, M07.02, and M07.03.
 
 Acceptance: a driver sees session progress and completes charging with matching,
 immutable final usage. Accepted observations survive document-store interruption;
@@ -572,7 +575,7 @@ preserves unrelated commands for known equipment.
   Depends on M07.02 and M10.01.
 - [ ] M10.03 Deliver assigned-operator diagnostic-bundle downloads using sanitized
   ZIP/JSON evidence from SQL attempts, MongoDB observations, and provider records.
-  Verify private access and secret exclusion. Depends on M07.03 and M10.01.
+  Verify private access and secret exclusion. Depends on M07.04 and M10.01.
 - [ ] M10.04 Exercise media/document flows through upload-notice loss, worker
   crash after writing variants, storage outage, partial writes, expired/reused
   upload URLs, cross-user access, and summary failure after session completion.

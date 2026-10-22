@@ -1,15 +1,17 @@
 using Confluent.Kafka;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Retry;
 
-namespace EvCharging.ObservationWorker.Resilience;
+namespace EvCharging.ObservationStream;
 
 internal static class ObservationResilience
 {
     public const string PipelineKey = "observation-stream";
 
-    /// <summary>Retries stream reads and document-store writes with exponential backoff until they succeed.</summary>
+    /// <summary>Retries stream reads and store writes with exponential backoff until they succeed.</summary>
     public static IServiceCollection AddObservationResilience(this IServiceCollection services) =>
         services.AddResiliencePipeline(
             PipelineKey,
@@ -18,7 +20,7 @@ internal static class ObservationResilience
                 var options = context.ServiceProvider.GetRequiredService<IOptions<ObservationProcessingOptions>>()
                     .Value;
                 var logger = context.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("EvCharging.ObservationWorker.Resilience");
+                    .CreateLogger("EvCharging.ObservationStream.Resilience");
                 builder.AddRetry(new RetryStrategyOptions
                 {
                     // The stream retains the readings, so an outage only delays the views.

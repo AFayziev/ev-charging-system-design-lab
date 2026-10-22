@@ -1,10 +1,13 @@
 using EvCharging.ChargingWorker.Configuration;
 using EvCharging.ChargingWorker.Handlers;
+using EvCharging.ChargingWorker.Observations;
 using EvCharging.ChargingWorker.Persistence;
 using EvCharging.ChargingWorker.Providers;
 using EvCharging.Contracts.Charging;
 using EvCharging.Contracts.Events.Reservations;
+using EvCharging.Contracts.Observations;
 using EvCharging.Messaging;
+using EvCharging.ObservationStream;
 using EvCharging.Persistence.Extensions;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.ErrorHandling;
@@ -14,6 +17,11 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
 builder.AddChargingProviders();
 builder.AddPlatformPersistence();
+builder.Services.AddOptions<ObservationClockSkewOptions>()
+    .BindConfiguration(ObservationClockSkewOptions.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.AddObservationStreamConsumer<SessionEvidenceRecorder>();
 int maximumConcurrentCommands = builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentCommands");
 int maximumConcurrentChecks = builder.Configuration.GetValue<int>("ReservationExpiry:MaximumConcurrentChecks");
 var retryDelays = builder.Configuration.GetSection("MessagingFailures:TransientDatabaseRetryDelays")

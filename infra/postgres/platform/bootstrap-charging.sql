@@ -44,3 +44,7 @@ SELECT 'REVOKE ALL ON TABLE charging.reservation_notifications FROM platform_wri
 WHERE to_regclass('charging.reservation_notifications') IS NOT NULL \gexec
 SELECT 'REVOKE ALL ON TABLE charging.notification_delivery_attempts FROM platform_writer, platform_reader'
 WHERE to_regclass('charging.notification_delivery_attempts') IS NOT NULL \gexec
+
+-- Session evidence is written only by the charging worker.
+SELECT 'REVOKE INSERT, UPDATE, DELETE ON TABLE charging.session_evidence FROM platform_writer'
+WHERE to_regclass('charging.session_evidence') IS NOT NULL \gexec

@@ -59,6 +59,7 @@ implementation progress is recorded in the plan.
 | `EvCharging.Persistence.Migrations` | Resource | Charging-schema EF migrations, message-store provisioning, design-time tooling, sample-data seeding/reset, and one-shot migrations using schema-owning credentials |
 | `EvCharging.ServiceDefaults` | Library | Shared discovery, HTTP resilience, OpenTelemetry, and health checks |
 | `EvCharging.Messaging` | Library | Platform Wolverine configuration and message routing topologies; excluded from provider simulators |
+| `EvCharging.ObservationStream` | Library | Observation-stream consumer loop (batching, retry, offsets) shared by the workers that each own a consumer group |
 
 Projects dedicated to handling incoming HTTP/gRPC requests use the `Api` suffix.
 Queue, stream, and scheduled-job processors use `Worker`. The proxy/BFF host uses

@@ -1,6 +1,7 @@
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
+using EvCharging.Domain.Observations;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence.Entities;
 using EvCharging.Persistence.Extensions;
@@ -33,6 +34,7 @@ public class PlatformDbContext : DbContext
     public DbSet<ProviderConnector> ProviderConnectors => Set<ProviderConnector>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<ChargingSession> Sessions => Set<ChargingSession>();
+    public DbSet<SessionEvidence> SessionEvidence => Set<SessionEvidence>();
     public DbSet<Operation> Operations => Set<Operation>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
     public DbSet<FileMetadata> Files => Set<FileMetadata>();

@@ -119,8 +119,8 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 |---|---|
 | Gateway / BFF | Browser authentication sessions, identity-provider interactions, and browser/service/callback routing to runtime-balanced API services |
 | API | Command/query acceptance, transactional reservation/operation/session intent, file authorization, observation ingestion, and live connections/event subscription |
-| Charging worker | Charging-provider integrations and start/stop effects, reservation expiry, reconciliation, recovery polling through observation ingestion, and recurring due-work discovery |
-| Observation worker | Stream consumers, document history/latest views, transactional lifecycle/final-usage processing, stalled-session detection, and isolated observation-view replay |
+| Charging worker | Charging-provider integrations and start/stop effects, reservation expiry, transactional lifecycle/final-usage processing, reconciliation, recovery polling through observation ingestion, and recurring due-work discovery |
+| Observation worker | Stream consumers, document history/latest views, stalled-session detection, and isolated observation-view replay |
 | Search index worker | Station/business-event and observation consumers, search indexing, replacement-index rebuilds, validation, and switchover |
 | Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and bounded warming/recovery |
 | Media worker | Media processing/publication, summaries, diagnostic bundles, and upload/orphan sweeps |
@@ -321,8 +321,8 @@ Callback retry and polling behavior are defined in
 [integrations](integrations.md#3-observations-and-recovery).
 
 Each consumer group owns its store and checkpoint; offsets advance after durable
-effects. Relational lifecycle processing commits deduplication, state, and outbox
-together. Document, cache, and search consumers use idempotent, version-conditional
+effects. Relational lifecycle processing commits state and outbox together and
+deduplicates through source-time-conditional updates. Document, cache, and search consumers use idempotent, version-conditional
 updates; their effects are not atomic with the relational store or with each other.
 Every store is fed by its own consumer group directly from the stream; none feeds
 another. Cached progress is written by the cache worker's group. The document

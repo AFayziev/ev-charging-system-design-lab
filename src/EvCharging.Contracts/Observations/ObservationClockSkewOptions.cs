@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace EvCharging.DocumentStore;
+namespace EvCharging.Contracts.Observations;
 
 /// <summary>The clock skew between a provider and the platform that readings are still trusted within.</summary>
 public sealed class ObservationClockSkewOptions

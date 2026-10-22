@@ -24,13 +24,15 @@ internal static class ChargingSessionQueryExtensions
         var session = await database.Sessions
             .AsNoTracking()
             .Where(s => s.PublicId == sessionId)
-            .Select(s => new
+            .Select(
+                s => new
                 {
                     s.PublicId,
                     ReservationId = s.Reservation!.PublicId,
                     s.Lifecycle,
                     s.StartedAt,
-                    Owned = database.Reservations.OwnedBy(identity)
+                    IsOwnedByCaller = database.Reservations
+                        .OwnedBy(identity)
                         .Any(reservation => reservation.Id == s.ReservationId),
                     // The start attempt names the integration before the provider has confirmed the session.
                     IntegrationKey = database.Attempts
@@ -43,7 +45,7 @@ internal static class ChargingSessionQueryExtensions
         return session switch
         {
             null => Result.Fail<OwnedChargingSession>(new NotFoundError<Guid>("charging session", sessionId)),
-            { Owned: false } => Result.Fail<OwnedChargingSession>(new ForbiddenError()),
+            { IsOwnedByCaller: false } => Result.Fail<OwnedChargingSession>(new ForbiddenError()),
             _ => Result.Ok(new OwnedChargingSession(
                 session.PublicId, session.ReservationId, session.Lifecycle, session.StartedAt, session.IntegrationKey))
         };

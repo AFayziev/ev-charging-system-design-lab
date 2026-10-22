@@ -1,4 +1,5 @@
 using EvCharging.Api.Authentication;
+using EvCharging.Contracts.Observations;
 using EvCharging.DocumentStore;
 using EvCharging.Persistence;
 using FluentResults;

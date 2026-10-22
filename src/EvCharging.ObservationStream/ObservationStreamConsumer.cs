@@ -1,21 +1,21 @@
 using System.Text.Json;
 using Confluent.Kafka;
 using EvCharging.Contracts.Observations;
-using EvCharging.ObservationWorker.Projection;
-using EvCharging.ObservationWorker.Resilience;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Registry;
 
-namespace EvCharging.ObservationWorker.Consumers;
+namespace EvCharging.ObservationStream;
 
 /// <summary>
-/// Reads the observation stream in batches and projects each batch into the document store. An offset is stored
-/// only after its batch is written, so a restart resumes from the last projected message.
+/// Reads the observation stream in batches and hands each batch to its handler. An offset is stored only after its
+/// batch is handled, so a restart resumes from the last handled message.
 /// </summary>
 internal sealed class ObservationStreamConsumer(
     IConsumer<string, string> consumer,
-    ObservationProjector projector,
+    IObservationBatchHandler handler,
     IOptions<ObservationStreamOptions> stream,
     IOptions<ObservationProcessingOptions> options,
     ResiliencePipelineProvider<string> pipelines,
@@ -41,7 +41,7 @@ internal sealed class ObservationStreamConsumer(
                     continue;
                 }
 
-                await ProjectUntilStoredAsync(DeserializeValid(messages), cancellationToken);
+                await HandleUntilStoredAsync(DeserializeValid(messages), cancellationToken);
                 StoreOffsets(messages);
             }
         }
@@ -133,11 +133,11 @@ internal sealed class ObservationStreamConsumer(
         return null;
     }
 
-    private ValueTask ProjectUntilStoredAsync(
+    private ValueTask HandleUntilStoredAsync(
         List<ObservationEnvelope> envelopes,
         CancellationToken cancellationToken) =>
         _pipeline.ExecuteAsync(
-            token => new ValueTask(projector.ProjectAsync(envelopes, token)),
+            token => new ValueTask(handler.HandleAsync(envelopes, token)),
             cancellationToken);
 
     private void StoreOffsets(List<ConsumeResult<string, string>> messages)
@@ -151,7 +151,7 @@ internal sealed class ObservationStreamConsumer(
             catch (KafkaException exception)
             {
                 // The partition was reassigned while the batch was retried; its new owner reads the batch again,
-                // and the projection is idempotent.
+                // and handling is idempotent.
                 logger.LogWarning(exception, "Could not store {TopicPartitionOffset}.", message.TopicPartitionOffset);
             }
         }

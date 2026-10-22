@@ -1,5 +1,6 @@
 using EvCharging.Contracts.Observations;
 using EvCharging.DocumentStore;
+using EvCharging.ObservationStream;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
@@ -12,9 +13,9 @@ namespace EvCharging.ObservationWorker.Projection;
 internal sealed class ObservationProjector(
     ObservationStore store,
     IOptions<ObservationClockSkewOptions> clockSkew,
-    ILogger<ObservationProjector> logger)
+    ILogger<ObservationProjector> logger) : IObservationBatchHandler
 {
-    public async Task ProjectAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
+    public async Task HandleAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
     {
         if (envelopes.Count == 0)
         {

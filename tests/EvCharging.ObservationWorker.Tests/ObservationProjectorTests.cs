@@ -126,7 +126,7 @@ public sealed class ObservationProjectorTests(MongoDbFixture fixture) : IClassFi
             _store,
             Options.Create(new ObservationClockSkewOptions { ClockSkew = TimeSpan.FromSeconds(5) }),
             NullLogger<ObservationProjector>.Instance)
-            .ProjectAsync(envelopes, CancellationToken.None);
+            .HandleAsync(envelopes, CancellationToken.None);
 
     private Task<long> HistoryCountAsync() =>
         _store.History.CountDocumentsAsync(FilterDefinition<ObservationHistoryDocument>.Empty);

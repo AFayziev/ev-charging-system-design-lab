@@ -1,12 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace EvCharging.ObservationWorker;
+namespace EvCharging.ObservationStream;
 
-internal sealed class ObservationProcessingOptions
+public sealed class ObservationProcessingOptions
 {
     public const string SectionName = "ObservationProcessing";
 
-    /// <summary>The most messages projected with one pair of writes.</summary>
+    /// <summary>The most messages handled with one write.</summary>
     [Range(1, 10000)]
     public int BatchSize { get; init; }
 

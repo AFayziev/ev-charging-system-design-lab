@@ -78,6 +78,9 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
                 await Storage.Operations.Where(value => value.Session != null
                     && reservationIds.Contains(value.Session.ReservationId))
                     .ExecuteDeleteAsync();
+                await Storage.SessionEvidence.Where(value => Storage.Sessions.Any(
+                    session => session.Id == value.SessionId && reservationIds.Contains(session.ReservationId)))
+                    .ExecuteDeleteAsync();
                 await Storage.Sessions.Where(value => reservationIds.Contains(value.ReservationId))
                     .ExecuteDeleteAsync();
                 await Storage.Reservations.Where(value => driverIds.Contains(value.DriverId)).ExecuteDeleteAsync();

@@ -7,6 +7,7 @@ using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
 using EvCharging.Api.Streaming;
+using EvCharging.Contracts.Observations;
 using EvCharging.DocumentStore;
 using EvCharging.Messaging;
 using EvCharging.Persistence.Extensions;
