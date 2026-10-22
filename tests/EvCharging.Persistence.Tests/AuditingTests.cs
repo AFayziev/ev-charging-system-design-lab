@@ -43,7 +43,7 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
 
         context.Stations.Remove(station);
         await context.SaveChangesAsync();
-        Assert.False(await context.Stations.AnyAsync(candidate => candidate.Id == stationId));
+        Assert.False(await context.Stations.AnyAsync(s => s.Id == stationId));
         var deleted = await context.AuditEntries.SingleAsync(audit =>
             audit.ResourceId == stationId && audit.Action == AuditAction.Deleted);
         Assert.Equal(after.GetRawText(), deleted.Details.GetProperty("before").GetRawText());
@@ -74,14 +74,14 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
             {
                 await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
                 Assert.Equal(EntityState.Added, context.Entry(station).State);
-                Assert.False(await context.Stations.AnyAsync(candidate => candidate.Name == station.Name));
-                Guid attemptedId = context.Entry(station).Property(candidate => candidate.Id).CurrentValue;
+                Assert.False(await context.Stations.AnyAsync(s => s.Name == station.Name));
+                Guid attemptedId = context.Entry(station).Property(s => s.Id).CurrentValue;
                 Assert.False(await context.AuditEntries.AnyAsync(audit => audit.ResourceId == attemptedId));
             });
 
         await context.SaveChangesAsync();
         Assert.NotEqual(Guid.Empty, station.Id);
-        Assert.Equal(1, await context.Stations.CountAsync(candidate => candidate.Name == station.Name));
+        Assert.Equal(1, await context.Stations.CountAsync(s => s.Name == station.Name));
         var audit = await context.AuditEntries.SingleAsync(audit => audit.ResourceId == station.Id);
         Assert.Equal(AuditAction.Added, audit.Action);
         Assert.Equal(station.Name, audit.Details.GetProperty("after").GetProperty("name").GetString());
@@ -117,8 +117,8 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
             .UseNpgsql(readerConnection).Options);
         Assert.Equal(
             "Earlier save",
-            await reader.Stations.Where(candidate => candidate.Id == stationId)
-                .Select(candidate => candidate.Name)
+            await reader.Stations.Where(s => s.Id == stationId)
+                .Select(s => s.Name)
                 .SingleAsync());
         var audit = await reader.AuditEntries.SingleAsync(audit => audit.ResourceId == stationId);
         Assert.Equal("Earlier save", audit.Details.GetProperty("after").GetProperty("name").GetString());
@@ -142,12 +142,12 @@ public sealed class AuditingTests(PlatformDatabaseFixture database) : IClassFixt
             {
                 await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
                 Assert.Equal(EntityState.Deleted, context.Entry(station).State);
-                Assert.True(await context.Stations.AnyAsync(candidate => candidate.Id == stationId));
+                Assert.True(await context.Stations.AnyAsync(s => s.Id == stationId));
                 Assert.False(await context.AuditEntries.AnyAsync(audit => audit.ResourceId == stationId));
             });
 
         await context.SaveChangesAsync();
-        Assert.False(await context.Stations.AnyAsync(candidate => candidate.Id == stationId));
+        Assert.False(await context.Stations.AnyAsync(s => s.Id == stationId));
         var audit = await context.AuditEntries.SingleAsync(audit => audit.ResourceId == stationId);
         Assert.Equal(AuditAction.Deleted, audit.Action);
         Assert.Equal("Original station", audit.Details.GetProperty("before").GetProperty("name").GetString());
