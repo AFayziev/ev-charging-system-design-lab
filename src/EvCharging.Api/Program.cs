@@ -21,6 +21,10 @@ builder.AddPlatformPersistence();
 builder.AddObservationStream();
 builder.AddObservationIngestion();
 builder.AddDocumentStore();
+builder.Services.AddOptions<ObservationClockSkewOptions>()
+    .BindConfiguration(ObservationClockSkewOptions.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.AddChargingProgress();
 builder.AddMessaging(
     options =>
@@ -46,6 +50,7 @@ app.MapStations();
 app.MapDrivers();
 app.MapReservations();
 app.MapCharging();
+app.MapChargingSessions();
 app.MapObservations();
 
 app.Run();

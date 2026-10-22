@@ -1,43 +1,36 @@
-import {
-  IconAlertCircle,
-  IconCircleCheck,
-  IconClock,
-  IconHelpCircle,
-} from "@tabler/icons-react";
+import type { Presentation } from "@/components/tones";
 import type { StopOperation } from "./api";
 
-export function getStopPresentation(operation: StopOperation | null) {
+export function getStopPresentation(
+  operation: StopOperation | null,
+): Presentation | undefined {
   switch (operation?.outcome) {
     case "pending":
       return {
-        color: "blue",
+        tone: "pending",
         badge: "Stopping",
         title: "Stopping charging",
         text: "Your stop request was accepted. Waiting for the station to confirm charging has stopped.",
-        icon: IconClock,
       };
     case "uncertain":
       return {
-        color: "orange",
+        tone: "unresolved",
         badge: "Stop unresolved",
         title: "Waiting for confirmation",
         text: "We could not confirm whether charging stopped. Charging may still be in progress, so please check the charger.",
-        icon: IconHelpCircle,
       };
     case "confirmed":
       return {
-        color: "green",
+        tone: "success",
         badge: "Stopped · final usage pending",
         title: "Charging stopped",
         text: "The station confirmed your stop. Your session stays open until its final usage is available.",
-        icon: IconCircleCheck,
       };
     case "rejected":
       return {
-        color: "red",
+        tone: "error",
         title: "Charging did not stop",
         text: "The station rejected the stop request. Your charging session is still active. You can try stopping again.",
-        icon: IconAlertCircle,
       };
     default:
       return undefined;

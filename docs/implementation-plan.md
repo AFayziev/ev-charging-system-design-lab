@@ -477,7 +477,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
     write. Serve a progress query from the latest view. Verify duplicates,
     out-of-order events, and catch-up after worker restart.
     Depends on M07.01.1.
-  - [ ] M07.01.4 Driver charging session page: show energy, power, elapsed time,
+  - [x] M07.01.4 Driver charging session page: show energy, power, elapsed time,
     the power-over-time chart, source-time freshness (`Last reported charging`
     when stale), bounded polling, and the stopping state. Polling and the chart
     stay incremental: a request does not return the whole observation history,

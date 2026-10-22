@@ -4,9 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 var builder = DistributedApplication.CreateBuilder(args);
-var chargingProviders = new ChargingProviderOptions();
-builder.Configuration.GetRequiredSection(ChargingProviderOptions.SectionName).Bind(chargingProviders);
-Validator.ValidateObject(chargingProviders, new ValidationContext(chargingProviders), validateAllProperties: true);
+var chargingProviders = BindValidatedConfigSection<ChargingProviderOptions>(ChargingProviderOptions.SectionName);
+var chargingSettings = BindValidatedConfigSection<ChargingOptions>(ChargingOptions.SectionName);
 
 var database = builder.AddPlatformDatabase();
 var databaseAccess = builder.AddDatabaseAccess(database);
@@ -45,6 +44,13 @@ var apiCount = await InstanceCountAsync("api-instances");
 var gatewayCount = await InstanceCountAsync("gateway-instances");
 var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithSettings(
+        chargingSettings,
+        ChargingOptions.SectionName,
+        options => options.StatusCheckTimeout,
+        options => options.FreshnessLimit,
+        options => options.SilenceLimit,
+        options => options.ClockSkew)
     .WithHttpEndpoint()
     .WithReplicas(apiCount)
     .WithHttpHealthCheck("/health");
@@ -193,7 +199,8 @@ var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-
     .WaitFor(gateway);
 
 var observation = builder.AddProject<Projects.EvCharging_ObservationWorker>("observation-worker")
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
+    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithSettings(chargingSettings, ChargingOptions.SectionName, options => options.ClockSkew);
 
 var search = builder.AddProject<Projects.EvCharging_SearchIndexWorker>("search-index-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
@@ -262,4 +269,13 @@ async Task<int> InstanceCountAsync(string name)
     }
 
     return count;
+}
+
+T BindValidatedConfigSection<T>(string section)
+    where T : new()
+{
+    var options = new T();
+    builder.Configuration.GetRequiredSection(section).Bind(options);
+    Validator.ValidateObject(options, new ValidationContext(options), validateAllProperties: true);
+    return options;
 }

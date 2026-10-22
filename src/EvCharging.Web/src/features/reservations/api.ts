@@ -115,7 +115,27 @@ export const reservationKeys = {
   bookingPolicy: ["reservations", "booking-policy"] as const,
   lists: ["reservations", "list"] as const,
   list: (afterId: string | null) => ["reservations", "list", afterId] as const,
+  detail: (id: string) => ["reservations", "detail", id] as const,
 };
+
+export async function getReservation(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Reservation> {
+  const response = await api.get<Reservation>(
+    `/api/reservations/${encodeURIComponent(id)}`,
+    { signal },
+  );
+  return response.data;
+}
+
+export const reservationQuery = (id: string) =>
+  queryOptions({
+    queryKey: reservationKeys.detail(id),
+    queryFn: ({ signal }) => getReservation(id, signal),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
 
 export async function getBookingPolicy(
   signal?: AbortSignal,

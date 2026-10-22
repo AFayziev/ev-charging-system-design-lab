@@ -1,5 +1,5 @@
+import { StatusAlert } from "@/components/StatusAlert";
 import {
-  Alert,
   Button,
   EmptyState,
   Group,
@@ -85,9 +85,7 @@ export function ReservationsPage() {
         description="View your charging reservations and booked time slots."
       />
       {createdReservation && (
-        <Alert color="teal" role="status">
-          Reservation created.
-        </Alert>
+        <StatusAlert tone="success">Reservation created.</StatusAlert>
       )}
       {query.isPending && <Loader aria-label="Loading reservations" />}
       {query.isError && (

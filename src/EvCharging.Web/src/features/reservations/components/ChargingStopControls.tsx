@@ -1,11 +1,9 @@
-import { Alert, Button, Stack } from "@mantine/core";
-import {
-  IconAlertCircle,
-  IconHelpCircle,
-  IconPlayerStop,
-} from "@tabler/icons-react";
+import { StatusAlert } from "@/components/StatusAlert";
+import { Button, Stack } from "@mantine/core";
+import { IconBolt, IconPlayerStop } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router";
 import { getHttpFailure } from "@/lib/http-errors";
 import {
   reservationKeys,
@@ -77,6 +75,17 @@ export function ChargingStopControls({
   return (
     <>
       <div className={classes.actions}>
+        {reservation.startOperation && (
+          <Button
+            component={Link}
+            to={`/charging-sessions/${reservation.startOperation.sessionId}`}
+            variant="default"
+            leftSection={<IconBolt size={16} aria-hidden />}
+            fullWidth
+          >
+            View charging
+          </Button>
+        )}
         {sessionActive && (
           <Button
             color="red"
@@ -100,35 +109,24 @@ export function ChargingStopControls({
       </div>
       <Stack gap="xs" className={classes.chargingStatus}>
         {content && (
-          <Alert
-            color={content.color}
-            title={content.title}
-            icon={<content.icon size={20} aria-hidden />}
-            role="status"
-          >
+          <StatusAlert tone={content.tone} title={content.title}>
             {content.text}
-          </Alert>
+          </StatusAlert>
         )}
         {submission.unconfirmed && sessionActive && (
-          <Alert
-            color="orange"
-            title="Stop request not confirmed"
-            icon={<IconHelpCircle size={20} aria-hidden />}
+          <StatusAlert
+            tone="unresolved"
             role="alert"
+            title="Stop request not confirmed"
           >
             We could not confirm your stop request. You can safely retry this
             request.
-          </Alert>
+          </StatusAlert>
         )}
         {sessionActive && !submission.unconfirmed && failure && (
-          <Alert
-            color="red"
-            title={failure.title}
-            icon={<IconAlertCircle size={20} aria-hidden />}
-            role="alert"
-          >
+          <StatusAlert tone="error" title={failure.title}>
             {failure.message}
-          </Alert>
+          </StatusAlert>
         )}
       </Stack>
       {opened && (

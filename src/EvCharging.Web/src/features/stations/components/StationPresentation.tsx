@@ -1,4 +1,5 @@
-import { Alert, Button, Stack, Text } from "@mantine/core";
+import { Button, Text } from "@mantine/core";
+import { FailureAlert } from "@/components/StatusAlert";
 import { getHttpFailure } from "@/lib/http-errors";
 import type { ConnectorCapability } from "../api";
 
@@ -25,21 +26,17 @@ export function StationFailure({
   error: unknown;
   retry: () => void;
 }) {
-  const failure = getHttpFailure(error);
   return (
-    <Alert color="red" title={failure.title} role="alert">
-      <Stack gap="sm">
-        <Text size="sm">{failure.message}</Text>
-        <Button
-          variant="light"
-          color="red"
-          onClick={retry}
-          w="fit-content"
-          mih={44}
-        >
-          Try again
-        </Button>
-      </Stack>
-    </Alert>
+    <FailureAlert failure={getHttpFailure(error)}>
+      <Button
+        variant="light"
+        color="red"
+        onClick={retry}
+        w="fit-content"
+        mih={44}
+      >
+        Try again
+      </Button>
+    </FailureAlert>
   );
 }

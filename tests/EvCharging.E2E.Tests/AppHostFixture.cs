@@ -81,23 +81,31 @@ public sealed class AppHostFixture : IAsyncLifetime
     public async Task PrepareWattHarborConnectorAsync(
         string stationId, string chargerId, string connectorId, bool enabled)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var controls = await CreateWattHarborControlClientAsync(timeout.Token);
-        using var response = await controls.PutAsJsonAsync(
+        await PutWattHarborControlAsync(
             $"/simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}",
-            new ProviderEquipment(22m, enabled),
-            timeout.Token);
-        response.EnsureSuccessStatusCode();
+            new ProviderEquipment(22m, enabled));
     }
 
     public async Task ConfigureWattHarborCommandFaultAsync(Guid operationId, Guid sessionId, int? lookupStatus)
     {
+        await PutWattHarborControlAsync(
+            $"/simulation/commands/{operationId}",
+            new ProviderCommandFault(sessionId, true, lookupStatus));
+    }
+
+    /// <summary>Stops WattHarbor from sending observations for a session, or lets it send them again.</summary>
+    public async Task ConfigureWattHarborTelemetryFaultAsync(Guid sessionId, bool interrupt)
+    {
+        await PutWattHarborControlAsync(
+            $"/simulation/sessions/{sessionId}/telemetry",
+            new ProviderTelemetryFault(false, false, interrupt));
+    }
+
+    private async Task PutWattHarborControlAsync(string path, object body)
+    {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         using var controls = await CreateWattHarborControlClientAsync(timeout.Token);
-        using var response = await controls.PutAsJsonAsync(
-            $"/simulation/commands/{operationId}",
-            new ProviderCommandFault(sessionId, true, lookupStatus),
-            timeout.Token);
+        using var response = await controls.PutAsJsonAsync(path, body, timeout.Token);
         response.EnsureSuccessStatusCode();
     }
 
@@ -125,6 +133,8 @@ public sealed class AppHostFixture : IAsyncLifetime
 
     private sealed record ProviderEquipment(decimal PowerKw, bool Enabled);
     private sealed record ProviderCallbackTarget(string Url, string ApiKey);
+    private sealed record ProviderTelemetryFault(bool Duplicate, bool DeliverOutOfOrder, bool Interrupt);
+
     private sealed record ProviderCommandFault(Guid ExternalSessionId, bool LoseResponse, int? LookupStatusCode);
     private sealed record ProviderToken([property: JsonPropertyName("access_token")] string AccessToken);
 

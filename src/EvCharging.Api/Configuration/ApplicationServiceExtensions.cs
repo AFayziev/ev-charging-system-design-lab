@@ -1,4 +1,5 @@
 using EvCharging.Api.Authentication;
+using EvCharging.Api.Features.Charging;
 using EvCharging.Api.Features.Stations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
@@ -11,10 +12,8 @@ internal static class ApplicationServiceExtensions
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddOptions<ChargingStatusCheckOptions>()
-            .BindConfiguration("ChargingStatusChecks")
-            .Validate(
-                options => options.Timeout > TimeSpan.Zero,
-                "The status-check timeout must be positive.")
+            .BindConfiguration(ChargingProgressOptions.SectionName)
+            .ValidateDataAnnotations()
             .ValidateOnStart();
         services.AddOptions<ReservationPolicyOptions>()
             .BindConfiguration("ReservationPolicy")

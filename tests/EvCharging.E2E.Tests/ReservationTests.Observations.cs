@@ -44,10 +44,10 @@ public sealed partial class ReservationTests
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
         await fixture.LoginAsync(page, "driver");
-        var (reservationId, sessionId) = await StartConfirmedSessionAsync(page, timeout.Token);
+        var (_, sessionId) = await StartConfirmedSessionAsync(page, timeout.Token);
         var running = await WaitForProgressAsync(
             page,
-            reservationId,
+            sessionId,
             progress => progress.GetProperty("reading").ValueKind == JsonValueKind.Object,
             timeout
                 .Token);
@@ -62,14 +62,14 @@ public sealed partial class ReservationTests
             timeout.Token);
         var newest = produced.Max(envelope => envelope.GetProperty("occurredAt").GetDateTimeOffset());
         var stale = await WaitForProgressAsync(
-            page, reservationId, progress => progress.GetProperty("isStale").GetBoolean(), timeout.Token);
+            page, sessionId, progress => progress.GetProperty("isStale").GetBoolean(), timeout.Token);
         Assert.True(stale.GetProperty("reading").GetProperty("occurredAt").GetDateTimeOffset() < newest);
 
         await WorkerCommandAsync(KnownResourceCommands.StartCommand, timeout.Token, "observation-worker");
 
         var caughtUp = await WaitForProgressAsync(
             page,
-            reservationId,
+            sessionId,
             progress => progress.GetProperty("reading").GetProperty("occurredAt").GetDateTimeOffset() >= newest,
             timeout.Token);
         Assert.Equal("charging", caughtUp.GetProperty("reading").GetProperty("state").GetString());
@@ -90,7 +90,7 @@ public sealed partial class ReservationTests
     }
 
     private static async Task<JsonElement> WaitForProgressAsync(
-        IPage page, Guid reservationId, Func<JsonElement, bool> condition, CancellationToken cancellationToken)
+        IPage page, Guid sessionId, Func<JsonElement, bool> condition, CancellationToken cancellationToken)
     {
         var last = default(JsonElement);
         while (true)
@@ -102,7 +102,7 @@ public sealed partial class ReservationTests
                     return { status: response.status, body: await response.json().catch(() => null) };
                 }
                 """,
-                $"/api/reservations/{reservationId}/progress");
+                $"/api/charging-sessions/{sessionId}/progress");
             if (last.GetProperty("status").GetInt32() == 200 && condition(last.GetProperty("body")))
             {
                 return last.GetProperty("body");

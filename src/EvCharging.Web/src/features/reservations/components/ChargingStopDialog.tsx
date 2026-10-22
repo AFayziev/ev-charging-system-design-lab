@@ -1,13 +1,5 @@
-import {
-  Alert,
-  Button,
-  Group,
-  Loader,
-  Modal,
-  Stack,
-  Text,
-} from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { StatusAlert } from "@/components/StatusAlert";
+import { Button, Group, Loader, Modal, Stack, Text } from "@mantine/core";
 import { useUserSession } from "@/features/auth/useUserSession";
 import type { Reservation } from "../api";
 import { ReservationFailure } from "./ReservationFailure";
@@ -55,13 +47,9 @@ export function ChargingStopDialog({
           />
         )}
         {session.signedIn === false && (
-          <Alert
-            color="orange"
-            icon={<IconAlertCircle size={20} aria-hidden />}
-            role="alert"
-          >
+          <StatusAlert tone="warning">
             Sign in again to request a stop.
-          </Alert>
+          </StatusAlert>
         )}
         <Group justify="flex-end">
           <Button variant="default" disabled={pending} onClick={onClose}>

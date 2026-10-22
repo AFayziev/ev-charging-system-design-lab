@@ -1,13 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using EvCharging.Api.Authentication;
-using EvCharging.Api.Errors;
-using EvCharging.Api.Features.Reservations;
 using EvCharging.Contracts.Observations;
 using EvCharging.DocumentStore;
 using EvCharging.Domain.Charging;
 using EvCharging.Persistence;
 using FluentResults;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
@@ -24,20 +21,27 @@ public sealed record ChargingReadingResponse(
 /// <summary>A session's lifecycle with its latest reading; the reading is absent until one has been projected.</summary>
 public sealed record ChargingProgressResponse(
     Guid SessionId,
+    Guid ReservationId,
     SessionLifecycle Lifecycle,
     DateTimeOffset? StartedAt,
     ChargingReadingResponse? Reading,
-    bool IsStale);
+    bool IsStale,
+    bool IsSilentPastLimit,
+    double? ElapsedSeconds);
 
-public sealed record GetChargingProgressRequest(Guid ReservationId) : IAuthenticatedRequest<ChargingProgressResponse>;
+public sealed record GetChargingProgressRequest(Guid SessionId) : IAuthenticatedRequest<ChargingProgressResponse>;
 
 public sealed class ChargingProgressOptions
 {
-    public const string SectionName = "ChargingProgress";
+    public const string SectionName = "Charging";
 
     /// <summary>A reading older than this is stale, unless it is the provider's final one; silence says nothing about the session.</summary>
     [Range(typeof(TimeSpan), "00:00:01", "1.00:00:00")]
-    public TimeSpan FreshnessLimit { get; init; } = TimeSpan.FromSeconds(10);
+    public TimeSpan FreshnessLimit { get; init; }
+
+    /// <summary>A running session silent for longer than this is no longer worth polling; it is refreshed by hand.</summary>
+    [Range(typeof(TimeSpan), "00:00:01", "1.00:00:00")]
+    public TimeSpan SilenceLimit { get; init; }
 }
 
 internal static class ChargingProgressExtensions
@@ -47,6 +51,9 @@ internal static class ChargingProgressExtensions
         builder.Services.AddOptions<ChargingProgressOptions>()
             .BindConfiguration(ChargingProgressOptions.SectionName)
             .ValidateDataAnnotations()
+            .Validate(
+                options => options.SilenceLimit > options.FreshnessLimit,
+                "The silence limit must be longer than the freshness limit.")
             .ValidateOnStart();
         return builder;
     }
@@ -61,34 +68,13 @@ public sealed class GetChargingProgressQueryHandler(
     public async Task<Result<ChargingProgressResponse>> HandleAsync(
         GetChargingProgressRequest request, UserIdentity identity, CancellationToken cancellationToken)
     {
-        var reservation = await database.LoadOwnedAsync(request.ReservationId, identity, cancellationToken);
-        if (reservation.IsFailed)
+        var loaded = await database.LoadOwnedSessionAsync(request.SessionId, identity, cancellationToken);
+        if (loaded.IsFailed)
         {
-            return Result.Fail<ChargingProgressResponse>(reservation.Errors);
+            return Result.Fail<ChargingProgressResponse>(loaded.Errors);
         }
 
-        var session = await database.Sessions
-            .AsNoTracking()
-            .Where(candidate => candidate.ReservationId == reservation.Value.Id)
-            .Select(candidate => new
-                {
-                    candidate.PublicId,
-                    candidate.Lifecycle,
-                    candidate.StartedAt,
-                    // The start attempt names the integration before the provider has confirmed the session.
-                    IntegrationKey = database.Attempts
-                        .Where(attempt => attempt.Operation!.SessionId == candidate.Id)
-                        .OrderBy(attempt => attempt.AuthorizedAt)
-                        .Select(attempt => attempt.IntegrationKey)
-                        .FirstOrDefault()
-                })
-            .SingleOrDefaultAsync(cancellationToken);
-        if (session is null)
-        {
-            return Result.Fail<ChargingProgressResponse>(
-                new NotFoundError<Guid>("charging session", request.ReservationId));
-        }
-
+        var session = loaded.Value;
         // Matching the whole key lets the lookup use the _id index.
         var reading = session.IntegrationKey is null
             ? null
@@ -103,15 +89,22 @@ public sealed class GetChargingProgressQueryHandler(
                 .Project(document => document.Reading)
                 .FirstOrDefaultAsync(cancellationToken);
 
+        var now = clock.GetUtcNow();
+        // A started session that has reported nothing has been quiet since it started.
+        var lastHeardAt = reading?.OccurredAt ?? session.StartedAt;
+        var isFinal = reading is { IsFinalEnergy: true };
         return Result.Ok(new ChargingProgressResponse(
             session.PublicId,
+            session.ReservationId,
             session.Lifecycle,
             session.StartedAt,
             reading is null
                 ? null
                 : new ChargingReadingResponse(
                     reading.State, reading.PowerKw, reading.EnergyKWh, reading.IsFinalEnergy, reading.OccurredAt),
-            reading is { IsFinalEnergy: false }
-                && clock.GetUtcNow() - reading.OccurredAt > options.Value.FreshnessLimit));
+            SessionTiming.IsSilentFor(session.Lifecycle, lastHeardAt, isFinal, now, options.Value.FreshnessLimit),
+            SessionTiming.IsSilentFor(session.Lifecycle, lastHeardAt, isFinal, now, options.Value.SilenceLimit),
+            SessionTiming.Elapsed(session.Lifecycle, session.StartedAt, reading?.OccurredAt, isFinal, now)
+                ?.TotalSeconds));
     }
 }

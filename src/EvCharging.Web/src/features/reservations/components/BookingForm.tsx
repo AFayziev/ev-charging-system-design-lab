@@ -1,5 +1,5 @@
+import { FailureAlert, StatusAlert } from "@/components/StatusAlert";
 import {
-  Alert,
   Button,
   Card,
   Group,
@@ -48,18 +48,15 @@ export function BookingForm(props: BookingFormProps) {
   });
   const policyError = policy.isError ? getHttpFailure(policy.error) : null;
   const policyFailure = policyError && (
-    <Alert color="red" title={policyError.title} role="alert">
-      <Stack gap="xs">
-        <Text size="sm">{policyError.message}</Text>
-        <Button
-          variant="white"
-          onClick={() => void policy.refetch()}
-          loading={policy.isFetching}
-        >
-          Try again
-        </Button>
-      </Stack>
-    </Alert>
+    <FailureAlert failure={policyError}>
+      <Button
+        variant="white"
+        onClick={() => void policy.refetch()}
+        loading={policy.isFetching}
+      >
+        Try again
+      </Button>
+    </FailureAlert>
   );
   if (!policy.data) {
     return (
@@ -232,11 +229,10 @@ function ConfiguredBookingForm({
             Book a connector
           </Title>
           {policyFailure}
-          <Alert
-            color="blue"
+          <StatusAlert
+            tone="info"
             variant="light"
             title="Booking limits"
-            icon={<IconInfoCircle size={18} aria-hidden="true" />}
             role="region"
             aria-label="Booking limits"
           >
@@ -261,7 +257,7 @@ function ConfiguredBookingForm({
                 {formatDuration(policy.maximumAdvanceBookingHorizonSeconds)}
               </Text>
             </Stack>
-          </Alert>
+          </StatusAlert>
           <Select
             label="Connector"
             data={connectors}

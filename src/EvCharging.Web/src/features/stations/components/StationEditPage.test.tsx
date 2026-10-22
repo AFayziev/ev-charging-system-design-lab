@@ -1,5 +1,4 @@
-import { MantineProvider } from "@mantine/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TestProviders, createTestQueryClient } from "@/test/providers";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -25,23 +24,19 @@ const failure = (status: number, data?: unknown) =>
   });
 
 function renderEditor(cached?: typeof station) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = createTestQueryClient();
   if (cached) client.setQueryData(stationKeys.editor(station.id), cached);
   render(
-    <MantineProvider>
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[`/stations/${station.id}/edit`]}>
-          <Routes>
-            <Route
-              path="/stations/:stationId/edit"
-              element={<StationEditPage />}
-            />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    </MantineProvider>,
+    <TestProviders client={client}>
+      <MemoryRouter initialEntries={[`/stations/${station.id}/edit`]}>
+        <Routes>
+          <Route
+            path="/stations/:stationId/edit"
+            element={<StationEditPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </TestProviders>,
   );
   return client;
 }

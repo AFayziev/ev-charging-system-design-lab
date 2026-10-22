@@ -8,6 +8,10 @@ using EvCharging.ObservationWorker.Resilience;
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
 builder.AddDocumentStore();
+builder.Services.AddOptions<ObservationClockSkewOptions>()
+    .BindConfiguration(ObservationClockSkewOptions.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 // Consumer settings (group, offset policy, health check) come from the Aspire:Confluent:Kafka:Consumer section.
 builder.AddKafkaConsumer<string, string>("kafka");
 builder.Services.AddOptions<ObservationStreamOptions>()

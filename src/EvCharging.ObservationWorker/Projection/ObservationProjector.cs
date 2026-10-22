@@ -11,7 +11,7 @@ namespace EvCharging.ObservationWorker.Projection;
 /// </summary>
 internal sealed class ObservationProjector(
     ObservationStore store,
-    IOptions<ObservationProcessingOptions> options,
+    IOptions<ObservationClockSkewOptions> clockSkew,
     ILogger<ObservationProjector> logger)
 {
     public async Task ProjectAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
@@ -49,7 +49,7 @@ internal sealed class ObservationProjector(
         IReadOnlyList<ObservationEnvelope> envelopes,
         CancellationToken cancellationToken)
     {
-        var tolerance = options.Value.FutureTolerance;
+        var tolerance = clockSkew.Value.ClockSkew;
         var filters = Builders<SessionLatestDocument>.Filter;
         var current = envelopes.Where(envelope => envelope.OccurredAt <= envelope.ReceivedAt + tolerance).ToList();
         if (current.Count < envelopes.Count)

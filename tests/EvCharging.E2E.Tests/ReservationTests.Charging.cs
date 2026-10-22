@@ -416,6 +416,8 @@ public sealed partial class ReservationTests
         foreach (var (name, width, height) in new[] { ("desktop", 1280, 900), ("mobile", 390, 844) })
         {
             await page.SetViewportSizeAsync(width, height);
+            // Charts measure their container after a resize, so the layout settles a moment later.
+            await page.WaitForFunctionAsync("document.documentElement.scrollWidth <= window.innerWidth");
             Assert.False(await page.EvaluateAsync<bool>("document.documentElement.scrollWidth > window.innerWidth"));
             await page.ScreenshotAsync(new()
             {

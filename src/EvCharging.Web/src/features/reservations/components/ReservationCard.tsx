@@ -1,3 +1,5 @@
+import { tones } from "@/components/tones";
+import { formatClock } from "@/lib/time-formatting";
 import { Anchor, Badge, Paper, Stack, Text } from "@mantine/core";
 import { useForceUpdate, useTimeout } from "@mantine/hooks";
 import { IconCalendar, IconPlug } from "@tabler/icons-react";
@@ -5,11 +7,7 @@ import { Link } from "react-router";
 import { StationPhoto } from "@/features/stations/components/StationPhoto";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
 import { hasCurrentCharging, isUnresolved, type Reservation } from "../api";
-import {
-  formatReservationSlot,
-  getBrowserTimeZone,
-  formatStartDeadline,
-} from "../time-formatting";
+import { formatReservationSlot, getBrowserTimeZone } from "../time-formatting";
 import { ReservationStatus } from "./ReservationStatus";
 import classes from "./Reservations.module.css";
 import { ChargingStartControls } from "./ChargingStartControls";
@@ -108,7 +106,7 @@ export function ReservationCard({
         </Text>
         {badge?.badge ? (
           <Badge
-            color={badge.color}
+            color={tones[badge.tone].color}
             variant="light"
             styles={{ label: { textTransform: "none" } }}
           >
@@ -119,7 +117,7 @@ export function ReservationCard({
         )}
         {reservation.state === "active" && (
           <Text size="xs" c="dimmed">
-            Start by {formatStartDeadline(reservation.arrivalDeadline)}
+            Start by {formatClock(reservation.arrivalDeadline)}
           </Text>
         )}
       </Stack>

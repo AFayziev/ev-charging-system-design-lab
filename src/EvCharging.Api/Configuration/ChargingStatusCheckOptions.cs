@@ -1,6 +1,9 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace EvCharging.Api.Configuration;
 
 public sealed class ChargingStatusCheckOptions
 {
-    public TimeSpan Timeout { get; set; }
+    [Range(typeof(TimeSpan), "00:00:01", "1.00:00:00")]
+    public TimeSpan StatusCheckTimeout { get; set; }
 }

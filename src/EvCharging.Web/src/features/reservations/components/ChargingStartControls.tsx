@@ -1,11 +1,7 @@
-import { Alert, Button, Stack } from "@mantine/core";
-import {
-  IconAlertCircle,
-  IconBolt,
-  IconClock,
-  IconHelpCircle,
-  IconPlug,
-} from "@tabler/icons-react";
+import { StatusAlert } from "@/components/StatusAlert";
+import { formatClock } from "@/lib/time-formatting";
+import { Button, Stack } from "@mantine/core";
+import { IconBolt } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useUserSession } from "@/features/auth/useUserSession";
@@ -22,10 +18,7 @@ import {
 import { getStartPresentation } from "../start-presentation";
 import { useSubmissionIdentity } from "../useSubmissionIdentity";
 import { connectorBusyCode } from "../errors";
-import {
-  formatReservationTransitionTime,
-  formatStartDeadline,
-} from "../time-formatting";
+import { formatReservationTransitionTime } from "../time-formatting";
 import { ChargingStartDialog } from "./ChargingStartDialog";
 import classes from "./Reservations.module.css";
 
@@ -185,39 +178,27 @@ export function ChargingStartControls({
       </div>
       <Stack gap="xs" className={classes.chargingStatus}>
         {statusCheck.isPending && (
-          <Alert
-            color="blue"
-            title="Checking with the station"
-            icon={<IconClock size={20} aria-hidden />}
-            role="status"
-          >
+          <StatusAlert tone="pending" title="Checking with the station">
             We are checking whether charging started. Please wait.
-          </Alert>
+          </StatusAlert>
         )}
         {isUnresolved(operation) &&
           !operation?.automaticChecksEndAt &&
           check &&
           !statusCheck.isPending &&
           check.outcome === "unresolved" && (
-            <Alert
-              color="orange"
-              title="Start is still unresolved"
-              icon={<IconHelpCircle size={20} aria-hidden />}
-              role="status"
-            >
+            <StatusAlert tone="unresolved" title="Start is still unresolved">
               The station has not provided a definite result. Charging may still
               have started. Do not submit another start.
-            </Alert>
+            </StatusAlert>
           )}
         {isUnresolved(operation) && statusCheck.isError && (
-          <Alert
-            color="red"
+          <StatusAlert
+            tone="error"
             title={getHttpFailure(statusCheck.error).title}
-            icon={<IconAlertCircle size={20} aria-hidden />}
-            role="alert"
           >
             {getHttpFailure(statusCheck.error).message}
-          </Alert>
+          </StatusAlert>
         )}
         {outcomeContent &&
           !statusCheck.isPending &&
@@ -225,70 +206,49 @@ export function ChargingStartControls({
             operation?.automaticChecksEndAt ||
             !check ||
             check.outcome === "resolved") && (
-            <Alert
-              color={outcomeContent.color}
+            <StatusAlert
+              tone={outcomeContent.tone}
               title={outcomeContent.title}
-              icon={<outcomeContent.icon size={20} aria-hidden />}
-              role="status"
             >
               {outcomeContent.text}
               {isUnresolved(operation) &&
                 check?.outcome === "unresolved" &&
                 operation?.automaticChecksEndAt &&
                 " The latest status check did not provide a definite result."}
-            </Alert>
+            </StatusAlert>
           )}
         {submission.unconfirmed && !blocked && (
-          <Alert
-            color="orange"
-            title="Start request not confirmed"
-            icon={<IconHelpCircle size={20} aria-hidden />}
+          <StatusAlert
+            tone="unresolved"
             role="alert"
+            title="Start request not confirmed"
           >
             We could not confirm your start request. You can safely retry this
             request.
-          </Alert>
+          </StatusAlert>
         )}
         {!blocked && !submission.unconfirmed && failure && (
-          <Alert
-            color={connectorBusy ? "orange" : "red"}
+          <StatusAlert
+            tone={connectorBusy ? "warning" : "error"}
             title={connectorBusy ? "Connector is still in use" : failure.title}
-            icon={
-              connectorBusy ? (
-                <IconPlug size={20} aria-hidden />
-              ) : (
-                <IconAlertCircle size={20} aria-hidden />
-              )
-            }
-            role="alert"
           >
             {connectorBusy
               ? "The connector is still in use or waiting for a previous start to be confirmed. Try again when it is free."
               : failure.message}
-          </Alert>
+          </StatusAlert>
         )}
         {!operation && active && early && (
-          <Alert
-            color="blue"
-            title="Not ready to start yet"
-            icon={<IconClock size={20} aria-hidden />}
-            role="status"
-          >
+          <StatusAlert tone="pending" title="Not ready to start yet">
             You can start{" "}
             {formatReservationTransitionTime(reservation.startsAt)}. Connect
             your vehicle before requesting a start.
-          </Alert>
+          </StatusAlert>
         )}
         {!blocked && active && late && (
-          <Alert
-            color="gray"
-            title="Start window has ended"
-            icon={<IconClock size={20} aria-hidden />}
-            role="status"
-          >
+          <StatusAlert tone="neutral" title="Start window has ended">
             This reservation was not used before its{" "}
-            {formatStartDeadline(reservation.arrivalDeadline)} arrival deadline.
-          </Alert>
+            {formatClock(reservation.arrivalDeadline)} arrival deadline.
+          </StatusAlert>
         )}
       </Stack>
       {opened && (

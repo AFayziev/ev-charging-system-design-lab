@@ -1,5 +1,4 @@
-import { MantineProvider } from "@mantine/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TestProviders, createTestQueryClient } from "@/test/providers";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -63,9 +62,7 @@ function respond(path: string) {
 }
 
 function setup(initialEntry: string | Partial<Location> = "/") {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = createTestQueryClient();
   const router = createMemoryRouter(
     [
       {
@@ -77,11 +74,9 @@ function setup(initialEntry: string | Partial<Location> = "/") {
     { initialEntries: [initialEntry] },
   );
   const view = render(
-    <MantineProvider env="test">
-      <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </MantineProvider>,
+    <TestProviders client={client} env="test">
+      <RouterProvider router={router} />
+    </TestProviders>,
   );
   return { router, client, ...view };
 }

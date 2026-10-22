@@ -1,5 +1,5 @@
-import { MantineProvider } from "@mantine/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TestProviders, createTestQueryClient } from "@/test/providers";
+import { QueryClient } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpStatusCode } from "axios";
@@ -25,26 +25,22 @@ const failure = (status: number) =>
   });
 
 function setup(
-  client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  }),
+  client = createTestQueryClient(),
   createdReservation?: Reservation,
   initialPath = "/reservations",
 ) {
   const view = render(
-    <MantineProvider>
-      <QueryClientProvider client={client}>
-        <MemoryRouter
-          initialEntries={[
-            createdReservation
-              ? { pathname: "/reservations", state: { createdReservation } }
-              : initialPath,
-          ]}
-        >
-          <ReservationsPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    </MantineProvider>,
+    <TestProviders client={client}>
+      <MemoryRouter
+        initialEntries={[
+          createdReservation
+            ? { pathname: "/reservations", state: { createdReservation } }
+            : initialPath,
+        ]}
+      >
+        <ReservationsPage />
+      </MemoryRouter>
+    </TestProviders>,
   );
   return { client, ...view };
 }
@@ -315,9 +311,7 @@ it("preserves cancellation when the initial list response arrives after the muta
 it("blocks cancellation after a failed session refresh despite a cached token, and supports retry", async () => {
   const user = userEvent.setup();
   const session = { signedIn: true, antiforgeryToken: "cached-token" };
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = createTestQueryClient();
   client.setQueryData(authKeys.session, session);
   get.mockImplementation(async (url: string) => {
     if (url === "/auth/session")
@@ -385,9 +379,7 @@ it("ends automatic checking at the cutoff without updated reservation data", asy
 it("requires a successful session check when a failed refresh retains a cached token", async () => {
   vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
   const user = userEvent.setup();
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = createTestQueryClient();
   client.setQueryData(authKeys.session, {
     signedIn: true,
     antiforgeryToken: "stale-token",
@@ -990,3 +982,15 @@ it.each([
     ).not.toBeInTheDocument();
   },
 );
+
+it("links an active session to its charging page", async () => {
+  serve(() => activeSession);
+  setup();
+
+  expect(
+    await screen.findByRole("link", { name: "View charging" }),
+  ).toHaveAttribute(
+    "href",
+    `/charging-sessions/${activeSession.startOperation!.sessionId}`,
+  );
+});

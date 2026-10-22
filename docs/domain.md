@@ -258,9 +258,10 @@ Zero power, stale telemetry, and a stop acknowledgement alone do not complete on
 
 Freshness accompanies state: `Charging, stale` preserves the last report without
 claiming current activity. Silence establishes staleness, not stopped or offline.
-Missing/invalid timestamps cannot establish freshness. Reprocessing old evidence
-does not refresh it. Views preserve connector-level state; there is no separate
-station-wide availability algorithm.
+A started session that has reported nothing becomes stale once it is older than
+the age limit. Missing/invalid timestamps cannot establish freshness.
+Reprocessing old evidence does not refresh it. Views preserve connector-level
+state; there is no separate station-wide availability algorithm.
 
 ## 7. Measurements and completion
 

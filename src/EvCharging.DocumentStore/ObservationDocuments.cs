@@ -76,9 +76,11 @@ public sealed class ObservationHistoryDocument
 
     public static ObservationHistoryDocument From(ObservationEnvelope envelope) => new()
     {
-        Id = new ObservationEventKey {
+        Id = new ObservationEventKey
+        {
             IntegrationKey = envelope.IntegrationKey,
-            SourceEventId = envelope.SourceEventId },
+            SourceEventId = envelope.SourceEventId
+        },
         IntegrationKey = envelope.IntegrationKey,
         ExternalSessionId = envelope.ExternalSessionId,
         Reading = ObservationReading.From(envelope)

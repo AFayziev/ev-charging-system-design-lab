@@ -6,10 +6,6 @@ internal sealed class ObservationProcessingOptions
 {
     public const string SectionName = "ObservationProcessing";
 
-    /// <summary>How far a reading's occurrence may lie ahead of its receipt and still be current.</summary>
-    [Range(typeof(TimeSpan), "00:00:00", "1.00:00:00")]
-    public TimeSpan FutureTolerance { get; init; }
-
     /// <summary>The most messages projected with one pair of writes.</summary>
     [Range(1, 10000)]
     public int BatchSize { get; init; }

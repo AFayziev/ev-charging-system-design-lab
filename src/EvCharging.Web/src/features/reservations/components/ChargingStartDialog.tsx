@@ -1,21 +1,10 @@
-import {
-  Alert,
-  Button,
-  Group,
-  Loader,
-  Modal,
-  Stack,
-  Text,
-} from "@mantine/core";
-import { IconAlertCircle, IconInfoCircle } from "@tabler/icons-react";
+import { StatusAlert } from "@/components/StatusAlert";
+import { formatClock } from "@/lib/time-formatting";
+import { Button, Group, Loader, Modal, Stack, Text } from "@mantine/core";
 import { useUserSession } from "@/features/auth/useUserSession";
 import { capabilityLabel } from "@/features/stations/components/StationPresentation";
 import type { Reservation } from "../api";
-import {
-  formatReservationSlot,
-  formatStartDeadline,
-  getBrowserTimeZone,
-} from "../time-formatting";
+import { formatReservationSlot, getBrowserTimeZone } from "../time-formatting";
 import { ReservationFailure } from "./ReservationFailure";
 
 export function ChargingStartDialog({
@@ -57,16 +46,12 @@ export function ChargingStartDialog({
         </Text>
         <Text size="sm" c="dimmed">
           Your time · {getBrowserTimeZone()} · Start by{" "}
-          {formatStartDeadline(reservation.arrivalDeadline)}
+          {formatClock(reservation.arrivalDeadline)}
         </Text>
-        <Alert
-          color="blue"
-          icon={<IconInfoCircle size={20} aria-hidden />}
-          role="note"
-        >
+        <StatusAlert tone="info" role="note">
           Connect your vehicle to Connector {reservation.connectorNumber} before
           starting.
-        </Alert>
+        </StatusAlert>
         <Text size="sm">
           We will show the result after the station confirms your request.
         </Text>
@@ -80,13 +65,9 @@ export function ChargingStartDialog({
           />
         )}
         {session.signedIn === false && (
-          <Alert
-            color="orange"
-            icon={<IconAlertCircle size={20} aria-hidden />}
-            role="alert"
-          >
+          <StatusAlert tone="warning">
             Sign in again to request a start.
-          </Alert>
+          </StatusAlert>
         )}
         <Group justify="flex-end">
           <Button variant="default" disabled={pending} onClick={onClose}>

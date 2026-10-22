@@ -34,11 +34,17 @@ import { ReservationsPage } from "@/features/reservations/components/Reservation
 import { SignInErrorPage } from "@/features/auth/components/SignInErrorPage";
 
 import { PageHeading } from "@/components/PageHeading";
-import { Activity, type ReactNode } from "react";
+import { Activity, Suspense, lazy, type ReactNode } from "react";
 import { getSignInUrl } from "@/features/auth/api";
 import { useUserSession } from "@/features/auth/useUserSession";
 
 const SentryRoutes = wrapReactRouterRouting(Routes);
+// The chart library is only needed here, so it loads with the page.
+const ChargingSessionPage = lazy(() =>
+  import("@/features/charging/components/ChargingSessionPage").then(
+    (module) => ({ default: module.ChargingSessionPage }),
+  ),
+);
 
 export function App() {
   const location = useLocation();
@@ -248,6 +254,17 @@ export function App() {
             <Route
               path="/reservations"
               element={area(PlatformRole.Driver, <ReservationsPage />)}
+            />
+            <Route
+              path="/charging-sessions/:sessionId"
+              element={area(
+                PlatformRole.Driver,
+                <Suspense
+                  fallback={<Loader aria-label="Loading charging session" />}
+                >
+                  <ChargingSessionPage />
+                </Suspense>,
+              )}
             />
             <Route
               path="/stations/:stationId/edit"

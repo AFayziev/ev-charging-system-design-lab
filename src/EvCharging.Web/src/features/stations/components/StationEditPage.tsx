@@ -1,6 +1,6 @@
+import { FailureAlert, StatusAlert } from "@/components/StatusAlert";
 import { useState, type ReactNode } from "react";
 import {
-  Alert,
   Anchor,
   Button,
   Card,
@@ -201,9 +201,7 @@ function StationEditForm({
                 </StationEditFailureNotice>
               )}
               {mutation.isSuccess && !form.isDirty() && (
-                <Alert color="teal" role="status">
-                  Changes saved.
-                </Alert>
+                <StatusAlert tone="success">Changes saved.</StatusAlert>
               )}
               <Group>
                 <Button
@@ -237,23 +235,20 @@ function StationEditFailureNotice({
   children?: ReactNode;
 }) {
   return (
-    <Alert color="red" role="alert" title={failure.title}>
-      <Stack gap="xs">
-        <Text size="sm">{failure.message}</Text>
-        {children}
-        {failure.recovery === "reload" && (
-          <Button
-            variant="white"
-            size="sm"
-            w="fit-content"
-            loading={reloading}
-            onClick={reload}
-          >
-            Reload current station
-          </Button>
-        )}
-      </Stack>
-    </Alert>
+    <FailureAlert failure={failure}>
+      {children}
+      {failure.recovery === "reload" && (
+        <Button
+          variant="white"
+          size="sm"
+          w="fit-content"
+          loading={reloading}
+          onClick={reload}
+        >
+          Reload current station
+        </Button>
+      )}
+    </FailureAlert>
   );
 }
 

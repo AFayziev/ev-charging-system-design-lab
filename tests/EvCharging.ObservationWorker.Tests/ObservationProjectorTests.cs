@@ -124,7 +124,7 @@ public sealed class ObservationProjectorTests(MongoDbFixture fixture) : IClassFi
     private Task Project(params ObservationEnvelope[] envelopes) =>
         new ObservationProjector(
             _store,
-            Options.Create(new ObservationProcessingOptions { FutureTolerance = TimeSpan.FromSeconds(5) }),
+            Options.Create(new ObservationClockSkewOptions { ClockSkew = TimeSpan.FromSeconds(5) }),
             NullLogger<ObservationProjector>.Instance)
             .ProjectAsync(envelopes, CancellationToken.None);
 

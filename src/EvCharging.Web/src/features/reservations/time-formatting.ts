@@ -39,10 +39,3 @@ export function formatReservationTransitionTime(instant: string) {
     sameElse: datedTime,
   });
 }
-export function formatStartDeadline(deadline: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).format(new Date(deadline));
-}

@@ -54,7 +54,7 @@ public sealed class CheckChargingStartCommandHandler(
             try
             {
                 var result = await bus.InvokeAsync<ChargingCheckResult>(
-                    new CheckChargingStart(operation.Id), cancellationToken, options.Value.Timeout);
+                    new CheckChargingStart(operation.Id), cancellationToken, options.Value.StatusCheckTimeout);
                 outcome = result.Outcome;
             }
             catch (TimeoutException exception)

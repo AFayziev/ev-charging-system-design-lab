@@ -379,7 +379,8 @@ business transitions also protect against independently submitted duplicate work
 | Consumer | The observation worker reads the topic as its own consumer group with the Confluent client, in batches (`ObservationProcessing:BatchSize`, `BatchWait`). Offsets are stored only after the batch is written |
 | Documents | Two MongoDB collections in the `observations` database: history, one document per source event, and latest, one document per provider session. The API reads the latest view for the progress query. The indexes are created by the one-shot `document-store-migrations` resource before the worker starts |
 | Writes | Idempotent bulk writes with majority, journaled acknowledgement. The latest view is replaced only by a strictly newer occurrence time |
-| Future readings | A reading dated more than `ObservationProcessing:FutureTolerance` ahead of its receipt stays history |
+| Clock skew | One setting, `Charging:ClockSkew`, owned by the AppHost and passed to the worker and the API. A reading dated more than the skew ahead of its receipt stays history, and the API leaves readings dated more than the skew ahead of its clock out of the power history |
+| Power history | The API reads history in one-minute buckets of source time with a MongoDB aggregation on the by-session index, so a request from the last bucket held returns one bucket |
 | Unprocessable messages | An invalid or unsupported-version envelope is logged and skipped. Stream and document-store failures are retried with exponential backoff and no attempt limit using a `Microsoft.Extensions.Resilience` pipeline |
 
 ### 1.5 Storage and delivery
@@ -597,7 +598,9 @@ These are overridable experiment settings, not production availability targets.
 | Setting | Default | Meaning |
 |---|---|---|
 | Telemetry interval | 2 seconds | Normal simulator cadence |
-| Freshness limit | 10 seconds | Greater source-observation age is stale (`ChargingProgress:FreshnessLimit`) |
+| Freshness limit | 10 seconds | Greater source-observation age is stale. A started session with no observation is stale once it is older than this |
+| Driver progress polling | 5 seconds; power history 30 seconds | The charging page stops polling a session that sent its final reading, or that the API reports silent for longer than the silence limit (`Charging:SilenceLimit`), and offers a manual refresh |
+| Silence limit | 10 minutes | A running session whose provider has been quiet longer than this is no longer polled; it must exceed the freshness limit. The API also reports the session's elapsed time, so the page does not depend on the device clock |
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
 | Command request limit | 3 total requests per start or stop | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and command eligibility |

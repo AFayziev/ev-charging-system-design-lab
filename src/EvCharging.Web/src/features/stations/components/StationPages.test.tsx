@@ -1,5 +1,4 @@
-import { MantineProvider } from "@mantine/core";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TestProviders, createTestQueryClient } from "@/test/providers";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
@@ -12,13 +11,11 @@ vi.mock("@/lib/api", () => ({ api: { get } }));
 
 function renderScreen() {
   return render(
-    <MantineProvider>
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={["/stations"]}>
-          <StationListPage />
-        </MemoryRouter>
-      </QueryClientProvider>
-    </MantineProvider>,
+    <TestProviders client={createTestQueryClient()}>
+      <MemoryRouter initialEntries={["/stations"]}>
+        <StationListPage />
+      </MemoryRouter>
+    </TestProviders>,
   );
 }
 
@@ -103,11 +100,9 @@ it("keeps connector selection synchronized with the URL and booking form", async
     },
   );
   render(
-    <MantineProvider env="test">
-      <QueryClientProvider client={new QueryClient()}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </MantineProvider>,
+    <TestProviders client={createTestQueryClient()} env="test">
+      <RouterProvider router={router} />
+    </TestProviders>,
   );
 
   const second = await screen.findByRole("radio", { name: /Connector 2/ });
