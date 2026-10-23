@@ -11,7 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.AppHost" />
-    <PackageReference Include="MessagePack" />
     <PackageReference Include="Aspire.Hosting.Elasticsearch" />
     <PackageReference Include="Aspire.Hosting.JavaScript" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
