@@ -983,6 +983,57 @@ it.each([
   },
 );
 
+it("presents a completed session as completed and keeps its charging page linked", async () => {
+  get.mockResolvedValue({
+    data: {
+      reservations: [
+        {
+          ...activeSession,
+          startOperation: {
+            ...activeSession.startOperation!,
+            lifecycle: "completed",
+          },
+          stopOperation: stopOperation("confirmed"),
+        },
+      ],
+      nextAfterId: null,
+    },
+  });
+  setup();
+
+  expect(await screen.findAllByText("Charging completed")).not.toHaveLength(0);
+  expect(screen.queryByText(/final usage pending/)).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "View charging" })).toHaveAttribute(
+    "href",
+    `/charging-sessions/${activeSession.startOperation!.sessionId}`,
+  );
+  expect(
+    screen.queryByRole("button", { name: "Stop charging" }),
+  ).not.toBeInTheDocument();
+});
+
+it("presents a session that completed without a stop as completed", async () => {
+  get.mockResolvedValue({
+    data: {
+      reservations: [
+        {
+          ...activeSession,
+          startOperation: {
+            ...activeSession.startOperation!,
+            lifecycle: "completed",
+          },
+          stopOperation: null,
+        },
+      ],
+      nextAfterId: null,
+    },
+  });
+  setup();
+
+  expect(await screen.findAllByText("Charging completed")).not.toHaveLength(0);
+  expect(screen.getByRole("link", { name: "View charging" })).toBeVisible();
+});
+
 it("links an active session to its charging page", async () => {
   serve(() => activeSession);
   setup();

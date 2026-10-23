@@ -182,6 +182,47 @@ public sealed class OperationTests
         Assert.Equal(SessionLifecycle.Stopping, session.Lifecycle);
     }
 
+    [Theory]
+    [InlineData(SessionLifecycle.Active)]
+    [InlineData(SessionLifecycle.Stopping)]
+    public void Complete_ActiveOrStoppingSession_FreezesFinalUsageAndEndTime(SessionLifecycle lifecycle)
+    {
+        var session = lifecycle == SessionLifecycle.Active ? ActiveSession() : StoppingSession();
+
+        var result = session.Complete(7.25m, Start.AddMinutes(9));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(SessionLifecycle.Completed, session.Lifecycle);
+        Assert.Equal(7.25m, session.FinalEnergyKWh);
+        Assert.Equal(Start.AddMinutes(9), session.CompletedAt);
+    }
+
+    [Theory]
+    [InlineData(SessionLifecycle.Starting)]
+    [InlineData(SessionLifecycle.Failed)]
+    [InlineData(SessionLifecycle.Completed)]
+    public void Complete_SessionNotActiveOrStopping_ReturnsFailureWithoutMutation(SessionLifecycle lifecycle)
+    {
+        var session = ChargingSession.AcceptStart(Booking(), Start).Value;
+        if (lifecycle == SessionLifecycle.Failed)
+        {
+            Assert.True(session.RejectStart().IsSuccess);
+        }
+        else if (lifecycle == SessionLifecycle.Completed)
+        {
+            session = ActiveSession();
+            Assert.True(session.Complete(7.25m, Start.AddMinutes(9)).IsSuccess);
+        }
+
+        var result = session.Complete(9m, Start.AddMinutes(10));
+
+        Assert.Equal(
+            ChargingCompletionError.SessionNotCompletableCode,
+            Assert.IsType<ChargingCompletionError>(Assert.Single(result.Errors)).Code);
+        Assert.Equal(lifecycle, session.Lifecycle);
+        Assert.Equal(lifecycle == SessionLifecycle.Completed ? 7.25m : null, session.FinalEnergyKWh);
+    }
+
     private static ChargingSession ActiveSession()
     {
         var session = ChargingSession.AcceptStart(Booking(), Start).Value;

@@ -34,6 +34,7 @@ builder.AddMessaging(
         options.CodeGeneration.AlwaysUseServiceLocationFor<ChargingProviderClientFactory>();
         options.AddReservationEventRouting();
         options.AddChargingCommandRouting();
+        options.AddSessionEventRouting();
         options.Policies.LogMessageStarting(LogLevel.Information);
         options.Policies.ForMessagesOfType<ReservationCreated>().Audit(message => message.ReservationId);
         options.Policies.ForMessagesOfType<ExpireReservation>().Audit(message => message.ReservationId);
@@ -41,6 +42,7 @@ builder.AddMessaging(
         options.Policies.ForMessagesOfType<CheckChargingStart>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<StopCharging>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CheckChargingStop>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<CompleteChargingSession>().Audit(message => message.SessionId);
         options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure).ScheduleRetry(retryDelays);
         options.Policies
             .OnException(

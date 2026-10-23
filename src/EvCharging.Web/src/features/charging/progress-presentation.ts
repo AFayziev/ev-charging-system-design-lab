@@ -36,6 +36,21 @@ export function getProgressPresentation(
     };
   }
 
+  if (lifecycle === "completed") {
+    const ended = progress.completedAt
+      ? ` Charging ended ${formatClockWithSeconds(progress.completedAt)}.`
+      : "";
+    const usage =
+      progress.finalEnergyKWh === null
+        ? ""
+        : ` Final usage ${progress.finalEnergyKWh.toFixed(2)} kWh.`;
+    return {
+      tone: "success",
+      title: "Charging completed",
+      text: `This charging session is complete.${ended}${usage}`,
+    };
+  }
+
   if (reading === null) {
     return isStale
       ? {

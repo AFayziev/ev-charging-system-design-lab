@@ -19,6 +19,8 @@ internal sealed class ChargingSessionConfiguration : IEntityTypeConfiguration<Ch
         entity.Property(session => session.ReservationId).IsAudited();
         entity.Property(session => session.ConnectorId).IsAudited();
         entity.Property(session => session.Lifecycle).IsAudited();
+        entity.Property(session => session.CompletedAt).IsAudited();
+        entity.Property(session => session.FinalEnergyKWh).IsAudited();
         entity.HasIndex(session => session.ConnectorId).IsUnique()
             .HasFilter("lifecycle IN ('starting', 'active', 'stopping')")
             .HasDatabaseName(ConnectorClaimIndexName);

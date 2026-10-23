@@ -376,6 +376,17 @@ public sealed partial class ReservationTests
         }
     }
 
+    private async Task AwaitSessionLifecycleAsync(
+        Guid sessionId, SessionLifecycle lifecycle, CancellationToken cancellationToken)
+    {
+        while (!await Storage.Sessions.AsNoTracking().AnyAsync(
+            value => value.Id == sessionId && value.Lifecycle == lifecycle,
+            cancellationToken))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+        }
+    }
+
     private static Task<JsonElement> SubmitStartAsync(IPage page, Guid reservationId, Guid key) =>
         PostKeyedAsync(page, $"/api/reservations/{reservationId}/start", key);
 

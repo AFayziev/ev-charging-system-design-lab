@@ -14,6 +14,8 @@ internal sealed record OwnedChargingSession(
     Guid ReservationId,
     SessionLifecycle Lifecycle,
     DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    decimal? FinalEnergyKWh,
     string? IntegrationKey);
 
 internal static class ChargingSessionQueryExtensions
@@ -31,6 +33,8 @@ internal static class ChargingSessionQueryExtensions
                     ReservationId = s.Reservation!.PublicId,
                     s.Lifecycle,
                     s.StartedAt,
+                    s.CompletedAt,
+                    s.FinalEnergyKWh,
                     IsOwnedByCaller = database.Reservations
                         .OwnedBy(identity)
                         .Any(reservation => reservation.Id == s.ReservationId),
@@ -47,7 +51,13 @@ internal static class ChargingSessionQueryExtensions
             null => Result.Fail<OwnedChargingSession>(new NotFoundError<Guid>("charging session", sessionId)),
             { IsOwnedByCaller: false } => Result.Fail<OwnedChargingSession>(new ForbiddenError()),
             _ => Result.Ok(new OwnedChargingSession(
-                session.PublicId, session.ReservationId, session.Lifecycle, session.StartedAt, session.IntegrationKey))
+                session.PublicId,
+                session.ReservationId,
+                session.Lifecycle,
+                session.StartedAt,
+                session.CompletedAt,
+                session.FinalEnergyKWh,
+                session.IntegrationKey))
         };
     }
 }

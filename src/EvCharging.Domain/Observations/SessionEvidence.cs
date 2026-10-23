@@ -30,9 +30,10 @@ public sealed class SessionEvidence
 
     /// <summary>
     /// Takes one reading into account. A reading dated beyond <paramref name="clockSkew"/> ahead of its receipt
-    /// cannot outrank later readings, so it never advances <see cref="LastObservedAt"/>.
+    /// cannot outrank later readings, so it never advances <see cref="LastObservedAt"/>. Returns whether the reading
+    /// supplied the final facts for the first time.
     /// </summary>
-    public void Record(
+    public bool Record(
         DateTimeOffset occurredAt,
         DateTimeOffset receivedAt,
         decimal energyKWh,
@@ -53,6 +54,9 @@ public sealed class SessionEvidence
         {
             FinalEnergyKWh = energyKWh;
             FinalReadingAt = observed;
+            return true;
         }
+
+        return false;
     }
 }

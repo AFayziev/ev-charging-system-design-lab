@@ -18,6 +18,9 @@ export interface ChargingProgress {
   readonly reservationId: string;
   readonly lifecycle: SessionLifecycle;
   readonly startedAt: string | null;
+  /** The end of a completed session, frozen with its final usage. */
+  readonly completedAt: string | null;
+  readonly finalEnergyKWh: number | null;
   readonly reading: ChargingReading | null;
   readonly isStale: boolean;
   /** A running session silent for so long that it is no longer polled. */
@@ -41,18 +44,24 @@ export interface ChargingPower {
 export const progressPollingMs = 5_000;
 export const powerPollingMs = 30_000;
 
-export function isLive(progress: ChargingProgress) {
+function isRunning(progress: ChargingProgress) {
   return (
-    (progress.lifecycle === "starting" ||
-      progress.lifecycle === "active" ||
-      progress.lifecycle === "stopping") &&
-    !progress.reading?.isFinalEnergy
+    progress.lifecycle === "starting" ||
+    progress.lifecycle === "active" ||
+    progress.lifecycle === "stopping"
   );
 }
 
-/** A live session is polled until the server reports its source silent for too long. */
+export function isLive(progress: ChargingProgress) {
+  return isRunning(progress) && !progress.reading?.isFinalEnergy;
+}
+
+/**
+ * A running session is polled until it completes or the server reports its source silent for too long. The final
+ * reading does not end the polling, because the session completes after it.
+ */
 export function shouldPoll(progress: ChargingProgress) {
-  return isLive(progress) && !progress.isSilentPastLimit;
+  return isRunning(progress) && !progress.isSilentPastLimit;
 }
 
 /** Adds the fetched buckets to the held ones; the fetched ones replace any held bucket from their start on. */

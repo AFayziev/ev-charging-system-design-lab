@@ -491,10 +491,22 @@ recoverable without authorizing conflicting starts. Final completion depends on 
     replay and duplicate delivery do not refresh timestamps or repeat transitions.
     Depends on M07.01.2 and M07.01.3.
 - [ ] M07.02 Deliver completed-session final usage and completion notifications.
-  Match provider/session evidence, validate cumulative usage, conditionally
-  freeze completion facts, and commit outgoing completion events with SQL state.
+  Match provider/session evidence, conditionally freeze completion facts, and
+  commit outgoing completion events with SQL state.
   Verify stop-before-usage, early terminal evidence, and late contradictions.
   Depends on M06.02, M07.01.5, and M05.04 for notification delivery.
+  Sub-items are sequenced as follows:
+  - [x] M07.02.1 Completion transition: complete an active or stopping session
+    from matching terminal evidence with a final reading, freezing its final
+    energy and end time and committing the completion event with the state.
+    Verify duplicate and replayed evidence, readings that are not terminal,
+    and contradictions after completion.
+  - [x] M07.02.2 Completed session page: show the frozen final usage and keep
+    polling until completion. Verify stop-before-usage and early terminal
+    evidence through the application. Depends on M07.02.1.
+  - [ ] M07.02.3 Completion notification: prepare one email from the completion
+    event and deliver it through the notification worker. Verify the frozen
+    content and redelivery. Depends on M07.02.1 and M05.04.
 - [ ] M07.03 Deliver stalled-session detection and recovery polling:
   stalled-session detection submits durable reconciliation work to the charging
   worker, which polls the provider snapshot and submits it through the gateway
@@ -504,13 +516,19 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   timestamps. Depends on M07.01.5 and M07.02.
 - [ ] M07.04 Deliver assigned-operator observation history and anomaly inspection
   alongside SQL attempts and provider evidence. Verify authorization, timestamp
-  skew, duplicate/out-of-order observations, and missing/decreasing energy in
-  these views. Depends on M06.04 and M07.01.
+  skew, duplicate/out-of-order observations, and missing/decreasing energy
+  (including a final total below earlier totals) in these views.
+  Depends on M06.04 and M07.01.
 - [ ] M07.05 Exercise progress/completion through stream outage and ambiguous
   append, observation-worker loss/stall, MongoDB outage, and offset recovery.
   Add isolated observation-view replay/rebuild and verify it preserves source
   times without sending charging commands or notifications.
   Depends on M07.01, M07.02, and M07.03.
+- [ ] M07.06 Deliver provider-initiated session end. A WattHarbor session
+  currently ends only on the platform's stop command, so an unstopped session
+  reports indefinitely and keeps its connector claim. This needs dedicated
+  planning and implementation time, and sub-items are defined when it starts.
+  Depends on M07.02.
 
 Acceptance: a driver sees session progress and completes charging with matching,
 immutable final usage. Accepted observations survive document-store interruption;

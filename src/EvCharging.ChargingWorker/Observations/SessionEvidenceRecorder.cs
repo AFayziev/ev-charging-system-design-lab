@@ -1,9 +1,11 @@
+using EvCharging.Contracts.Charging;
 using EvCharging.Contracts.Observations;
 using EvCharging.Domain.Observations;
 using EvCharging.ObservationStream;
 using EvCharging.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.ChargingWorker.Observations;
 
@@ -34,6 +36,8 @@ internal sealed class SessionEvidenceRecorder(
             return;
         }
 
+        var outbox = scope.ServiceProvider.GetRequiredService<IDbContextOutbox>();
+        outbox.Enroll(database);
         var sessionIds = readings.Keys.ToList();
         var evidence = await database.SessionEvidence
             .Where(row => sessionIds.Contains(row.SessionId))
@@ -46,19 +50,26 @@ internal sealed class SessionEvidenceRecorder(
                 database.SessionEvidence.Add(row);
             }
 
+            bool finalised = false;
             foreach (var reading in sessionReadings.OrderBy(envelope => envelope.OccurredAt)
                 .ThenBy(envelope => envelope.SourceEventId))
             {
-                row.Record(
+                // The provider's terminal state with its final energy is the evidence that ends a session.
+                finalised |= row.Record(
                     reading.OccurredAt,
                     reading.ReceivedAt,
                     reading.EnergyKWh,
-                    reading.IsFinalEnergy,
+                    reading.IsFinalEnergy && reading.State == ObservationState.Stopped,
                     clockSkew.Value.ClockSkew);
+            }
+
+            if (finalised)
+            {
+                await outbox.PublishAsync(new CompleteChargingSession(sessionId));
             }
         }
 
-        await database.SaveChangesAsync(cancellationToken);
+        await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
     }
 
     // A reading belongs to a session when its identity is a started session of the same integration.

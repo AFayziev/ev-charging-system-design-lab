@@ -1,4 +1,7 @@
 using System.Text.RegularExpressions;
+using Aspire.Hosting.Testing;
+using EvCharging.Domain.Charging;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using Xunit;
 using static Microsoft.Playwright.Assertions;
@@ -51,18 +54,28 @@ public sealed partial class ReservationTests
         await page.GetByRole(AriaRole.Dialog, new() { Name = "Stop charging?" })
             .GetByRole(AriaRole.Button, new() { Name = "Stop charging", Exact = true })
             .ClickAsync();
-        await Expect(page.GetByText("Charging stopped", new() { Exact = true }))
-            .ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await page.GetByRole(AriaRole.Link, new() { Name = "View charging", Exact = true }).ClickAsync();
-        await Expect(page.GetByText("Stopping charging", new() { Exact = true }))
-            .ToBeVisibleAsync(new() { Timeout = 30_000 });
-        await CaptureStartAsync(page, "charging-stopping");
+        // The stop is accepted by the click's request; leaving the page earlier could abandon it.
+        Operation? stop;
+        while ((stop = await Storage.Operations.AsNoTracking().SingleOrDefaultAsync(
+            value => value.Kind == ChargingCommandKind.Stop && value.DriverId == Driver.Id, timeout.Token)) is null)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100), timeout.Token);
+        }
 
-        // The provider's final reading ends the polling.
+        await AwaitStartOutcomeAsync(stop.Id, CommandOutcome.Confirmed, timeout.Token);
+        // The provider's final reading completes the session, which may already have happened.
+        await page.GotoAsync(new Uri(
+            fixture.App.GetEndpoint("frontend", "http"), $"/charging-sessions/{sessionId}").AbsoluteUri);
+        await Expect(page.GetByText("Charging completed", new() { Exact = true }))
+            .ToBeVisibleAsync(new() { Timeout = 60_000 });
+        await Expect(page.GetByText(new Regex(@"^\d+\.\d\d kWh$"))).ToBeVisibleAsync();
+        await CaptureStartAsync(page, "charging-completed");
+
+        // Completion ends the polling.
         await WaitForProgressAsync(
             page,
             sessionId,
-            progress => progress.GetProperty("reading").GetProperty("isFinalEnergy").GetBoolean(),
+            progress => progress.GetProperty("lifecycle").GetString() == "completed",
             timeout.Token);
         await Task.Delay(TimeSpan.FromSeconds(6), timeout.Token);
         var polled = ProgressRequests();

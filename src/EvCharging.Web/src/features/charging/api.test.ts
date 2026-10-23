@@ -18,6 +18,8 @@ const progress = (overrides: Partial<ChargingProgress>): ChargingProgress => ({
   reservationId: "reservation",
   lifecycle: "active",
   startedAt: "2026-10-21T09:00:00Z",
+  completedAt: null,
+  finalEnergyKWh: null,
   reading,
   isStale: false,
   isSilentPastLimit: false,
@@ -30,12 +32,12 @@ it.each([
   ["a completed session", progress({ lifecycle: "completed" }), false],
   ["a failed session", progress({ lifecycle: "failed" }), false],
   [
-    "a session that sent its final reading",
+    "a stopping session that sent its final reading",
     progress({
       lifecycle: "stopping",
       reading: { ...reading, isFinalEnergy: true },
     }),
-    false,
+    true,
   ],
   [
     "a session the server reports silent for too long",

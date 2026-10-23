@@ -106,4 +106,21 @@ public sealed class ChargingSession : IAuditableEntity
         Lifecycle = SessionLifecycle.Active;
         return Result.Ok();
     }
+
+    /// <summary>Freezes the final usage and end time. The facts never change once the session is completed.</summary>
+    public Result Complete(decimal finalEnergyKWh, DateTimeOffset completedAt)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(finalEnergyKWh);
+        if (Lifecycle is not (SessionLifecycle.Active or SessionLifecycle.Stopping))
+        {
+            return Result.Fail(new ChargingCompletionError(
+                ChargingCompletionError.SessionNotCompletableCode,
+                "Only an active or stopping session can be completed."));
+        }
+
+        FinalEnergyKWh = finalEnergyKWh;
+        CompletedAt = completedAt.ToUniversalTime();
+        Lifecycle = SessionLifecycle.Completed;
+        return Result.Ok();
+    }
 }

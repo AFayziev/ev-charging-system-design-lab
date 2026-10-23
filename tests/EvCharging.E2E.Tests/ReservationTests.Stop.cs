@@ -113,7 +113,7 @@ public sealed partial class ReservationTests
 
     [Fact]
     [Trait("Category", "Api")]
-    public async Task Stop_LostResponse_AutomaticallyConfirmsWithoutRepeatingEffect()
+    public async Task Stop_LostResponse_ConfirmsWithoutRepeatingEffectAndCompletesFromTheFinalReading()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         using var playwright = await Playwright.CreateAsync();
@@ -136,7 +136,12 @@ public sealed partial class ReservationTests
         var confirmed = await Storage.Operations.AsNoTracking().Include(value => value.Session)
             .SingleAsync(value => value.Id == stop.Id, timeout.Token);
         Assert.Equal(1, confirmed.AuthorizedAttemptCount);
-        Assert.Equal(SessionLifecycle.Stopping, confirmed.Session!.Lifecycle);
+        // The provider ended the session, so its final reading completes the session whatever the stop's outcome.
+        await AwaitSessionLifecycleAsync(confirmed.SessionId, SessionLifecycle.Completed, timeout.Token);
+        var completed = await Storage.Sessions.AsNoTracking()
+            .SingleAsync(value => value.Id == confirmed.SessionId, timeout.Token);
+        Assert.NotNull(completed.CompletedAt);
+        Assert.NotNull(completed.FinalEnergyKWh);
     }
 
     [Fact]
@@ -147,7 +152,12 @@ public sealed partial class ReservationTests
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
-        await StartConfirmedAsync(page, timeout.Token);
+        var reservation = await StartConfirmedAsync(page, timeout.Token);
+        var sessionId = await Storage.Sessions.AsNoTracking().Where(value => value.ReservationId == reservation.Id)
+            .Select(value => value.PublicId)
+            .SingleAsync(timeout.Token);
+        // Without the provider's final reading there is no final usage, so the session cannot complete.
+        await fixture.ConfigureWattHarborTelemetryFaultAsync(sessionId, interrupt: true);
         await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Stop charging", Exact = true }).ClickAsync();
         var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Stop charging?" });

@@ -220,6 +220,8 @@ export const reservationsQuery = (afterId: string | null) =>
       return query.state.data?.reservations.some(
         (reservation) =>
           reservation.state === "active" ||
+          // A confirmed stop leaves the session stopping until its final usage completes it.
+          reservation.startOperation?.lifecycle === "stopping" ||
           isUnresolved(reservation.startOperation) ||
           isUnresolved(reservation.stopOperation),
       )

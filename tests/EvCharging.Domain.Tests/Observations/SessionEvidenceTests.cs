@@ -125,6 +125,17 @@ public sealed class SessionEvidenceTests
     }
 
     [Fact]
+    public void Record_FinalReading_ReportsTheFinalFactsOnlyTheFirstTime()
+    {
+        var evidence = NewEvidence();
+
+        Assert.False(Record(evidence, occurredAt: Start));
+        Assert.True(Record(evidence, occurredAt: Start.AddSeconds(1), isFinal: true));
+        Assert.False(Record(evidence, occurredAt: Start.AddSeconds(1), isFinal: true));
+        Assert.False(Record(evidence, occurredAt: Start.AddSeconds(2), isFinal: true));
+    }
+
+    [Fact]
     public void Record_SubMicrosecondOccurrence_IsKeptToTheMicrosecond()
     {
         var evidence = NewEvidence();
@@ -140,7 +151,7 @@ public sealed class SessionEvidenceTests
 
     private static SessionEvidence NewEvidence() => SessionEvidence.Create(Guid.CreateVersion7());
 
-    private static void Record(
+    private static bool Record(
         SessionEvidence evidence,
         DateTimeOffset occurredAt,
         DateTimeOffset? receivedAt = null,

@@ -26,7 +26,6 @@ import {
   isLive,
   powerPollingMs,
   shouldPoll,
-  type ChargingReading,
   type PowerBucket,
 } from "../api";
 import { getProgressPresentation } from "../progress-presentation";
@@ -112,7 +111,11 @@ export function ChargingSessionPage() {
           </Group>
         </StatusAlert>
       )}
-      <Metrics reading={data.reading} elapsedMs={elapsedMs} />
+      <Metrics
+        energyKWh={data.finalEnergyKWh ?? data.reading?.energyKWh ?? null}
+        powerKw={data.reading?.powerKw ?? null}
+        elapsedMs={elapsedMs}
+      />
       <Paper withBorder p="md" component="section" aria-label="Power over time">
         <Title order={2} size="h4" mb="sm">
           Power over time
@@ -124,21 +127,23 @@ export function ChargingSessionPage() {
 }
 
 function Metrics({
-  reading,
+  energyKWh,
+  powerKw,
   elapsedMs,
 }: {
-  reading: ChargingReading | null;
+  energyKWh: number | null;
+  powerKw: number | null;
   elapsedMs: number | null;
 }) {
   return (
     <SimpleGrid cols={{ base: 1, xs: 3 }}>
       <Metric
         label="Energy"
-        value={reading ? `${reading.energyKWh.toFixed(2)} kWh` : "–"}
+        value={energyKWh === null ? "–" : `${energyKWh.toFixed(2)} kWh`}
       />
       <Metric
         label="Power"
-        value={reading ? `${reading.powerKw.toFixed(1)} kW` : "–"}
+        value={powerKw === null ? "–" : `${powerKw.toFixed(1)} kW`}
       />
       <Metric
         label="Elapsed"

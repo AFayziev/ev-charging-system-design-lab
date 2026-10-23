@@ -1,4 +1,6 @@
+using EvCharging.ChargingWorker.Handlers;
 using EvCharging.ChargingWorker.Observations;
+using EvCharging.Contracts.Events.Sessions;
 using EvCharging.Contracts.Observations;
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
@@ -8,19 +10,59 @@ using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Entities;
 using EvCharging.Testing;
+using JasperFx;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Wolverine;
+using Wolverine.EntityFrameworkCore;
+using Wolverine.Postgresql;
+using Wolverine.Tracking;
 using Xunit;
 
 namespace EvCharging.ChargingWorker.Tests;
 
 public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture) :
-    IClassFixture<PlatformDatabaseFixture>
+    IClassFixture<PlatformDatabaseFixture>,
+    IAsyncLifetime
 {
     private const string IntegrationKey = "evidence-test";
     private static readonly DateTimeOffset Start = new(2026, 10, 22, 10, 0, 0, TimeSpan.Zero);
+    private IHost? _messaging;
+
+    public async Task InitializeAsync()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services
+            .AddDbContext<PlatformDbContext>(options => options.UseNpgsql(fixture.GetDataSource("charging_messaging")));
+        builder.Services.AddSingleton<CompletionRecorder>();
+        builder.UseWolverine(options =>
+        {
+            options.Discovery.DisableConventionalDiscovery();
+            options.UseEntityFrameworkCoreTransactions();
+            options.PersistMessagesWithPostgresql(
+                fixture.GetConnectionString("platform_migrator"),
+                "charging_messages");
+            options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
+            options.Policies.UseDurableLocalQueues();
+            options.PublishMessage<SessionCompleted>().ToLocalQueue("session-completed-tests");
+            options.Discovery.IncludeType<CompleteChargingSessionHandler>();
+            options.Discovery.IncludeType<SessionCompletedRecorderHandler>();
+        });
+        _messaging = builder.Build();
+        await _messaging.StartAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (_messaging is not null)
+        {
+            await _messaging.StopAsync();
+            _messaging.Dispose();
+        }
+    }
 
     [Fact]
     public async Task Handle_FirstBatch_CreatesEvidence()
@@ -130,6 +172,73 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
         Assert.Equal(7m, evidence.FinalEnergyKWh);
     }
 
+    [Theory]
+    [InlineData(SessionLifecycle.Stopping)]
+    [InlineData(SessionLifecycle.Active)]
+    public async Task Handle_FinalReading_CompletesTheSessionWithItsFrozenFacts(SessionLifecycle lifecycle)
+    {
+        var session = await SeedSessionAsync(lifecycle);
+
+        await CompleteAsync(Reading(session, 10, 3m), Reading(session, 20, 7.25m, isFinal: true));
+
+        var saved = await SavedSessionAsync(session);
+        Assert.Equal(SessionLifecycle.Completed, saved.Lifecycle);
+        Assert.Equal(7.25m, saved.FinalEnergyKWh);
+        Assert.Equal(Start.AddSeconds(20), saved.CompletedAt);
+        var completed = Assert.Single(Completions.For(session.Id));
+        Assert.Equal(new SessionCompleted(session.Id, session.ReservationId, 7.25m, Start.AddSeconds(20)), completed);
+    }
+
+    [Fact]
+    public async Task Handle_FinalReadingDeliveredAgain_CompletesOnce()
+    {
+        var session = await SeedSessionAsync(SessionLifecycle.Stopping);
+        var batch = new[] { Reading(session, 20, 7.25m, isFinal: true) };
+        await CompleteAsync(batch);
+
+        await CompleteAsync(batch);
+
+        Assert.Single(Completions.For(session.Id));
+        Assert.Equal(Start.AddSeconds(20), (await SavedSessionAsync(session)).CompletedAt);
+    }
+
+    [Fact]
+    public async Task Handle_FinalEnergyWithoutTheStoppedState_DoesNotComplete()
+    {
+        var session = await SeedSessionAsync(SessionLifecycle.Stopping);
+        var reading = Reading(session, 20, 7.25m) with { IsFinalEnergy = true };
+
+        await CompleteAsync(reading);
+
+        Assert.Equal(SessionLifecycle.Stopping, (await SavedSessionAsync(session)).Lifecycle);
+        Assert.Empty(Completions.For(session.Id));
+    }
+
+    [Fact]
+    public async Task Handle_FinalReadingForAStartingSession_DoesNotComplete()
+    {
+        var session = await SeedSessionAsync();
+
+        await CompleteAsync(Reading(session, 20, 7.25m, isFinal: true));
+
+        Assert.Equal(SessionLifecycle.Starting, (await SavedSessionAsync(session)).Lifecycle);
+        Assert.Empty(Completions.For(session.Id));
+    }
+
+    [Fact]
+    public async Task Handle_ContradictionAfterCompletion_KeepsTheFrozenFacts()
+    {
+        var session = await SeedSessionAsync(SessionLifecycle.Stopping);
+        await CompleteAsync(Reading(session, 20, 7.25m, isFinal: true));
+
+        await CompleteAsync(Reading(session, 25, 12m), Reading(session, 30, 9m, isFinal: true));
+
+        var saved = await SavedSessionAsync(session);
+        Assert.Equal(7.25m, saved.FinalEnergyKWh);
+        Assert.Equal(Start.AddSeconds(20), saved.CompletedAt);
+        Assert.Single(Completions.For(session.Id));
+    }
+
     private async Task<bool> TryHandleAsync(params ObservationEnvelope[] envelopes)
     {
         try
@@ -143,18 +252,25 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
         }
     }
 
-    private async Task HandleAsync(params ObservationEnvelope[] envelopes)
-    {
-        var services = new ServiceCollection();
-        services.AddDbContext<PlatformDbContext>(
-            options => options.UseNpgsql(fixture.GetDataSource("charging_messaging")));
-        await using var provider = services.BuildServiceProvider();
-        var recorder = new SessionEvidenceRecorder(
-            provider.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new ObservationClockSkewOptions { ClockSkew = TimeSpan.FromSeconds(5) }),
-            NullLogger<SessionEvidenceRecorder>.Instance);
+    private CompletionRecorder Completions => _messaging!.Services.GetRequiredService<CompletionRecorder>();
 
-        await recorder.HandleAsync(envelopes, CancellationToken.None);
+    private Task HandleAsync(params ObservationEnvelope[] envelopes) =>
+        new SessionEvidenceRecorder(
+            _messaging!.Services.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new ObservationClockSkewOptions { ClockSkew = TimeSpan.FromSeconds(5) }),
+            NullLogger<SessionEvidenceRecorder>.Instance)
+            .HandleAsync(envelopes, CancellationToken.None);
+
+    // Waits for the completion job the batch enrolled, and for the event that job publishes.
+    private async Task CompleteAsync(params ObservationEnvelope[] envelopes) =>
+        await _messaging!.TrackActivity().Timeout(TimeSpan.FromSeconds(30))
+            .ExecuteAndWaitAsync(_ => HandleAsync(envelopes));
+
+    private async Task<ChargingSession> SavedSessionAsync(ChargingSession session)
+    {
+        await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(fixture.GetDataSource("charging_messaging")).Options);
+        return await database.Sessions.AsNoTracking().SingleAsync(value => value.Id == session.Id);
     }
 
     private async Task<SessionEvidence?> EvidenceAsync(ChargingSession session)
@@ -186,7 +302,7 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
             energyKWh,
             isFinal);
 
-    private async Task<ChargingSession> SeedSessionAsync()
+    private async Task<ChargingSession> SeedSessionAsync(SessionLifecycle lifecycle = SessionLifecycle.Starting)
     {
         await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
             .UseNpgsql(fixture.GetDataSource("platform_writer")).Options);
@@ -213,6 +329,16 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
         database.Operations.Add(operation);
         database.ChargingProviders.Add(provider);
         await database.SaveChangesAsync();
+        if (lifecycle is SessionLifecycle.Active or SessionLifecycle.Stopping)
+        {
+            operation.Session!.ConfirmStart(provider.Id, "provider-session", now);
+        }
+
+        if (lifecycle == SessionLifecycle.Stopping)
+        {
+            operation.Session!.AcceptStop();
+        }
+
 
         // The provider is told the session by its public identifier, which the database assigns on insert.
         database.Attempts.Add(new Attempt
@@ -230,5 +356,19 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
         });
         await database.SaveChangesAsync();
         return operation.Session;
+    }
+
+    public sealed class CompletionRecorder
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<SessionCompleted> _events = new();
+
+        public void Add(SessionCompleted message) => _events.Enqueue(message);
+
+        public SessionCompleted[] For(Guid sessionId) => [.. _events.Where(value => value.SessionId == sessionId)];
+    }
+
+    public sealed class SessionCompletedRecorderHandler(CompletionRecorder recorder)
+    {
+        public void Handle(SessionCompleted message) => recorder.Add(message);
     }
 }

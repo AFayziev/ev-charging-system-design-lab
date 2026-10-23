@@ -48,7 +48,8 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
+                        .HasColumnName("completed_at")
+                        .HasAnnotation("Audit:Included", true);
 
                     b.Property<Guid>("ConnectorId")
                         .HasColumnType("uuid")
@@ -61,7 +62,8 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.Property<decimal?>("FinalEnergyKWh")
                         .HasColumnType("numeric")
-                        .HasColumnName("final_energy_k_wh");
+                        .HasColumnName("final_energy_k_wh")
+                        .HasAnnotation("Audit:Included", true);
 
                     b.Property<SessionLifecycle>("Lifecycle")
                         .HasColumnType("charging.session_lifecycle")

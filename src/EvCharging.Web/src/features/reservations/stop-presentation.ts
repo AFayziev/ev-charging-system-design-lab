@@ -1,9 +1,20 @@
 import type { Presentation } from "@/components/tones";
-import type { StopOperation } from "./api";
+import type { SessionLifecycle, StopOperation } from "./api";
 
 export function getStopPresentation(
   operation: StopOperation | null,
+  lifecycle?: SessionLifecycle,
 ): Presentation | undefined {
+  // The session's end is established by the provider's final reading, whatever became of any stop request.
+  if (lifecycle === "completed") {
+    return {
+      tone: "success",
+      badge: "Charging completed",
+      title: "Charging completed",
+      text: "The station stopped charging and your session is complete. Its final usage is on the charging page.",
+    };
+  }
+
   switch (operation?.outcome) {
     case "pending":
       return {

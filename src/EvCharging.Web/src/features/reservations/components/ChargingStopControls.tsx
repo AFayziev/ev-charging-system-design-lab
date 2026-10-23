@@ -66,7 +66,10 @@ export function ChargingStopControls({
     reservation.startOperation.lifecycle === "active" &&
     (!stop || stop.outcome === "rejected");
   const canStop = sessionActive && !statusUnavailable && !mutation.isPending;
-  const content = getStopPresentation(stop);
+  const content = getStopPresentation(
+    stop,
+    reservation.startOperation?.lifecycle,
+  );
   const failure =
     mutation.isError && submission.showsFailure
       ? getHttpFailure(mutation.error, "write")

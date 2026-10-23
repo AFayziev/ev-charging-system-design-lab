@@ -44,7 +44,10 @@ export function ReservationCard({
     reservation.state === "active",
     reservation.arrivalDeadline,
   );
-  const stopPresentation = getStopPresentation(reservation.stopOperation);
+  const stopPresentation = getStopPresentation(
+    reservation.stopOperation,
+    operation?.lifecycle,
+  );
   const badge = stopPresentation?.badge
     ? stopPresentation
     : startPresentation?.badge
@@ -52,7 +55,9 @@ export function ReservationCard({
       : undefined;
   const hasSession =
     operation?.outcome === "confirmed" &&
-    (operation.lifecycle === "active" || operation.lifecycle === "stopping");
+    (operation.lifecycle === "active" ||
+      operation.lifecycle === "stopping" ||
+      operation.lifecycle === "completed");
   const timeRange = formatReservationSlot(
     reservation.startsAt,
     reservation.endsAt,

@@ -35,6 +35,8 @@ const progress = (
   reservationId: "9d3f2e57-4c56-4f0e-8a5b-7f0d5c9a1b22",
   lifecycle: "active",
   startedAt: "2026-10-21T09:00:00Z",
+  completedAt: null,
+  finalEnergyKWh: null,
   reading,
   isStale: false,
   isSilentPastLimit: false,
@@ -125,6 +127,21 @@ it("keeps the last reading visible while the session is stopping", async () => {
 
   expect(await screen.findByText("Stopping charging")).toBeInTheDocument();
   expect(screen.getByText("1.50 kWh")).toBeInTheDocument();
+});
+
+it("shows the frozen final usage of a completed session", async () => {
+  serve(
+    progress({
+      lifecycle: "completed",
+      completedAt: "2026-10-21T09:05:00Z",
+      finalEnergyKWh: 7.256,
+      reading: { ...reading, state: "stopped", isFinalEnergy: true },
+    }),
+  );
+  setup();
+
+  expect(await screen.findByText("Charging completed")).toBeInTheDocument();
+  expect(screen.getByText("7.26 kWh")).toBeInTheDocument();
 });
 
 it("pauses updates of a session silent for too long and offers a refresh", async () => {

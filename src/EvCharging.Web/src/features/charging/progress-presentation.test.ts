@@ -14,6 +14,8 @@ const progress = (overrides: Partial<ChargingProgress>): ChargingProgress => ({
   reservationId: "reservation",
   lifecycle: "active",
   startedAt: "2026-10-21T08:59:00Z",
+  completedAt: null,
+  finalEnergyKWh: null,
   reading,
   isStale: false,
   isSilentPastLimit: false,
@@ -42,6 +44,21 @@ it.each([
   ],
 ])("titles %s", (_, value, title) => {
   expect(getProgressPresentation(value).title).toBe(title);
+});
+
+it("shows a completed session with its frozen final usage and end time", () => {
+  const completed = getProgressPresentation(
+    progress({
+      lifecycle: "completed",
+      completedAt: "2026-10-21T09:05:00Z",
+      finalEnergyKWh: 7.256,
+      reading: { ...reading, state: "stopped", isFinalEnergy: true },
+    }),
+  );
+
+  expect(completed.title).toBe("Charging completed");
+  expect(completed.tone).toBe("success");
+  expect(completed.text).toMatch(/final usage 7\.26 kWh/i);
 });
 
 it("tells a stopping session with its final reading that the station stopped", () => {

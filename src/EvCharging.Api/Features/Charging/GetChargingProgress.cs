@@ -18,12 +18,17 @@ public sealed record ChargingReadingResponse(
     bool IsFinalEnergy,
     DateTimeOffset OccurredAt);
 
-/// <summary>A session's lifecycle with its latest reading; the reading is absent until one has been projected.</summary>
+/// <summary>
+/// A session's lifecycle with its latest reading; the reading is absent until one has been projected. A completed
+/// session also carries its frozen final usage and end time.
+/// </summary>
 public sealed record ChargingProgressResponse(
     Guid SessionId,
     Guid ReservationId,
     SessionLifecycle Lifecycle,
     DateTimeOffset? StartedAt,
+    DateTimeOffset? CompletedAt,
+    decimal? FinalEnergyKWh,
     ChargingReadingResponse? Reading,
     bool IsStale,
     bool IsSilentPastLimit,
@@ -98,13 +103,16 @@ public sealed class GetChargingProgressQueryHandler(
             session.ReservationId,
             session.Lifecycle,
             session.StartedAt,
+            session.CompletedAt,
+            session.FinalEnergyKWh,
             reading is null
                 ? null
                 : new ChargingReadingResponse(
                     reading.State, reading.PowerKw, reading.EnergyKWh, reading.IsFinalEnergy, reading.OccurredAt),
             SessionTiming.IsSilentFor(session.Lifecycle, lastHeardAt, isFinal, now, options.Value.FreshnessLimit),
             SessionTiming.IsSilentFor(session.Lifecycle, lastHeardAt, isFinal, now, options.Value.SilenceLimit),
-            SessionTiming.Elapsed(session.Lifecycle, session.StartedAt, reading?.OccurredAt, isFinal, now)
+            SessionTiming.Elapsed(
+                session.Lifecycle, session.StartedAt, session.CompletedAt ?? reading?.OccurredAt, isFinal, now)
                 ?.TotalSeconds));
     }
 }
