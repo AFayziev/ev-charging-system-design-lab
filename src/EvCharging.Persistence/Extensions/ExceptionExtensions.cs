@@ -50,6 +50,18 @@ public static class ExceptionExtensions
         _ => false
     };
 
+    // PostgreSQL rolls back the whole transaction for these, so rerunning it cannot apply anything twice.
+    public static bool IsTransactionConflict(this Exception exception) => exception switch
+    {
+        PostgresException
+        {
+            SqlState: PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure
+        } => true,
+        DbUpdateException { InnerException: { } cause } => cause.IsTransactionConflict(),
+        InvalidOperationException { InnerException: { } cause } => cause.IsTransactionConflict(),
+        _ => false
+    };
+
     public static bool IsReservationOverlap(this DbUpdateException exception) =>
         exception.InnerException is PostgresException
         {

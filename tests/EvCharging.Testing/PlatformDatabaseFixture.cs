@@ -33,6 +33,9 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
 
     public NpgsqlConnection CreateConnection(string role) => GetDataSource(role).CreateConnection();
 
+    public PlatformDbContext CreateContext(string role = "platform_writer") => new(
+        new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(GetDataSource(role)).Options);
+
     public string GetConnectionString(string role)
     {
         var options = new NpgsqlConnectionStringBuilder(_postgres.GetConnectionString())
@@ -82,6 +85,22 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
         }
 
         await _postgres.DisposeAsync();
+    }
+
+    // Returns once some session is queued behind a lock, so a test can release a held lock knowing the competing
+    // operation reached it rather than ran after it.
+    public async Task WaitForLockWaiterAsync()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await using var connection = CreateConnection("platform_migrator");
+        await connection.OpenAsync(timeout.Token);
+        await using var command = new NpgsqlCommand(
+            "SELECT EXISTS (SELECT FROM pg_locks WHERE NOT granted)",
+            connection);
+        while (!(bool)(await command.ExecuteScalarAsync(timeout.Token))!)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), timeout.Token);
+        }
     }
 
     public async Task ReprovisionAsync(CancellationToken cancellationToken = default)

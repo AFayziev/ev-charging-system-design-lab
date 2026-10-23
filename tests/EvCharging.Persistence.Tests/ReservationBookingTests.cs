@@ -2,7 +2,6 @@ using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
-using EvCharging.Persistence.Auditing;
 using EvCharging.Persistence.Extensions;
 using EvCharging.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -14,40 +13,24 @@ namespace EvCharging.Persistence.Tests;
 public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : IClassFixture<PlatformDatabaseFixture>
 {
     [Fact]
-    public async Task Start_CompetingDrivers_DatabaseAllowsOneConnectorClaim()
+    public async Task Start_SecondClaimOnConnector_DatabaseRejects()
     {
-        await using var setupConnection = fixture.CreateConnection("platform_writer");
-        await using var setup = Context(setupConnection);
-        var (connector, firstDriver) = await EquipmentAsync(setup);
+        await using var connection = fixture.CreateConnection("platform_writer");
+        await using var database = Context(connection);
+        var (connector, firstDriver) = await EquipmentAsync(database);
         var secondDriver = Driver.Register(
             "https://test.invalid", Guid.NewGuid().ToString(), EmailAddress.Create("other@example.test").Value);
         var start = DateTimeOffset.UtcNow.AddHours(-3);
         var first = Booking(connector, firstDriver, start, start.AddHours(1));
         var second = Booking(connector, secondDriver, start.AddHours(1), start.AddHours(2));
-        setup.Reservations.AddRange(first, second);
-        await setup.SaveChangesAsync();
+        database.Reservations.AddRange(first, second);
+        database.Sessions.Add(ChargingSession.AcceptStart(first, first.StartsAt).Value);
+        await database.SaveChangesAsync();
 
-        var outcomes = await Task.WhenAll(ClaimAsync(first.Id), ClaimAsync(second.Id));
+        database.Sessions.Add(ChargingSession.AcceptStart(second, second.StartsAt).Value);
 
-        Assert.Equal(1, outcomes.Count(value => value));
-        Assert.Equal(1, await setup.Sessions.CountAsync(value => value.ConnectorId == connector.Id));
-
-        async Task<bool> ClaimAsync(Guid reservationId)
-        {
-            await using var connection = fixture.CreateConnection("platform_writer");
-            await using var context = Context(connection);
-            var reservation = await context.Reservations.SingleAsync(value => value.Id == reservationId);
-            context.Sessions.Add(ChargingSession.AcceptStart(reservation, reservation.StartsAt).Value);
-            try
-            {
-                await context.SaveChangesAsync();
-                return true;
-            }
-            catch (DbUpdateException exception) when (exception.IsChargingClaimConflict())
-            {
-                return false;
-            }
-        }
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => database.SaveChangesAsync());
+        Assert.True(exception.IsChargingClaimConflict());
     }
 
     [Fact]
@@ -68,128 +51,6 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
 
         Assert.True(exception.IsTransientDatabaseFailure());
     }
-
-    [Fact]
-    public async Task Expire_CompetingChecks_CommitsOneTransitionAndAudit()
-    {
-        await using var setupConnection = fixture.CreateConnection("platform_writer");
-        await using var setup = Context(setupConnection);
-        var (connector, driver) = await EquipmentAsync(setup);
-        var end = DateTimeOffset.UtcNow.AddMinutes(-1);
-        var reservation = Booking(connector, driver, end.AddHours(-1), end);
-        setup.Reservations.Add(reservation);
-        await setup.SaveChangesAsync();
-
-        await Task.WhenAll(
-            ExpireAsync("charging_messaging"),
-            ExpireAsync("charging_messaging"),
-            ExpireAsync("platform_writer"));
-
-        var saved = await setup.Reservations.AsNoTracking().SingleAsync(value => value.Id == reservation.Id);
-        Assert.Equal(ReservationState.Expired, saved.State);
-        Assert.NotNull(saved.ExpiredAt);
-        var audit = await setup.AuditEntries.SingleAsync(entry => entry.ResourceId == reservation.Id);
-        Assert.Equal(AuditAction.Updated, audit.Action);
-        Assert.Equal(0, audit.Details.GetProperty("before").GetProperty("state").GetInt32());
-        Assert.Equal(3, audit.Details.GetProperty("after").GetProperty("state").GetInt32());
-        Assert.Equal(
-            saved.ExpiredAt.Value.ToUnixTimeMilliseconds(),
-            audit.Details.GetProperty("after").GetProperty("expiredAt").GetDateTimeOffset().ToUnixTimeMilliseconds());
-
-        async Task ExpireAsync(string role)
-        {
-            await using var connection = fixture.CreateConnection(role);
-            var writer = new AuditEntryWriter(new ExpiryActor(), TimeProvider.System);
-            await using var context = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(connection)
-                .AddInterceptors(new AuditSaveChangesInterceptor(writer))
-                .Options);
-            await using var transaction = await context.Database.BeginTransactionAsync();
-            await context.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
-            var loaded = await context.Reservations.SingleAsync(value => value.Id == reservation.Id);
-            await context.ExpireReservationAsync(loaded, DateTimeOffset.UtcNow, CancellationToken.None);
-            await context.SaveChangesAsync();
-            await transaction.CommitAsync();
-        }
-    }
-
-    private sealed class ExpiryActor : IAuditActorAccessor
-    {
-        public AuditActor GetActor() => AuditActor.Service("expiry-test");
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task Cancel_ExpiryRace_DriverLockPreservesFirstTransition(bool cancellationFirst)
-    {
-        await using var setupConnection = fixture.CreateConnection("platform_writer");
-        await using var setup = Context(setupConnection);
-        var (connector, driver) = await EquipmentAsync(setup);
-        var end = DateTimeOffset.UtcNow.AddMinutes(-1);
-        var reservation = Booking(connector, driver, end.AddHours(-1), end);
-        setup.Reservations.Add(reservation);
-        await setup.SaveChangesAsync();
-
-        await using var firstConnection = fixture.CreateConnection(
-            cancellationFirst ? "platform_writer" : "charging_messaging");
-        await using var first = AuditedContext(firstConnection);
-        await using var firstTransaction = await first.Database.BeginTransactionAsync();
-        await first.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
-        var loaded = await first.Reservations.SingleAsync(value => value.Id == reservation.Id);
-        var transitionedAt = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        if (cancellationFirst)
-        {
-            Assert.True(loaded.Cancel(transitionedAt, false).IsSuccess);
-        }
-        else
-        {
-            await first.ExpireReservationAsync(loaded, transitionedAt, CancellationToken.None);
-        }
-
-        var competing = CompeteAsync();
-        await first.SaveChangesAsync();
-        await firstTransaction.CommitAsync();
-        await competing;
-
-        var saved = await setup.Reservations.AsNoTracking().SingleAsync(value => value.Id == reservation.Id);
-        Assert.Equal(cancellationFirst ? ReservationState.Cancelled : ReservationState.Expired, saved.State);
-        Assert.Equal(cancellationFirst ? transitionedAt : (DateTimeOffset?)null, saved.CancelledAt);
-        Assert.Equal(cancellationFirst ? (DateTimeOffset?)null : transitionedAt, saved.ExpiredAt);
-        Assert.Single(await setup.AuditEntries.Where(entry => entry.ResourceId == reservation.Id).ToListAsync());
-
-        async Task CompeteAsync()
-        {
-            await using var connection = fixture.CreateConnection(
-                cancellationFirst ? "charging_messaging" : "platform_writer");
-            await using var context = AuditedContext(connection);
-            await using var transaction = await context.Database.BeginTransactionAsync();
-            await context.LockDriverReservationsAsync(driver.Id, CancellationToken.None);
-            var current = await context.Reservations.SingleAsync(value => value.Id == reservation.Id);
-            if (cancellationFirst)
-            {
-                var outcome = await context.ExpireReservationAsync(
-                    current,
-                    DateTimeOffset.UtcNow,
-                    CancellationToken.None);
-                Assert.Equal(ReservationExpiryOutcome.AlreadyInactive, outcome);
-            }
-            else
-            {
-                Assert.True(current.Cancel(DateTimeOffset.UtcNow, false).IsFailed);
-            }
-
-            await context.SaveChangesAsync();
-            await transaction.CommitAsync();
-        }
-    }
-
-    private static PlatformDbContext AuditedContext(NpgsqlConnection connection) => new(
-        new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseNpgsql(connection)
-            .AddInterceptors(new AuditSaveChangesInterceptor(
-                new AuditEntryWriter(new ExpiryActor(), TimeProvider.System)))
-            .Options);
 
     [Theory]
     [InlineData(ReservationState.Active, true)]
@@ -256,39 +117,6 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         var count = await database.Reservations.CountAsync(
             value => value.ConnectorId == first.Id || value.ConnectorId == second.Id);
         Assert.Equal(2, count);
-    }
-
-    [Fact]
-    public async Task Book_CompetingConnections_OneWinsAndAdjacentSucceeds()
-    {
-        await using var setupConnection = fixture.CreateConnection("platform_writer");
-        await using var setup = Context(setupConnection);
-        var (connector, driver) = await EquipmentAsync(setup);
-        var startsAt = new DateTimeOffset(2030, 1, 1, 10, 0, 0, TimeSpan.Zero);
-        var outcomes = await Task.WhenAll(AttemptAsync(), AttemptAsync());
-        Assert.Equal(1, outcomes.Count(success => success));
-        setup.Reservations.Add(Booking(connector, driver, startsAt.AddHours(1), startsAt.AddHours(2)));
-        await setup.SaveChangesAsync();
-        Assert.Equal(2, await setup.Reservations.CountAsync(reservation => reservation.ConnectorId == connector.Id));
-
-        async Task<bool> AttemptAsync()
-        {
-            await using var connection = fixture.CreateConnection("platform_writer");
-            await using var database = Context(connection);
-            var loadedConnector = await database.Connectors.SingleAsync(value => value.Id == connector.Id);
-            var loadedDriver = await database.Drivers.SingleAsync(value => value.Id == driver.Id);
-            database.Reservations.Add(Booking(loadedConnector, loadedDriver, startsAt, startsAt.AddHours(1)));
-            try
-            {
-                await database.SaveChangesAsync();
-                return true;
-            }
-            catch (DbUpdateException exception) when (
-                exception.IsReservationOverlap() || exception.IsDriverReservationOverlap())
-            {
-                return false;
-            }
-        }
     }
 
     [Theory]

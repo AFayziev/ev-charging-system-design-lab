@@ -1,9 +1,11 @@
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Features.Charging;
 using EvCharging.Api.Features.Stations;
+using EvCharging.Persistence.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Wolverine;
+using Wolverine.ErrorHandling;
 
 namespace EvCharging.Api.Configuration;
 
@@ -49,6 +51,11 @@ internal static class ApplicationServiceExtensions
         options.CodeGeneration.AlwaysUseServiceLocationFor<IAuthorizationService>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptionsSnapshot<ReservationPolicyOptions>>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<ChargingStatusCheckOptions>>();
+
+        // Concurrent writers can deadlock on exclusion constraints. The aborted transaction is rerun inline,
+        // where it sees the winner's committed row and reports the conflict.
+        options.Policies.OnException(ExceptionExtensions.IsTransactionConflict)
+            .RetryWithCooldown(TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(250));
 
         return options;
     }

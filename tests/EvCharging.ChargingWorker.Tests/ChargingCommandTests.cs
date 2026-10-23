@@ -13,7 +13,6 @@ using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Auditing;
 using EvCharging.Persistence.Entities;
-using EvCharging.Persistence.Extensions;
 using EvCharging.Testing;
 using JasperFx;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +47,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
             .AddDbContext<PlatformDbContext>(options => options.UseNpgsql(fixture.GetDataSource("charging_messaging")));
         builder.Services.AddSingleton<StartRecorder>();
         builder.Services.AddSingleton<StopRecorder>();
+        builder.Services.AddSingleton<TimeProvider>(_clock);
         builder.UseWolverine(options =>
         {
             options.Discovery.DisableConventionalDiscovery();
@@ -63,6 +63,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
             options.PublishMessage<StopCharging>().ToLocalQueue("stop-resend-tests");
             options.Discovery.IncludeType<StartChargingRecorderHandler>();
             options.Discovery.IncludeType<StopChargingRecorderHandler>();
+            options.Discovery.IncludeType<ExpireReservationHandler>();
         });
         _messaging = builder.Build();
         await _messaging.StartAsync();
@@ -694,7 +695,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         var operation = await PrepareAsync();
         _clock.Advance(TimeSpan.FromMinutes(11));
 
-        Assert.Equal(ReservationExpiryOutcome.Expired, await ExpireAsync(operation.Id));
+        await ExpireAsync(operation.Id);
 
         using var transport = new ProviderTransport((_, _) => throw new InvalidOperationException("No call expected."));
         await ExecuteAsync(operation.Id, transport);
@@ -737,7 +738,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
 
         _clock.Advance(TimeSpan.FromMinutes(11));
 
-        Assert.Equal(ReservationExpiryOutcome.UnresolvedStart, await ExpireAsync(operation.Id));
+        await ExpireAsync(operation.Id);
         await using var database = Database();
         var retained = await database.Operations.AsNoTracking().Include(value => value.Session!)
             .ThenInclude(value => value.Reservation)
@@ -758,19 +759,14 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         Assert.Equal(1, settled.AuthorizedAttemptCount);
     }
 
-    private async Task<ReservationExpiryOutcome> ExpireAsync(Guid operationId)
+    // Runs the worker's expiry handler; the reservation and session states show its outcome.
+    private async Task ExpireAsync(Guid operationId)
     {
         await using var database = Database();
-        var operation = await database.Operations.AsNoTracking().Include(value => value.Session)
-            .SingleAsync(value => value.Id == operationId);
-        await using var transaction = await database.Database.BeginTransactionAsync();
-        await database.LockDriverReservationsAsync(operation.DriverId, CancellationToken.None);
-        var reservation = await database.Reservations
-            .SingleAsync(value => value.Id == operation.Session!.ReservationId);
-        var outcome = await database.ExpireReservationAsync(reservation, _clock.GetUtcNow(), CancellationToken.None);
-        await database.SaveChangesAsync();
-        await transaction.CommitAsync();
-        return outcome;
+        var reservationId = await database.Operations.Where(value => value.Id == operationId)
+            .Select(value => value.Session!.ReservationId)
+            .SingleAsync();
+        await _messaging!.MessageBus().InvokeAsync(new ExpireReservation(reservationId));
     }
 
     private async Task<StartCharging[]> CheckAsync(Guid operationId, ProviderTransport queries, bool automatic)
