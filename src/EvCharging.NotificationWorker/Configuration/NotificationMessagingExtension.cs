@@ -33,6 +33,8 @@ internal sealed class NotificationMessagingExtension(
             .MoveToErrorQueue();
         options.ListenToRabbitQueue(ReservationEventTopology.NotificationQueue)
             .MaximumParallelMessages(preparation.Value.MaximumConcurrentPreparations);
+        options.ListenToRabbitQueue(SessionEventTopology.NotificationQueue)
+            .MaximumParallelMessages(preparation.Value.MaximumConcurrentPreparations);
         options.ListenToRabbitQueue("notification-send")
             .MaximumParallelMessages(delivery.Value.MaximumConcurrentSends);
     }

@@ -30,7 +30,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "file_kind", new[] { "diagnostic_bundle", "session_summary", "station_original", "station_variant" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "file_state", new[] { "awaiting_upload", "processed", "published", "uploaded" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "notification_delivery_outcome", new[] { "captured", "failed", "not_captured", "uncertain" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_notification_kind", new[] { "cancelled", "created", "expired" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_notification_kind", new[] { "cancelled", "charging_completed", "created", "expired" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_state", new[] { "active", "cancelled", "consumed", "expired" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "session_lifecycle", new[] { "active", "completed", "failed", "starting", "stopping" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using EvCharging.Contracts.Events.Reservations;
+using EvCharging.Contracts.Events.Sessions;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
 using EvCharging.NotificationWorker.Templates.Reservation;
@@ -20,7 +21,13 @@ public static class ReservationNotificationHandler
         TimeProvider clock,
         CancellationToken cancellationToken) =>
         PrepareAsync(
-            message.ReservationId, ReservationNotificationKind.Created, database, renderer, clock, cancellationToken);
+            message.ReservationId,
+            ReservationNotificationKind.Created,
+            null,
+            database,
+            renderer,
+            clock,
+            cancellationToken);
 
     [Transactional]
     public static Task<SendNotification?> HandleAsync(
@@ -30,7 +37,13 @@ public static class ReservationNotificationHandler
         TimeProvider clock,
         CancellationToken cancellationToken) =>
         PrepareAsync(
-            message.ReservationId, ReservationNotificationKind.Cancelled, database, renderer, clock, cancellationToken);
+            message.ReservationId,
+            ReservationNotificationKind.Cancelled,
+            null,
+            database,
+            renderer,
+            clock,
+            cancellationToken);
 
     [Transactional]
     public static Task<SendNotification?> HandleAsync(
@@ -40,11 +53,34 @@ public static class ReservationNotificationHandler
         TimeProvider clock,
         CancellationToken cancellationToken) =>
         PrepareAsync(
-            message.ReservationId, ReservationNotificationKind.Expired, database, renderer, clock, cancellationToken);
+            message.ReservationId,
+            ReservationNotificationKind.Expired,
+            null,
+            database,
+            renderer,
+            clock,
+            cancellationToken);
+
+    [Transactional]
+    public static Task<SendNotification?> HandleAsync(
+        SessionCompleted message,
+        PlatformDbContext database,
+        ReservationEmailRenderer renderer,
+        TimeProvider clock,
+        CancellationToken cancellationToken) =>
+        PrepareAsync(
+            message.ReservationId,
+            ReservationNotificationKind.ChargingCompleted,
+            message,
+            database,
+            renderer,
+            clock,
+            cancellationToken);
 
     private static async Task<SendNotification?> PrepareAsync(
         Guid reservationId,
         ReservationNotificationKind kind,
+        SessionCompleted? completion,
         PlatformDbContext database,
         ReservationEmailRenderer renderer,
         TimeProvider clock,
@@ -65,7 +101,7 @@ public static class ReservationNotificationHandler
             .ThenInclude(charger => charger.Station)
             .SingleOrDefaultAsync(reservation => reservation.Id == reservationId, cancellationToken)
             ?? throw new InvalidOperationException("Notification preparation requires an existing reservation.");
-        var notification = CreateNotification(reservation, kind, renderer, clock.GetUtcNow());
+        var notification = CreateNotification(reservation, kind, completion, renderer, clock.GetUtcNow());
         database.Notifications.Add(notification);
         database.ReservationNotifications.Add(new ReservationNotification
         {
@@ -81,6 +117,7 @@ public static class ReservationNotificationHandler
     private static Notification CreateNotification(
         Reservation reservation,
         ReservationNotificationKind kind,
+        SessionCompleted? completion,
         ReservationEmailRenderer renderer,
         DateTimeOffset preparedAt)
     {
@@ -104,6 +141,8 @@ public static class ReservationNotificationHandler
                 ?? throw new InvalidOperationException("The reservation has no cancellation fact."),
             ReservationNotificationKind.Expired => reservation.ExpiredAt
                 ?? throw new InvalidOperationException("The reservation has no expiry fact."),
+            ReservationNotificationKind.ChargingCompleted => completion?.CompletedAt
+                ?? throw new InvalidOperationException("A completion notification requires the completion event."),
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
         var details = new ReservationEmailDetails(
@@ -114,7 +153,8 @@ public static class ReservationNotificationHandler
             station.Name,
             station.Address,
             charger.Name,
-            connector.Number);
+            connector.Number,
+            completion?.FinalEnergyKWh);
         var content = renderer.Render(kind, details);
         return new Notification
         {

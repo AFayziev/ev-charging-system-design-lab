@@ -27,17 +27,21 @@ public sealed class ReservationEmailRenderer
 
     public RenderedEmail Render(ReservationNotificationKind kind, ReservationEmailDetails details)
     {
-        string action = kind switch
+        var (label, headline) = kind switch
         {
-            ReservationNotificationKind.Created => "created",
-            ReservationNotificationKind.Cancelled => "cancelled",
-            ReservationNotificationKind.Expired => "expired",
+            ReservationNotificationKind.Created => ("Reservation created", "Your reservation was created."),
+            ReservationNotificationKind.Cancelled => ("Reservation cancelled", "Your reservation was cancelled."),
+            ReservationNotificationKind.Expired => ("Reservation expired", "Your reservation was expired."),
+            ReservationNotificationKind.ChargingCompleted =>
+                ("Charging completed", "Your charging session is complete."),
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
         var data = new TemplateData(
-            action,
+            label,
+            headline,
             kind == ReservationNotificationKind.Cancelled,
             kind == ReservationNotificationKind.Expired,
+            details.FinalEnergyKWh?.ToString("0.###", CultureInfo.InvariantCulture),
             details.ReservationPublicId.ToString(),
             FormatTime(details.OccurredAt),
             FormatTime(details.StartsAt),
@@ -46,7 +50,7 @@ public sealed class ReservationEmailRenderer
             details.StationAddress,
             details.ChargerName,
             details.ConnectorNumber.ToString(CultureInfo.InvariantCulture));
-        return new($"Reservation {action}", _text(data).TrimEnd('\r', '\n'), _html(data));
+        return new(label, _text(data).TrimEnd('\r', '\n'), _html(data));
     }
 
     private static string FormatTime(DateTimeOffset instant) =>
@@ -62,9 +66,11 @@ public sealed class ReservationEmailRenderer
     }
 
     private sealed record TemplateData(
-        string Action,
+        string Label,
+        string Headline,
         bool Cancelled,
         bool Expired,
+        string? FinalUsage,
         string ReservationId,
         string OccurredAt,
         string StartsAt,

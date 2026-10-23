@@ -4,5 +4,6 @@ public enum ReservationNotificationKind
 {
     Created,
     Cancelled,
-    Expired
+    Expired,
+    ChargingCompleted
 }

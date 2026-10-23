@@ -8,4 +8,5 @@ public sealed record ReservationEmailDetails(
     string StationName,
     string StationAddress,
     string ChargerName,
-    int ConnectorNumber);
+    int ConnectorNumber,
+    decimal? FinalEnergyKWh = null);

@@ -490,7 +490,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
     deduplication, state, and outbox in one relational transaction. Verify that
     replay and duplicate delivery do not refresh timestamps or repeat transitions.
     Depends on M07.01.2 and M07.01.3.
-- [ ] M07.02 Deliver completed-session final usage and completion notifications.
+- [x] M07.02 Deliver completed-session final usage and completion notifications.
   Match provider/session evidence, conditionally freeze completion facts, and
   commit outgoing completion events with SQL state.
   Verify stop-before-usage, early terminal evidence, and late contradictions.
@@ -504,7 +504,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   - [x] M07.02.2 Completed session page: show the frozen final usage and keep
     polling until completion. Verify stop-before-usage and early terminal
     evidence through the application. Depends on M07.02.1.
-  - [ ] M07.02.3 Completion notification: prepare one email from the completion
+  - [x] M07.02.3 Completion notification: prepare one email from the completion
     event and deliver it through the notification worker. Verify the frozen
     content and redelivery. Depends on M07.02.1 and M05.04.
 - [ ] M07.03 Deliver stalled-session detection and recovery polling:

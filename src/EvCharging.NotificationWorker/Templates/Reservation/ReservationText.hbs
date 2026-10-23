@@ -1,6 +1,9 @@
-Your reservation was {{Action}}.
+{{Headline}}
 Reservation: {{ReservationId}}
 Occurred at: {{OccurredAt}} UTC
+{{#if FinalUsage}}
+Final usage: {{FinalUsage}} kWh
+{{/if}}
 Booked start: {{StartsAt}} UTC
 Booked end: {{EndsAt}} UTC
 Station: {{StationName}}

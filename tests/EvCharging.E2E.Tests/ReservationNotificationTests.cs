@@ -4,9 +4,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Aspire.Hosting.Testing;
 using EvCharging.Contracts.Events.Reservations;
+using EvCharging.Contracts.Events.Sessions;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
+using EvCharging.Messaging;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -47,7 +49,10 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         {
             options.ApplicationAssembly = typeof(ReservationCreated).Assembly;
             options.UseRabbitMq(rabbit).AutoProvision();
-            options.PublishAllMessages().ToRabbitQueue("notification-reservation-events");
+            options.PublishMessage<ReservationCreated>().ToRabbitQueue("notification-reservation-events");
+            options.PublishMessage<ReservationCancelled>().ToRabbitQueue("notification-reservation-events");
+            options.PublishMessage<ReservationExpired>().ToRabbitQueue("notification-reservation-events");
+            options.PublishMessage<SessionCompleted>().ToRabbitQueue(SessionEventTopology.NotificationQueue);
         });
         _publisher = builder.Build();
         await _publisher.StartAsync();
@@ -185,6 +190,38 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
             1,
             await Database.NotificationDeliveryAttempts.CountAsync(value =>
                 value.NotificationId == notification.Id));
+    }
+
+    [Fact]
+    public async Task Prepare_SessionCompleted_SnapshotsTheFrozenUsageAndQueuesOneJob()
+    {
+        var reservation = await BookAsync();
+        var completedAt = reservation.StartsAt.AddMinutes(30);
+        var message = new SessionCompleted(Guid.NewGuid(), reservation.Id, 7.25m, completedAt);
+
+        await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
+
+        var notification = await NotificationAsync(reservation.Id, ReservationNotificationKind.ChargingCompleted);
+        await AssertCapturedAsync(notification);
+        Assert.Equal("Charging completed", notification.Subject);
+        Assert.Contains("Your charging session is complete.", notification.Body, StringComparison.Ordinal);
+        Assert.Contains("Final usage: 7.25 kWh", notification.Body, StringComparison.Ordinal);
+        Assert.Contains(
+            completedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC",
+            notification.Body,
+            StringComparison.Ordinal);
+        Assert.Contains("7.25 kWh", notification.HtmlBody, StringComparison.Ordinal);
+        Assert.Contains("Station: Notification test", notification.Body, StringComparison.Ordinal);
+
+        await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
+        Assert.Equal(
+            1,
+            await Database.NotificationDeliveryAttempts.CountAsync(value =>
+                value.NotificationId == notification.Id));
+        Assert.Equal(
+            1,
+            await Database.ReservationNotifications.CountAsync(value =>
+                value.ReservationId == reservation.Id && value.Kind == ReservationNotificationKind.ChargingCompleted));
     }
 
     [Fact]

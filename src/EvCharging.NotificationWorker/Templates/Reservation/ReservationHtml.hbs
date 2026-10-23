@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Reservation {{Action}}</title>
+  <title>{{Label}}</title>
   <style>
     @media (max-width: 480px) {
       .email-content { padding: 24px 20px !important; }
@@ -22,8 +22,8 @@
           </tr>
           <tr>
             <td class="email-content" style="padding:32px; background-color:#ffffff; border:1px solid #dee2e6; border-radius:4px;">
-              <span style="display:inline-block; padding:5px 10px; border-radius:4px; font-size:12px; font-weight:700; color:{{#if Cancelled}}#c92a2a{{else if Expired}}#495057{{else}}#087f5b{{/if}}; background-color:{{#if Cancelled}}#fff5f5{{else if Expired}}#f1f3f5{{else}}#e6fcf5{{/if}};">Reservation {{Action}}</span>
-              <h1 class="email-title" style="margin:20px 0 12px; color:#101c3c; font-size:30px; line-height:1.25; font-weight:700;">Your reservation was {{Action}}.</h1>
+              <span style="display:inline-block; padding:5px 10px; border-radius:4px; font-size:12px; font-weight:700; color:{{#if Cancelled}}#c92a2a{{else if Expired}}#495057{{else}}#087f5b{{/if}}; background-color:{{#if Cancelled}}#fff5f5{{else if Expired}}#f1f3f5{{else}}#e6fcf5{{/if}};">{{Label}}</span>
+              <h1 class="email-title" style="margin:20px 0 12px; color:#101c3c; font-size:30px; line-height:1.25; font-weight:700;">{{Headline}}</h1>
               <p style="margin:0 0 28px; color:#59697a; font-size:14px; line-height:1.6;">Recorded at {{OccurredAt}} UTC</p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #dee2e6;">
                 <tr>
@@ -52,6 +52,14 @@
                 <tr>
                   <td style="padding:0 16px 16px; font-size:14px; line-height:1.6;">{{EndsAt}} UTC</td>
                 </tr>
+                {{#if FinalUsage}}
+                <tr>
+                  <td style="padding:0 16px 6px; color:#59697a; font-size:12px; font-weight:600;">FINAL USAGE</td>
+                </tr>
+                <tr>
+                  <td style="padding:0 16px 16px; font-size:14px; line-height:1.6;">{{FinalUsage}} kWh</td>
+                </tr>
+                {{/if}}
               </table>
               <p style="margin:24px 0 6px; color:#59697a; font-size:12px; font-weight:600;">RESERVATION REFERENCE</p>
               <p style="margin:0; color:#59697a; font-size:12px; line-height:1.6; overflow-wrap:anywhere; word-break:break-all;">{{ReservationId}}</p>

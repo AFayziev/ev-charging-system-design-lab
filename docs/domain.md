@@ -183,7 +183,9 @@ accepted, but their start can be blocked by an overrun.
 
 ### 5.3 Notifications
 
-Reservation creation, cancellation, and expiry each produce one logical notification.
+Reservation creation, cancellation, and expiry each produce one logical notification,
+and so does the completion of the reservation's charging session. A completion
+notification reports the frozen final usage and end time.
 Delayed notifications describe the original event even if the reservation has since
 changed. Once prepared, a notification's recipient and content remain fixed.
 
