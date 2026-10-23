@@ -168,6 +168,21 @@ public sealed class OperationTests
     }
 
     [Fact]
+    public void RejectStop_SessionAlreadyCompleted_SettlesTheStopAndKeepsTheSessionCompleted()
+    {
+        var session = ActiveSession();
+        var stop = Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(5)).Value;
+        Assert.True(stop.MarkUncertain().IsSuccess);
+        Assert.True(session.Complete(7.25m, Start.AddMinutes(6)).IsSuccess);
+
+        Assert.True(stop.RejectStop().IsSuccess);
+
+        Assert.Equal(CommandOutcome.Rejected, stop.Outcome);
+        Assert.Equal(SessionLifecycle.Completed, session.Lifecycle);
+        Assert.Equal(7.25m, session.FinalEnergyKWh);
+    }
+
+    [Fact]
     public void StartOutcomes_AppliedToAStop_AreRefused()
     {
         var session = ActiveSession();

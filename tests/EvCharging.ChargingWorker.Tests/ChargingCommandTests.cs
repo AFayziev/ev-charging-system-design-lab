@@ -335,8 +335,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         Assert.Equal(1, transport.Calls);
         var next = Operation.AcceptStart(
             ChargingSession.AcceptStart(saved.Session.Reservation, _clock.GetUtcNow()).Value, Guid.NewGuid());
-        await using (var acceptance = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseNpgsql(fixture.GetDataSource("platform_writer")).Options))
+        await using (var acceptance = WriterDatabase())
         {
             acceptance.Attach(saved.Session.Reservation);
             acceptance.Operations.Add(next);
@@ -793,7 +792,9 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         MaximumCommandRequests = 3,
         MaximumConcurrentCommands = 2,
         MaximumAutomaticStatusChecks = 2,
-        AutomaticStatusCheckInterval = TimeSpan.FromMinutes(1)
+        AutomaticStatusCheckInterval = TimeSpan.FromMinutes(1),
+        ContinuedStatusCheckInterval = TimeSpan.FromMinutes(1),
+        MaximumContinuedStatusCheckInterval = TimeSpan.FromMinutes(10)
     };
 
     private async Task<T[]> ScheduledAsync<T>(Guid operationId, Func<T, Guid> operationOf)
@@ -854,6 +855,9 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         return builder.Build();
     }
 
+    private PlatformDbContext WriterDatabase() => new(new DbContextOptionsBuilder<PlatformDbContext>()
+        .UseNpgsql(fixture.GetDataSource("platform_writer")).Options);
+
     private PlatformDbContext Database(params IInterceptor[] additional)
     {
         var writer = new AuditEntryWriter(new ServiceActor(), _clock);
@@ -866,8 +870,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
 
     private async Task<Operation> PrepareAsync(string? integrationKey = IntegrationKey)
     {
-        await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseNpgsql(fixture.GetDataSource("platform_writer")).Options);
+        await using var database = WriterDatabase();
         var station = new Station { Name = "Test", Address = "Test", TimeZoneId = "UTC", AccessInstructions = "Test" };
         var charger = new Charger { Station = station, Name = "Test" };
         var connector = new Connector { Charger = charger, ConnectorType = "Type2", PowerSupply = "AC" };
@@ -929,6 +932,22 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
                 rejection = (string?)null
             })
     };
+
+    private static HttpResponseMessage Rejected(Guid externalOperationId, string kind, string rejection) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(
+                new
+                {
+                    id = Guid.NewGuid(),
+                    externalOperationId,
+                    kind,
+                    outcome = "rejected",
+                    sessionId = (Guid?)null,
+                    appliedAt = (DateTimeOffset?)null,
+                    rejection
+                })
+        };
 
     public sealed class StartRecorder
     {

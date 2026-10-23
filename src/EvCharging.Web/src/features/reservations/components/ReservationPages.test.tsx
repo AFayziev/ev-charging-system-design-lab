@@ -349,7 +349,7 @@ const pendingStart: StartOperation = {
   automaticChecksEndAt: null,
 };
 
-it("ends automatic checking at the cutoff without updated reservation data", async () => {
+it("waits to check again at the cutoff without updated reservation data", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-11T12:31:00Z"));
   const cutoff = "2026-10-11T12:31:35Z";
@@ -372,8 +372,46 @@ it("ends automatic checking at the cutoff without updated reservation data", asy
   await act(async () => {
     await vi.advanceTimersByTimeAsync(35_000);
   });
-  expect(screen.getByText("Automatic checking ended")).toBeVisible();
+  expect(screen.getByText("Waiting to check again")).toBeVisible();
   expect(screen.getByRole("button", { name: "Check status" })).toBeEnabled();
+});
+
+it("shows scheduled checks again when the worker extends the checking window", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-11T12:32:00Z"));
+  const withCutoff = (automaticChecksEndAt: string) => ({
+    reservations: [
+      {
+        ...reservation,
+        startOperation: {
+          ...pendingStart,
+          outcome: "uncertain" as const,
+          automaticChecksEndAt,
+        },
+      },
+    ],
+    nextAfterId: null,
+  });
+  const ended = withCutoff("2026-10-11T12:31:35Z");
+  get.mockResolvedValue({ data: ended });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
+  client.setQueryData(reservationKeys.list(null), ended);
+  setup(client);
+  expect(screen.getByText("Waiting to check again")).toBeVisible();
+
+  await act(async () => {
+    client.setQueryData(
+      reservationKeys.list(null),
+      withCutoff("2026-10-11T12:32:30Z"),
+    );
+    // Query notifications are batched on a timer.
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+  expect(screen.getByText("Automatic status checks scheduled")).toBeVisible();
+  expect(screen.getByText(/do not submit another start/)).toBeVisible();
 });
 
 it("requires a successful session check when a failed refresh retains a cached token", async () => {
@@ -658,7 +696,7 @@ it.each([
   {
     outcome: "unresolved",
     automaticChecksEndAt: "2026-10-10T22:29:00Z",
-    title: "Automatic checking ended",
+    title: "Waiting to check again",
   },
 ] as const)(
   "shows $title after a provider check",

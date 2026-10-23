@@ -37,7 +37,7 @@ public sealed partial class ReservationTests
 
     [Fact]
     [Trait("Category", "Browser")]
-    public async Task CheckStart_ProviderRecoversAfterAutomaticWindow_ResolvesWithoutAnotherStart()
+    public async Task CheckStart_ProviderRecoversAfterAutomaticWindow_ResolvesInTheBackgroundWithoutAnotherStart()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         using var playwright = await Playwright.CreateAsync();
@@ -46,19 +46,27 @@ public sealed partial class ReservationTests
         var operation = await StartWithLostResponseAsync(page, HttpStatusCode.ServiceUnavailable, timeout.Token);
         await AwaitStartOutcomeAsync(operation.Id, CommandOutcome.Uncertain, timeout.Token);
         await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
-        await Expect(page.GetByText("Automatic checking ended", new() { Exact = true }))
-            .ToBeVisibleAsync(new() { Timeout = 25_000 });
-
         var unresolved = await Storage.Operations.AsNoTracking().Include(value => value.Session!)
             .ThenInclude(value => value.Reservation)
             .SingleAsync(value => value.Id == operation.Id, timeout.Token);
-        Assert.Equal(CommandOutcome.Uncertain, unresolved.Outcome);
         Assert.Equal(SessionLifecycle.Starting, unresolved.Session!.Lifecycle);
         Assert.Equal(ReservationState.Active, unresolved.Session.Reservation!.State);
+        // Wait out the first checking window.
+        var untilWindowEnds = unresolved.AutomaticChecksEndAt!.Value - DateTimeOffset.UtcNow + TimeSpan.FromSeconds(1);
+        if (untilWindowEnds > TimeSpan.Zero)
+        {
+            await Task.Delay(untilWindowEnds, timeout.Token);
+        }
+
+        var stillUnresolved = await Storage.Operations.AsNoTracking()
+            .SingleAsync(value => value.Id == operation.Id, timeout.Token);
+        Assert.Equal(CommandOutcome.Uncertain, stillUnresolved.Outcome);
+
         await fixture.ConfigureWattHarborCommandFaultAsync(operation.PublicId, unresolved.Session.PublicId, null);
 
-        await page.GetByRole(AriaRole.Button, new() { Name = "Check status" }).ClickAsync();
-        await Expect(page.GetByText("Charging started", new() { Exact = true })).ToBeVisibleAsync();
+        // Settled by continued checks, without a manual status check.
+        await Expect(page.GetByText("Charging started", new() { Exact = true }))
+            .ToBeVisibleAsync(new() { Timeout = 60_000 });
         Assert.Equal(1, await Storage.Attempts.CountAsync(value => value.OperationId == operation.Id, timeout.Token));
     }
 

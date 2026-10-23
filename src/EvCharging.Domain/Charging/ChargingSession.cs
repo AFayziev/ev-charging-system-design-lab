@@ -95,8 +95,14 @@ public sealed class ChargingSession : IAuditableEntity
         return Result.Ok();
     }
 
+    /// <summary>Returns a stopping session to active. A completed session stays completed.</summary>
     public Result RejectStop()
     {
+        if (Lifecycle == SessionLifecycle.Completed)
+        {
+            return Result.Ok();
+        }
+
         if (Lifecycle != SessionLifecycle.Stopping)
         {
             return Result.Fail(new ChargingStopError(

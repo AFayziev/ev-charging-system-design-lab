@@ -237,6 +237,7 @@ transport failures or delayed acknowledgements do not regress confirmed outcomes
 | Starting | Unresolved effect | Starting; execution claim retained |
 | Active | Stop intent accepted | Stopping |
 | Stopping | Stop definitively rejected | Active |
+| Completed | Stop definitively rejected | Completed; only the stop is settled |
 | Stopping | Uncertain stop or missing final usage | Stopping; execution claim retained |
 | Active or Stopping | Matching terminal state and final usage | Completed |
 

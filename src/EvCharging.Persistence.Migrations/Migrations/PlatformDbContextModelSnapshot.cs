@@ -22,7 +22,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("charging")
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "charging_command_kind", new[] { "start", "stop" });
@@ -176,6 +176,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.HasIndex("SessionId")
                         .HasDatabaseName("ix_operations_session_id");
+
+                    b.HasIndex("AutomaticChecksEndAt", "Id")
+                        .HasDatabaseName("ix_operations_automatic_checks_end_at_id")
+                        .HasFilter("outcome IN ('pending', 'uncertain') AND authorized_attempt_count > 0");
 
                     b.HasIndex("DriverId", "Kind", "IdempotencyKey")
                         .IsUnique()

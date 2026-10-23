@@ -216,20 +216,8 @@ public sealed partial class ChargingCommandTests
         var stop = await PrepareStopAsync();
         using var lost = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
         await ExecuteStopAsync(stop.Id, lost);
-        using var queries = new ProviderTransport((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = JsonContent.Create(
-                new
-                {
-                    id = Guid.NewGuid(),
-                    externalOperationId = stop.PublicId,
-                    kind = "stop",
-                    outcome = "rejected",
-                    sessionId = (Guid?)null,
-                    appliedAt = (DateTimeOffset?)null,
-                    rejection = "session_not_found"
-                })
-        }));
+        using var queries = new ProviderTransport(
+            (_, _) => Task.FromResult(Rejected(stop.PublicId, "stop", "session_not_found")));
 
         await CheckStopAsync(stop.Id, queries);
 
@@ -400,8 +388,7 @@ public sealed partial class ChargingCommandTests
         var start = await PrepareAsync();
         using var transport = new ProviderTransport((_, _) => Task.FromResult(Applied(start.PublicId)));
         await ExecuteAsync(start.Id, transport);
-        await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseNpgsql(fixture.GetDataSource("platform_writer")).Options);
+        await using var database = WriterDatabase();
         var session = await database.Sessions.Include(value => value.Reservation)
             .SingleAsync(value => value.Id == start.SessionId);
         var stop = Operation.AcceptStop(session, Guid.NewGuid(), _clock.GetUtcNow()).Value;

@@ -1,5 +1,6 @@
 using EvCharging.Persistence;
 using EvCharging.Persistence.Extensions;
+using EvCharging.Persistence.Migrations;
 using EvCharging.Persistence.Migrations.SeedData;
 using JasperFx;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,8 @@ if (builder.Configuration["Messaging:ServiceName"] is { } serviceName)
     {
         options.ApplicationAssembly = typeof(Program).Assembly;
         options.AddMessageStorage(builder.Configuration, serviceName);
+        // A registered schedule makes Wolverine provision recurring-message storage; it never fires here.
+        options.Schedules.ScheduleRecurring<RecurringStorageProvisioningMessage>("0 0 1 1 *", TimeZoneInfo.Utc);
     });
     using var messagingHost = builder.Build();
     return await messagingHost.RunJasperFxCommands(args);

@@ -293,10 +293,10 @@ Replicas coordinate recovery of stranded inbox/outbox work within that boundary.
 
 Persisted scheduled messages represent expiry deadlines and delayed retries.
 Scheduled jobs route to the owning worker queues. Recurring producers rescan
-persisted due state after startup and periodically submit reconciliation or cleanup
-work. Handlers coordinate conditional transitions and recheck current state rather
+persisted due state on a durable schedule, run once per deployment, and submit
+reconciliation or cleanup work. Handlers coordinate conditional transitions and recheck current state rather
 than treating a scheduled message as authority; duplicate submissions are harmless.
-Overdue reservation discovery runs at startup and periodically, submitting expiry
+Overdue reservation discovery runs periodically, submitting expiry
 checks for bounded batches of active reservations past their expiry time. It reads
 reservation state directly and complements durable message recovery; duplicate
 checks cannot repeat a completed transition.
@@ -494,8 +494,10 @@ are disabled unless permitted by the integration contract. HTTP method or librar
 defaults do not establish safety. Effect retries have one owner and share the
 persisted operation limit across worker retries and redelivery. Outcome lookups
 use bounded request retries, timeouts, and concurrency, without a
-persisted per-operation query budget. Scheduled reconciliation has a bounded run;
-later manual or operator checks can obtain a result without authorizing an effect.
+persisted per-operation query budget. Scheduled reconciliation starts with a short
+run of checks and then continues at a slower cadence until evidence settles the
+operation; resends stay within the persisted request limit, and manual or operator
+checks can obtain a result sooner without authorizing an effect.
 [Lab defaults](lab.md#22-default-timings) set the baseline limits.
 
 Per-dependency deadlines, cancellation, circuit breaking, concurrency limits, and

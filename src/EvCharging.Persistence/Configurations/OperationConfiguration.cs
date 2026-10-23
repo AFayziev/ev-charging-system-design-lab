@@ -31,5 +31,8 @@ internal sealed class OperationConfiguration : IEntityTypeConfiguration<Operatio
             .HasForeignKey(operation => operation.DriverId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasIndex(operation => new { operation.DriverId, operation.Kind, operation.IdempotencyKey }).IsUnique();
+        // Serves FindUnreconciledChargingMessageHandler; the filter matches its predicate.
+        entity.HasIndex(operation => new { operation.AutomaticChecksEndAt, operation.Id })
+            .HasFilter("outcome IN ('pending', 'uncertain') AND authorized_attempt_count > 0");
     }
 }

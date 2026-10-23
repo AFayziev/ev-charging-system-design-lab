@@ -9,6 +9,7 @@ using EvCharging.Contracts.Observations;
 using EvCharging.Messaging;
 using EvCharging.ObservationStream;
 using EvCharging.Persistence.Extensions;
+using Wolverine;
 using Wolverine.EntityFrameworkCore;
 using Wolverine.ErrorHandling;
 using Wolverine.RabbitMQ;
@@ -22,10 +23,13 @@ builder.Services.AddOptions<ObservationClockSkewOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.AddObservationStreamConsumer<SessionEvidenceBatchHandler>();
-int maximumConcurrentCommands = builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentCommands");
-int maximumConcurrentChecks = builder.Configuration.GetValue<int>("ReservationExpiry:MaximumConcurrentChecks");
-var retryDelays = builder.Configuration.GetSection("MessagingFailures:TransientDatabaseRetryDelays")
-    .Get<TimeSpan[]>() ?? throw new InvalidOperationException("Database message retry delays are required.");
+// Wolverine is configured before the options pipeline runs; the pipeline validates these sections at startup.
+var chargingExecutionOptions = builder.Configuration.GetRequiredSection(ChargingExecutionOptions.SectionName)
+    .Get<ChargingExecutionOptions>()!;
+var reservationExpiryOptions = builder.Configuration.GetRequiredSection(ReservationExpiryOptions.SectionName)
+    .Get<ReservationExpiryOptions>()!;
+var messagingFailureOptions = builder.Configuration.GetRequiredSection(MessagingFailureOptions.SectionName)
+    .Get<MessagingFailureOptions>()!;
 builder.AddMessaging(
     options =>
     {
@@ -43,20 +47,32 @@ builder.AddMessaging(
         options.Policies.ForMessagesOfType<StopChargingMessage>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CheckChargingStopMessage>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CompleteChargingSessionMessage>().Audit(message => message.SessionId);
-        options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure).ScheduleRetry(retryDelays);
+        options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure)
+            .ScheduleRetry(messagingFailureOptions.TransientDatabaseRetryDelays);
         options.Policies
             .OnException(
                 exception => exception is not OperationCanceledException && !exception.IsTransientDatabaseFailure())
             .MoveToErrorQueue();
         options.Policies.UseDurableLocalQueues();
         options.LocalQueueFor<ExpireReservationMessage>()
-            .MaximumParallelMessages(maximumConcurrentChecks);
+            .MaximumParallelMessages(reservationExpiryOptions.MaximumConcurrentChecks);
         options.LocalQueueFor<FindOverdueReservationsMessage>().Sequential();
+        options.LocalQueueFor<FindUnreconciledChargingMessage>().Sequential();
+        options.Schedules.ScheduleRecurring<FindOverdueReservationsMessage>(
+            ParseCronSchedule(
+                $"{ReservationExpiryOptions.SectionName}:{nameof(ReservationExpiryOptions.ScanSchedule)}",
+                reservationExpiryOptions.ScanSchedule));
+        options.Schedules.ScheduleRecurring<FindUnreconciledChargingMessage>(
+            ParseCronSchedule(
+                $"{ChargingExecutionOptions.SectionName}:"
+                + nameof(ChargingExecutionOptions.ContinuedStatusCheckSchedule),
+                chargingExecutionOptions.ContinuedStatusCheckSchedule));
         options.ListenToRabbitQueue(ReservationEventTopology.ChargingQueue)
-            .MaximumParallelMessages(maximumConcurrentChecks);
+            .MaximumParallelMessages(reservationExpiryOptions.MaximumConcurrentChecks);
         foreach (string queue in ChargingCommandTopology.ListenerQueues)
         {
-            options.ListenToRabbitQueue(queue).MaximumParallelMessages(maximumConcurrentCommands);
+            options.ListenToRabbitQueue(queue)
+                .MaximumParallelMessages(chargingExecutionOptions.MaximumConcurrentCommands);
         }
     });
 builder.Services.AddApplicationServices();
@@ -68,3 +84,10 @@ builder.Services.AddHttpClient(
 using var host = builder.Build();
 
 await host.RunAsync();
+
+static CronSchedule ParseCronSchedule(string setting, string expression) =>
+    CronSchedule.TryParse(expression, TimeZoneInfo.Utc, out var schedule)
+        ? schedule
+        : throw new InvalidOperationException(
+            $"{setting} must be a cron expression no more frequent than every "
+            + $"{CronSchedule.MinimumCadence.TotalSeconds:0} seconds.");

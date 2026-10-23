@@ -18,11 +18,11 @@ export function getStartPresentation(
       badge:
         operation.outcome === "pending" ? "Start pending" : "Start unresolved",
       title: ended
-        ? "Automatic checking ended"
+        ? "Waiting to check again"
         : "Automatic status checks scheduled",
       text: ended
-        ? "Automatic checks have ended without a definite result. You can check status again. Charging may still have started; do not submit another start."
-        : "We will check for the station's result during a limited period. You can also check status yourself. Charging may still have started; do not submit another start.",
+        ? "Recent automatic checks did not get a definite result. We will keep checking automatically, and you can also check status yourself. Charging may still have started; do not submit another start."
+        : "We are checking for the station's result automatically. You can also check status yourself. Charging may still have started; do not submit another start.",
     };
   }
 

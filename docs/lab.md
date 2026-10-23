@@ -605,7 +605,7 @@ These are overridable experiment settings, not production availability targets.
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
 | Command request limit | 3 total requests per start or stop | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and command eligibility |
-| Automatic reconciliation | Every 5 seconds, 6 scheduled checks per run | Captured checking window closes one interval after the final scheduled check; manual or operator checks remain available |
+| Automatic reconciliation | Every 5 seconds, 6 scheduled checks; then continued checks until resolved, every 30 seconds at first and slowing to every 15 minutes as the operation ages (a quarter of its unresolved time) | The first window closes one interval after its final scheduled check. A scan every 30 seconds claims due operations, longest-waiting first and no more than the concurrent command limit, so checks resume after a worker or provider outage; manual or operator checks remain available |
 
 Wolverine scheduled work and retry policies bound automatic reconciliation under
 the [resilience boundaries](architecture.md#12-resilience-boundaries).
