@@ -122,7 +122,7 @@ public sealed class CreateReservationCommandHandler(
         database.Reservations.Add(reservation);
         Activity.Current?.SetTag("reservation.id", reservation.Id.ToString());
         outbox.Enroll(database);
-        await outbox.PublishAsync(new ReservationCreated(reservation.Id, reservation.EndsAt));
+        await outbox.PublishAsync(new ReservationCreatedEvent(reservation.Id, reservation.EndsAt));
 
         try
         {

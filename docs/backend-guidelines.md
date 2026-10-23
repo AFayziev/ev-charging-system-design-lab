@@ -49,6 +49,17 @@ retain their prescribed names and signatures.
   related handlers grouped by area as their number grows. Keep hosted services
   and provider integrations in their own responsibility-based directories. Add
   directories when needed; do not impose the API feature-slice layout on workers.
+- Name every type by its technical role, so a file list outside feature slices
+  shows what each component is:
+  - `<Action>Message`, handled by `<Action>MessageHandler`: asks one owner to do
+    work, which it may refuse after rechecking state. It goes to that owner's queue.
+  - `<Fact>Event`, handled by `<Fact>EventHandler`, or by a handler named for its
+    consumer when it handles several related events: states a fact that already
+    happened, for any number of independent subscribers the publisher does not
+    know. It goes through a topic.
+  - `<UseCase>Command` and `<UseCase>Query`: in-process API use cases only.
+  - Other components carry their role suffix, such as `Service`, `Publisher`,
+    `Options`, `Producer`, `BatchHandler`, `Result`, or `Extensions`.
 - Keep small feature slices in a file named after the use case, grouping its
   request/response types, child contract types, exclusive errors, and command/query
   handler. Mapping extensions may live in separate files. Request/response models

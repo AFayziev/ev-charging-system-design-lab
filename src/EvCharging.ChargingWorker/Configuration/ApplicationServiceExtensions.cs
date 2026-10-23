@@ -1,3 +1,4 @@
+using EvCharging.ChargingWorker.Handlers;
 using EvCharging.ChargingWorker.Scheduling;
 
 namespace EvCharging.ChargingWorker.Configuration;
@@ -25,13 +26,18 @@ internal static class ApplicationServiceExtensions
             .ValidateOnStart();
         services.AddOptions<ReservationExpiryOptions>()
             .BindConfiguration("ReservationExpiry")
-            .Validate(options => options.SweepInterval > TimeSpan.Zero, "The expiry sweep interval must be positive.")
-            .Validate(options => options.SweepBatchSize is > 0 and <= 1000, "The expiry sweep batch must be 1 to 1000.")
+            .Validate(
+                options => options.ScanInterval > TimeSpan.Zero,
+                "The overdue reservation scan interval must be positive.")
+            .Validate(
+                options => options.BatchSize is > 0 and <= 1000,
+                "The overdue reservation batch must be 1 to 1000.")
             .Validate(
                 options => options.MaximumConcurrentChecks is > 0 and <= 32,
                 "Concurrent expiry checks must be 1 to 32.")
             .ValidateOnStart();
-        services.AddHostedService<OverdueReservationSweep>();
+        services.AddPeriodicMessage<FindOverdueReservationsMessage, ReservationExpiryOptions>(
+            options => options.ScanInterval);
         return services;
     }
 }

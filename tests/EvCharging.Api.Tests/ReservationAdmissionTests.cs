@@ -47,7 +47,7 @@ public sealed class ReservationAdmissionTests(PlatformDatabaseFixture fixture) :
             messaging =>
             {
                 messaging.Policies.UseDurableLocalQueues();
-                messaging.PublishMessage<ReservationCreated>().ToLocalQueue("reservation-created-tests");
+                messaging.PublishMessage<ReservationCreatedEvent>().ToLocalQueue("reservation-created-tests");
                 messaging.Discovery.IncludeType<ReservationCreatedRecorderHandler>();
             });
 
@@ -160,16 +160,16 @@ public sealed class ReservationAdmissionTests(PlatformDatabaseFixture fixture) :
 
     public sealed class CreatedRecorder
     {
-        private readonly ConcurrentQueue<ReservationCreated> _events = new();
+        private readonly ConcurrentQueue<ReservationCreatedEvent> _events = new();
 
-        public void Add(ReservationCreated message) => _events.Enqueue(message);
+        public void Add(ReservationCreatedEvent message) => _events.Enqueue(message);
 
-        public ReservationCreated[] For(Guid reservationId) =>
+        public ReservationCreatedEvent[] For(Guid reservationId) =>
             [.. _events.Where(value => value.ReservationId == reservationId)];
     }
 
     public sealed class ReservationCreatedRecorderHandler(CreatedRecorder recorder)
     {
-        public void Handle(ReservationCreated message) => recorder.Add(message);
+        public void Handle(ReservationCreatedEvent message) => recorder.Add(message);
     }
 }

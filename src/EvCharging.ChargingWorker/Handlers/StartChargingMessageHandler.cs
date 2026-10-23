@@ -14,16 +14,16 @@ using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public sealed class StartChargingCommandHandler(
+public sealed class StartChargingMessageHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
     TimeProvider clock,
     IOptions<ChargingExecutionOptions> options,
     IDbContextOutbox outbox,
-    ILogger<StartChargingCommandHandler> logger)
+    ILogger<StartChargingMessageHandler> logger)
 {
     [NonTransactional]
-    public async Task HandleAsync(StartCharging message, CancellationToken cancellationToken)
+    public async Task HandleAsync(StartChargingMessage message, CancellationToken cancellationToken)
     {
         var attempt = await AuthorizeAsync(message, cancellationToken);
         if (attempt is null)
@@ -42,7 +42,7 @@ public sealed class StartChargingCommandHandler(
         await ApplyOutcomeAsync(attempt, result, cancellationToken);
     }
 
-    private async Task<Attempt?> AuthorizeAsync(StartCharging message, CancellationToken cancellationToken)
+    private async Task<Attempt?> AuthorizeAsync(StartChargingMessage message, CancellationToken cancellationToken)
     {
         var operationId = message.OperationId;
         int attemptNumber = message.AttemptNumber;
@@ -158,15 +158,14 @@ public sealed class StartChargingCommandHandler(
             return null;
         }
 
-        var attempt = await CommandExecution.AuthorizeAttemptAsync(
-            database,
+        var attempt = await database.AuthorizeAttemptAsync(
             transaction,
             outbox,
             options.Value,
             operation,
             attemptNumber,
             new ProviderBinding(providerId, integrationKey!, address),
-            () => new CheckChargingStart(operation.Id, Automatic: true),
+            () => new CheckChargingStartMessage(operation.Id, Automatic: true),
             authorizedAt,
             logger,
             cancellationToken);
@@ -175,8 +174,7 @@ public sealed class StartChargingCommandHandler(
 
     private Task ApplyOutcomeAsync(
         Attempt authorized, Result<ProviderCommandResult> result, CancellationToken cancellationToken) =>
-        CommandExecution.ApplyOutcomeAsync(
-            database,
+        database.ApplyOutcomeAsync(
             clock,
             logger,
             authorized,

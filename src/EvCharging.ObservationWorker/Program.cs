@@ -10,6 +10,6 @@ builder.Services.AddOptions<ObservationClockSkewOptions>()
     .BindConfiguration(ObservationClockSkewOptions.SectionName)
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.AddObservationStreamConsumer<ObservationProjector>();
+builder.AddObservationStreamConsumer<ObservationProjectionBatchHandler>();
 
 await builder.Build().RunAsync();

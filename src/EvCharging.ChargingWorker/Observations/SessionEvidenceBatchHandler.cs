@@ -14,10 +14,10 @@ namespace EvCharging.ChargingWorker.Observations;
 /// transaction. A reading already accounted for changes nothing, so a batch that failed part-way, or is delivered
 /// again, converges to the same rows when it is handled again.
 /// </summary>
-internal sealed class SessionEvidenceRecorder(
+internal sealed class SessionEvidenceBatchHandler(
     IServiceScopeFactory scopes,
     IOptions<ObservationClockSkewOptions> clockSkew,
-    ILogger<SessionEvidenceRecorder> logger) : IObservationBatchHandler
+    ILogger<SessionEvidenceBatchHandler> logger) : IObservationBatchHandler
 {
     public async Task HandleAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
     {
@@ -65,7 +65,7 @@ internal sealed class SessionEvidenceRecorder(
 
             if (finalised)
             {
-                await outbox.PublishAsync(new CompleteChargingSession(sessionId));
+                await outbox.PublishAsync(new CompleteChargingSessionMessage(sessionId));
             }
         }
 

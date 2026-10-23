@@ -75,7 +75,7 @@ public sealed class StopChargingCommandHandler(
 
         database.Operations.Add(accepted.Value);
         outbox.Enroll(database);
-        await outbox.PublishAsync(new StopCharging(accepted.Value.Id));
+        await outbox.PublishAsync(new StopChargingMessage(accepted.Value.Id));
         await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
         return Result.Ok(accepted.Value.ToStopResponse());
     }

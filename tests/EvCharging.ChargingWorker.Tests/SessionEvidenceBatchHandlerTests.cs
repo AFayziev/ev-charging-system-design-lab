@@ -24,7 +24,7 @@ using Xunit;
 
 namespace EvCharging.ChargingWorker.Tests;
 
-public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture) :
+public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fixture) :
     IClassFixture<PlatformDatabaseFixture>,
     IAsyncLifetime
 {
@@ -47,8 +47,8 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
                 "charging_messages");
             options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
             options.Policies.UseDurableLocalQueues();
-            options.PublishMessage<SessionCompleted>().ToLocalQueue("session-completed-tests");
-            options.Discovery.IncludeType<CompleteChargingSessionHandler>();
+            options.PublishMessage<SessionCompletedEvent>().ToLocalQueue("session-completed-tests");
+            options.Discovery.IncludeType<CompleteChargingSessionMessageHandler>();
             options.Discovery.IncludeType<SessionCompletedRecorderHandler>();
         });
         _messaging = builder.Build();
@@ -186,7 +186,8 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
         Assert.Equal(7.25m, saved.FinalEnergyKWh);
         Assert.Equal(Start.AddSeconds(20), saved.CompletedAt);
         var completed = Assert.Single(Completions.For(session.Id));
-        Assert.Equal(new SessionCompleted(session.Id, session.ReservationId, 7.25m, Start.AddSeconds(20)), completed);
+        Assert.Equal(
+            new SessionCompletedEvent(session.Id, session.ReservationId, 7.25m, Start.AddSeconds(20)), completed);
     }
 
     [Fact]
@@ -255,10 +256,10 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
     private CompletionRecorder Completions => _messaging!.Services.GetRequiredService<CompletionRecorder>();
 
     private Task HandleAsync(params ObservationEnvelope[] envelopes) =>
-        new SessionEvidenceRecorder(
+        new SessionEvidenceBatchHandler(
             _messaging!.Services.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(new ObservationClockSkewOptions { ClockSkew = TimeSpan.FromSeconds(5) }),
-            NullLogger<SessionEvidenceRecorder>.Instance)
+            NullLogger<SessionEvidenceBatchHandler>.Instance)
             .HandleAsync(envelopes, CancellationToken.None);
 
     // Waits for the completion job the batch enrolled, and for the event that job publishes.
@@ -360,15 +361,15 @@ public sealed class SessionEvidenceRecorderTests(PlatformDatabaseFixture fixture
 
     public sealed class CompletionRecorder
     {
-        private readonly System.Collections.Concurrent.ConcurrentQueue<SessionCompleted> _events = new();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<SessionCompletedEvent> _events = new();
 
-        public void Add(SessionCompleted message) => _events.Enqueue(message);
+        public void Add(SessionCompletedEvent message) => _events.Enqueue(message);
 
-        public SessionCompleted[] For(Guid sessionId) => [.. _events.Where(value => value.SessionId == sessionId)];
+        public SessionCompletedEvent[] For(Guid sessionId) => [.. _events.Where(value => value.SessionId == sessionId)];
     }
 
     public sealed class SessionCompletedRecorderHandler(CompletionRecorder recorder)
     {
-        public void Handle(SessionCompleted message) => recorder.Add(message);
+        public void Handle(SessionCompletedEvent message) => recorder.Add(message);
     }
 }

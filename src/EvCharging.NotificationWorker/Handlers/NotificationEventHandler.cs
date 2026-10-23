@@ -11,11 +11,11 @@ using Wolverine.Attributes;
 
 namespace EvCharging.NotificationWorker.Handlers;
 
-public static class ReservationNotificationHandler
+public static class NotificationEventHandler
 {
     [Transactional]
-    public static Task<SendNotification?> HandleAsync(
-        ReservationCreated message,
+    public static Task<SendNotificationMessage?> HandleAsync(
+        ReservationCreatedEvent message,
         PlatformDbContext database,
         ReservationEmailRenderer renderer,
         TimeProvider clock,
@@ -30,8 +30,8 @@ public static class ReservationNotificationHandler
             cancellationToken);
 
     [Transactional]
-    public static Task<SendNotification?> HandleAsync(
-        ReservationCancelled message,
+    public static Task<SendNotificationMessage?> HandleAsync(
+        ReservationCancelledEvent message,
         PlatformDbContext database,
         ReservationEmailRenderer renderer,
         TimeProvider clock,
@@ -46,8 +46,8 @@ public static class ReservationNotificationHandler
             cancellationToken);
 
     [Transactional]
-    public static Task<SendNotification?> HandleAsync(
-        ReservationExpired message,
+    public static Task<SendNotificationMessage?> HandleAsync(
+        ReservationExpiredEvent message,
         PlatformDbContext database,
         ReservationEmailRenderer renderer,
         TimeProvider clock,
@@ -62,8 +62,8 @@ public static class ReservationNotificationHandler
             cancellationToken);
 
     [Transactional]
-    public static Task<SendNotification?> HandleAsync(
-        SessionCompleted message,
+    public static Task<SendNotificationMessage?> HandleAsync(
+        SessionCompletedEvent message,
         PlatformDbContext database,
         ReservationEmailRenderer renderer,
         TimeProvider clock,
@@ -77,10 +77,10 @@ public static class ReservationNotificationHandler
             clock,
             cancellationToken);
 
-    private static async Task<SendNotification?> PrepareAsync(
+    private static async Task<SendNotificationMessage?> PrepareAsync(
         Guid reservationId,
         ReservationNotificationKind kind,
-        SessionCompleted? completion,
+        SessionCompletedEvent? completion,
         PlatformDbContext database,
         ReservationEmailRenderer renderer,
         TimeProvider clock,
@@ -111,13 +111,13 @@ public static class ReservationNotificationHandler
         });
         Activity.Current?.SetTag("reservation.public_id", reservation.PublicId.ToString());
 
-        return new SendNotification(notification.Id);
+        return new SendNotificationMessage(notification.Id);
     }
 
     private static Notification CreateNotification(
         Reservation reservation,
         ReservationNotificationKind kind,
-        SessionCompleted? completion,
+        SessionCompletedEvent? completion,
         ReservationEmailRenderer renderer,
         DateTimeOffset preparedAt)
     {

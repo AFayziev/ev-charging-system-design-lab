@@ -47,12 +47,12 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         var builder = Host.CreateApplicationBuilder();
         builder.UseWolverine(options =>
         {
-            options.ApplicationAssembly = typeof(ReservationCreated).Assembly;
+            options.ApplicationAssembly = typeof(ReservationCreatedEvent).Assembly;
             options.UseRabbitMq(rabbit).AutoProvision();
-            options.PublishMessage<ReservationCreated>().ToRabbitQueue("notification-reservation-events");
-            options.PublishMessage<ReservationCancelled>().ToRabbitQueue("notification-reservation-events");
-            options.PublishMessage<ReservationExpired>().ToRabbitQueue("notification-reservation-events");
-            options.PublishMessage<SessionCompleted>().ToRabbitQueue(SessionEventTopology.NotificationQueue);
+            options.PublishMessage<ReservationCreatedEvent>().ToRabbitQueue("notification-reservation-events");
+            options.PublishMessage<ReservationCancelledEvent>().ToRabbitQueue("notification-reservation-events");
+            options.PublishMessage<ReservationExpiredEvent>().ToRabbitQueue("notification-reservation-events");
+            options.PublishMessage<SessionCompletedEvent>().ToRabbitQueue(SessionEventTopology.NotificationQueue);
         });
         _publisher = builder.Build();
         await _publisher.StartAsync();
@@ -150,9 +150,9 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
             .ExecuteUpdateAsync(setters => setters.SetProperty(driver => driver.Email, "current@example.test"));
         object message = kind switch
         {
-            ReservationNotificationKind.Created => new ReservationCreated(reservation.Id, reservation.EndsAt),
-            ReservationNotificationKind.Cancelled => new ReservationCancelled(reservation.Id),
-            ReservationNotificationKind.Expired => new ReservationExpired(reservation.Id, occurredAt),
+            ReservationNotificationKind.Created => new ReservationCreatedEvent(reservation.Id, reservation.EndsAt),
+            ReservationNotificationKind.Cancelled => new ReservationCancelledEvent(reservation.Id),
+            ReservationNotificationKind.Expired => new ReservationExpiredEvent(reservation.Id, occurredAt),
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
         await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
@@ -197,7 +197,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
     {
         var reservation = await BookAsync();
         var completedAt = reservation.StartsAt.AddMinutes(30);
-        var message = new SessionCompleted(Guid.NewGuid(), reservation.Id, 7.25m, completedAt);
+        var message = new SessionCompletedEvent(Guid.NewGuid(), reservation.Id, 7.25m, completedAt);
 
         await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
 
@@ -229,7 +229,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
     {
         var reservation = await BookAsync();
         int originalNotificationCount = await Database.Notifications.CountAsync();
-        var message = new ReservationCreated(reservation.Id, reservation.EndsAt);
+        var message = new ReservationCreatedEvent(reservation.Id, reservation.EndsAt);
         await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
             Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45))));
         var notification = await NotificationAsync(reservation.Id, ReservationNotificationKind.Created);
@@ -258,7 +258,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         }
 
         int originalNotificationCount = await Database.Notifications.CountAsync();
-        await Bus.PublishAsync(new ReservationCreated(id, reservation.EndsAt));
+        await Bus.PublishAsync(new ReservationCreatedEvent(id, reservation.EndsAt));
         await AwaitAsync(() => Task.FromResult(_failures.Contains(id)));
         Assert.False(await Database.ReservationNotifications.AnyAsync(value => value.ReservationId == id));
         Assert.Equal(originalNotificationCount, await Database.Notifications.CountAsync());
@@ -288,7 +288,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
             """);
         try
         {
-            await Bus.PublishAsync(new ReservationCreated(reservation.Id, reservation.EndsAt));
+            await Bus.PublishAsync(new ReservationCreatedEvent(reservation.Id, reservation.EndsAt));
             await AwaitAsync(() => Task.FromResult(_failures.Contains(reservation.Id)));
             Assert.False(
                 await Database.ReservationNotifications.AnyAsync(value => value.ReservationId == reservation.Id));
@@ -303,7 +303,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
         }
 
         await Bus.InvokeAsync(
-            new ReservationCreated(reservation.Id, reservation.EndsAt), timeout: TimeSpan.FromSeconds(45));
+            new ReservationCreatedEvent(reservation.Id, reservation.EndsAt), timeout: TimeSpan.FromSeconds(45));
         var notification = await NotificationAsync(reservation.Id, ReservationNotificationKind.Created);
         await AssertCapturedAsync(notification);
         Assert.Equal(
@@ -334,7 +334,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
             """);
         try
         {
-            var message = new ReservationCreated(reservation.Id, reservation.EndsAt);
+            var message = new ReservationCreatedEvent(reservation.Id, reservation.EndsAt);
             await Bus.InvokeAsync(message, timeout: TimeSpan.FromSeconds(45));
             var notification = await NotificationAsync(reservation.Id, ReservationNotificationKind.Created);
             await AwaitAsync(() => Database.NotificationDeliveryAttempts.AnyAsync(value =>
@@ -363,7 +363,7 @@ public sealed class ReservationNotificationTests(AppHostFixture fixture) : IAsyn
 
             var unrelated = await BookAsync();
             await Bus.InvokeAsync(
-                new ReservationCreated(unrelated.Id, unrelated.EndsAt), timeout: TimeSpan.FromSeconds(45));
+                new ReservationCreatedEvent(unrelated.Id, unrelated.EndsAt), timeout: TimeSpan.FromSeconds(45));
             await AssertCapturedAsync(await NotificationAsync(unrelated.Id, ReservationNotificationKind.Created));
         }
         finally

@@ -21,7 +21,7 @@ builder.Services.AddOptions<ObservationClockSkewOptions>()
     .BindConfiguration(ObservationClockSkewOptions.SectionName)
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.AddObservationStreamConsumer<SessionEvidenceRecorder>();
+builder.AddObservationStreamConsumer<SessionEvidenceBatchHandler>();
 int maximumConcurrentCommands = builder.Configuration.GetValue<int>("ChargingExecution:MaximumConcurrentCommands");
 int maximumConcurrentChecks = builder.Configuration.GetValue<int>("ReservationExpiry:MaximumConcurrentChecks");
 var retryDelays = builder.Configuration.GetSection("MessagingFailures:TransientDatabaseRetryDelays")
@@ -36,22 +36,22 @@ builder.AddMessaging(
         options.AddChargingCommandRouting();
         options.AddSessionEventRouting();
         options.Policies.LogMessageStarting(LogLevel.Information);
-        options.Policies.ForMessagesOfType<ReservationCreated>().Audit(message => message.ReservationId);
-        options.Policies.ForMessagesOfType<ExpireReservation>().Audit(message => message.ReservationId);
-        options.Policies.ForMessagesOfType<StartCharging>().Audit(message => message.OperationId);
-        options.Policies.ForMessagesOfType<CheckChargingStart>().Audit(message => message.OperationId);
-        options.Policies.ForMessagesOfType<StopCharging>().Audit(message => message.OperationId);
-        options.Policies.ForMessagesOfType<CheckChargingStop>().Audit(message => message.OperationId);
-        options.Policies.ForMessagesOfType<CompleteChargingSession>().Audit(message => message.SessionId);
+        options.Policies.ForMessagesOfType<ReservationCreatedEvent>().Audit(message => message.ReservationId);
+        options.Policies.ForMessagesOfType<ExpireReservationMessage>().Audit(message => message.ReservationId);
+        options.Policies.ForMessagesOfType<StartChargingMessage>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<CheckChargingStartMessage>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<StopChargingMessage>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<CheckChargingStopMessage>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<CompleteChargingSessionMessage>().Audit(message => message.SessionId);
         options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure).ScheduleRetry(retryDelays);
         options.Policies
             .OnException(
                 exception => exception is not OperationCanceledException && !exception.IsTransientDatabaseFailure())
             .MoveToErrorQueue();
         options.Policies.UseDurableLocalQueues();
-        options.LocalQueueFor<ExpireReservation>()
+        options.LocalQueueFor<ExpireReservationMessage>()
             .MaximumParallelMessages(maximumConcurrentChecks);
-        options.LocalQueueFor<SweepOverdueReservations>().Sequential();
+        options.LocalQueueFor<FindOverdueReservationsMessage>().Sequential();
         options.ListenToRabbitQueue(ReservationEventTopology.ChargingQueue)
             .MaximumParallelMessages(maximumConcurrentChecks);
         foreach (string queue in ChargingCommandTopology.ListenerQueues)

@@ -8,11 +8,11 @@ using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public static class ReservationCreatedHandler
+public static class ReservationCreatedEventHandler
 {
     [Transactional]
     public static async Task<OutgoingMessages> HandleAsync(
-        ReservationCreated message, PlatformDbContext database, CancellationToken cancellationToken)
+        ReservationCreatedEvent message, PlatformDbContext database, CancellationToken cancellationToken)
     {
         var reservation = await database.Reservations
             .AsNoTracking()
@@ -21,7 +21,7 @@ public static class ReservationCreatedHandler
         if (reservation?.State == ReservationState.Active)
         {
             Activity.Current?.SetTag("reservation.public_id", reservation.PublicId.ToString());
-            outgoing.Schedule(new ExpireReservation(reservation.Id), reservation.ArrivalDeadline);
+            outgoing.Schedule(new ExpireReservationMessage(reservation.Id), reservation.ArrivalDeadline);
         }
 
         return outgoing;

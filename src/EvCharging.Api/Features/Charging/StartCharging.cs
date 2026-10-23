@@ -87,7 +87,7 @@ public sealed class StartChargingCommandHandler(
     {
         database.Operations.Add(operation);
         outbox.Enroll(database);
-        await outbox.PublishAsync(new StartCharging(operation.Id));
+        await outbox.PublishAsync(new StartChargingMessage(operation.Id));
         try
         {
             await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);

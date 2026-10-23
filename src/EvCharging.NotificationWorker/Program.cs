@@ -19,7 +19,7 @@ builder.AddMessaging(
         options.CodeGeneration.AlwaysUseServiceLocationFor<INotificationDelivery>();
         options.AddReservationEventRouting();
         options.Policies.LogMessageStarting(LogLevel.Information);
-        options.PublishMessage<SendNotification>().ToRabbitQueue("notification-send");
+        options.PublishMessage<SendNotificationMessage>().ToRabbitQueue("notification-send");
     });
 
 using var host = builder.Build();

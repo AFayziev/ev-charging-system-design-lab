@@ -33,13 +33,15 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
             await using var database = CreateDatabase();
             try
             {
-                await SendNotificationHandler.HandleAsync(new(notification.Id), database, delivery, _clock, default);
+                await SendNotificationMessageHandler.HandleAsync(
+                    new(notification.Id), database, delivery, _clock, default);
             }
             catch (DbUpdateException exception) when (exception.IsNotificationDeliveryConflict())
             {
                 // Retry an authorization conflict with a fresh scope, as the Wolverine policy does.
                 await using var retry = CreateDatabase();
-                await SendNotificationHandler.HandleAsync(new(notification.Id), retry, delivery, _clock, default);
+                await SendNotificationMessageHandler.HandleAsync(
+                    new(notification.Id), retry, delivery, _clock, default);
             }
         }));
         Assert.Equal(1, delivery.Calls);
@@ -56,15 +58,15 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
         var notification = await PrepareAsync();
         await using (var database = CreateDatabase())
         {
-            await Assert.ThrowsAsync<OperationCanceledException>(() => SendNotificationHandler.HandleAsync(
+            await Assert.ThrowsAsync<OperationCanceledException>(() => SendNotificationMessageHandler.HandleAsync(
                 new(notification.Id), database, new CancelledDelivery(), _clock, default));
         }
 
         var other = await PrepareAsync();
         var delivery = new StubDelivery(new(NotificationDeliveryOutcome.Captured, "other-id"));
         await using var restarted = CreateDatabase();
-        await SendNotificationHandler.HandleAsync(new(notification.Id), restarted, delivery, _clock, default);
-        await SendNotificationHandler.HandleAsync(new(other.Id), restarted, delivery, _clock, default);
+        await SendNotificationMessageHandler.HandleAsync(new(notification.Id), restarted, delivery, _clock, default);
+        await SendNotificationMessageHandler.HandleAsync(new(other.Id), restarted, delivery, _clock, default);
         Assert.Equal(1, delivery.Calls);
         var interrupted = await restarted.NotificationDeliveryAttempts.AsNoTracking()
             .SingleAsync(value => value.NotificationId == notification.Id);
@@ -80,8 +82,10 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
         var notification = await PrepareAsync();
         var delivery = new StubDelivery(new(outcome, FailureCode: "test_failure"));
         await using var database = CreateDatabase();
-        await SendNotificationHandler.HandleAsync(new(notification.Id), database, delivery, _clock, default);
-        await SendNotificationHandler.HandleAsync(new(notification.Id), database, delivery, _clock, default);
+        await SendNotificationMessageHandler.HandleAsync(
+            new(notification.Id), database, delivery, _clock, default);
+        await SendNotificationMessageHandler.HandleAsync(
+            new(notification.Id), database, delivery, _clock, default);
         Assert.Equal(1, delivery.Calls);
         Assert.Equal(
             outcome,
@@ -109,21 +113,22 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
         {
             options.UseEntityFrameworkCoreTransactions();
             options.Discovery.DisableConventionalDiscovery();
-            options.Discovery.IncludeType(typeof(SendNotificationHandler));
+            options.Discovery.IncludeType(typeof(SendNotificationMessageHandler));
             options.CodeGeneration.AlwaysUseServiceLocationFor<INotificationDelivery>();
             options.PersistMessagesWithPostgresql(
                 fixture.GetConnectionString("platform_migrator"), "notification_messages");
             options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
             options.StubAllExternalTransports();
             options.Policies.UseDurableLocalQueues();
-            options.PublishMessage<SendNotification>().ToLocalQueue("notification-delivery-test");
+            options.PublishMessage<SendNotificationMessage>().ToLocalQueue("notification-delivery-test");
             options.Durability.ScheduledJobPollingTime = TimeSpan.FromMilliseconds(50);
         });
         using var host = builder.Build();
         await host.StartAsync();
         try
         {
-            await host.Services.GetRequiredService<IMessageBus>().SendAsync(new SendNotification(notification.Id));
+            await host.Services.GetRequiredService<IMessageBus>()
+                .SendAsync(new SendNotificationMessage(notification.Id));
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await using var database = CreateDatabase();
             if (recovers)

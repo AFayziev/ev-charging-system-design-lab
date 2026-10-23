@@ -30,7 +30,8 @@ public sealed partial class ChargingCommandTests
             Assert.Equal(1, saved.AuthorizedAttemptCount);
             Assert.Equal(3, saved.RequestLimit);
             Assert.Equal(attempt.AuthorizedAt.AddMinutes(3), saved.AutomaticChecksEndAt);
-            Assert.Equal(2, (await ScheduledAsync<CheckChargingStop>(stop.Id, value => value.OperationId)).Length);
+            Assert.Equal(
+                2, (await ScheduledAsync<CheckChargingStopMessage>(stop.Id, value => value.OperationId)).Length);
             Assert.Null(attempt.FinishedAt);
             Assert.Equal("/commands/stop", request.RequestUri!.AbsolutePath);
             Assert.Equal(stop.PublicId.ToString(), request.Headers.GetValues("Idempotency-Key").Single());
@@ -125,7 +126,7 @@ public sealed partial class ChargingCommandTests
         Assert.Equal(CommandOutcome.Uncertain, saved.Outcome);
         Assert.Equal(SessionLifecycle.Stopping, saved.Session!.Lifecycle);
         var attempt = await database.Attempts.SingleAsync(value => value.OperationId == stop.Id);
-        Assert.Equal(CommandExecution.TransportFailureCode, attempt.FailureCode);
+        Assert.Equal(CommandExecutionExtensions.TransportFailureCode, attempt.FailureCode);
         Assert.NotNull(attempt.FinishedAt);
     }
 
@@ -250,7 +251,7 @@ public sealed partial class ChargingCommandTests
 
         var sent = await CheckStopAsync(stop.Id, queries);
 
-        Assert.Equal([new StopCharging(stop.Id, 2)], sent);
+        Assert.Equal([new StopChargingMessage(stop.Id, 2)], sent);
         Assert.Equal(1, queries.Calls);
     }
 
@@ -309,7 +310,7 @@ public sealed partial class ChargingCommandTests
         var attempt = await settled.Attempts.SingleAsync(value => value.OperationId == stop.Id);
         Assert.NotNull(attempt.FinishedAt);
         Assert.Equal(CommandOutcome.Confirmed, attempt.Outcome);
-        Assert.Equal(CommandExecution.UnrecordedResponseCode, attempt.FailureCode);
+        Assert.Equal(CommandExecutionExtensions.UnrecordedResponseCode, attempt.FailureCode);
     }
 
     [Fact]
@@ -322,11 +323,11 @@ public sealed partial class ChargingCommandTests
 
         var sent = await CheckStopAsync(stop.Id, queries);
 
-        Assert.Equal([new StopCharging(stop.Id, 2)], sent);
+        Assert.Equal([new StopChargingMessage(stop.Id, 2)], sent);
         await using var database = Database();
         var attempt = await database.Attempts.AsNoTracking().SingleAsync(value => value.OperationId == stop.Id);
         Assert.NotNull(attempt.FinishedAt);
-        Assert.Equal(CommandExecution.UnrecordedResponseCode, attempt.FailureCode);
+        Assert.Equal(CommandExecutionExtensions.UnrecordedResponseCode, attempt.FailureCode);
         Assert.Equal(
             CommandOutcome.Uncertain,
             (await database.Operations.AsNoTracking().SingleAsync(value => value.Id == stop.Id)).Outcome);
@@ -428,45 +429,45 @@ public sealed partial class ChargingCommandTests
     {
         using var host = CreateProviderHost(database, transport);
         using var scope = _messaging!.Services.CreateScope();
-        var handler = new StopChargingCommandHandler(
+        var handler = new StopChargingMessageHandler(
             database,
             host.Services.GetRequiredService<ChargingProviderClientFactory>(),
             _clock,
             Options.Create(TestExecutionOptions()),
             scope.ServiceProvider.GetRequiredService<IDbContextOutbox>(),
-            NullLogger<StopChargingCommandHandler>.Instance);
+            NullLogger<StopChargingMessageHandler>.Instance);
         await handler.HandleAsync(new(operationId, attemptNumber), cancellationToken);
     }
 
-    private async Task<StopCharging[]> CheckStopAsync(Guid operationId, ProviderTransport queries)
+    private async Task<StopChargingMessage[]> CheckStopAsync(Guid operationId, ProviderTransport queries)
     {
         await using var database = Database();
         using var host = CreateProviderHost(database, queries);
         var messaging = _messaging!;
         await messaging.TrackActivity().Timeout(TimeSpan.FromSeconds(15)).ExecuteAndWaitAsync(
-            bus => new CheckChargingStopCommandHandler(
+            bus => new CheckChargingStopMessageHandler(
                 database,
                 host.Services.GetRequiredService<ChargingProviderClientFactory>(),
                 _clock,
                 Options.Create(TestExecutionOptions()),
                 bus,
-                NullLogger<CheckChargingStopCommandHandler>.Instance)
+                NullLogger<CheckChargingStopMessageHandler>.Instance)
                 .HandleAsync(new(operationId), CancellationToken.None));
         return messaging.Services.GetRequiredService<StopRecorder>().For(operationId);
     }
 
     public sealed class StopRecorder
     {
-        private readonly System.Collections.Concurrent.ConcurrentQueue<StopCharging> _messages = new();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<StopChargingMessage> _messages = new();
 
-        public void Add(StopCharging message) => _messages.Enqueue(message);
+        public void Add(StopChargingMessage message) => _messages.Enqueue(message);
 
-        public StopCharging[] For(Guid operationId) =>
+        public StopChargingMessage[] For(Guid operationId) =>
             [.. _messages.Where(value => value.OperationId == operationId)];
     }
 
     public sealed class StopChargingRecorderHandler(StopRecorder recorder)
     {
-        public void Handle(StopCharging message) => recorder.Add(message);
+        public void Handle(StopChargingMessage message) => recorder.Add(message);
     }
 }

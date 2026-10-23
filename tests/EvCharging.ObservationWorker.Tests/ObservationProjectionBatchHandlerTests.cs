@@ -8,7 +8,7 @@ using Xunit;
 
 namespace EvCharging.ObservationWorker.Tests;
 
-public sealed class ObservationProjectorTests(MongoDbFixture fixture) : IClassFixture<MongoDbFixture>
+public sealed class ObservationProjectionBatchHandlerTests(MongoDbFixture fixture) : IClassFixture<MongoDbFixture>
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 21, 9, 0, 0, TimeSpan.Zero);
     private static readonly Guid Session = Guid.NewGuid();
@@ -122,10 +122,10 @@ public sealed class ObservationProjectorTests(MongoDbFixture fixture) : IClassFi
     }
 
     private Task Project(params ObservationEnvelope[] envelopes) =>
-        new ObservationProjector(
+        new ObservationProjectionBatchHandler(
             _store,
             Options.Create(new ObservationClockSkewOptions { ClockSkew = TimeSpan.FromSeconds(5) }),
-            NullLogger<ObservationProjector>.Instance)
+            NullLogger<ObservationProjectionBatchHandler>.Instance)
             .HandleAsync(envelopes, CancellationToken.None);
 
     private Task<long> HistoryCountAsync() =>

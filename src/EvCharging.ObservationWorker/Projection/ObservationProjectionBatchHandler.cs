@@ -10,10 +10,10 @@ namespace EvCharging.ObservationWorker.Projection;
 /// Projects accepted observations into the history and latest views. Every write is idempotent, so a batch that
 /// failed part-way, or is delivered again, converges to the same documents when it is projected again.
 /// </summary>
-internal sealed class ObservationProjector(
+internal sealed class ObservationProjectionBatchHandler(
     ObservationStore store,
     IOptions<ObservationClockSkewOptions> clockSkew,
-    ILogger<ObservationProjector> logger) : IObservationBatchHandler
+    ILogger<ObservationProjectionBatchHandler> logger) : IObservationBatchHandler
 {
     public async Task HandleAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
     {

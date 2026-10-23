@@ -9,13 +9,11 @@ using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public sealed record SweepOverdueReservations;
-
-public static class SweepOverdueReservationsHandler
+public static class FindOverdueReservationsMessageHandler
 {
     [Transactional]
     public static async Task<OutgoingMessages> HandleAsync(
-        SweepOverdueReservations message,
+        FindOverdueReservationsMessage message,
         PlatformDbContext database,
         TimeProvider clock,
         IOptions<ReservationExpiryOptions> options,
@@ -28,12 +26,12 @@ public static class SweepOverdueReservationsHandler
             .OrderBy(reservation => reservation.ArrivalDeadline)
             .ThenBy(reservation => reservation.Id)
             .Select(reservation => reservation.Id)
-            .Take(options.Value.SweepBatchSize)
+            .Take(options.Value.BatchSize)
             .ToListAsync(cancellationToken);
         var outgoing = new OutgoingMessages();
         foreach (var reservationId in overdueIds)
         {
-            outgoing.Add(new ExpireReservation(reservationId));
+            outgoing.Add(new ExpireReservationMessage(reservationId));
         }
 
         return outgoing;

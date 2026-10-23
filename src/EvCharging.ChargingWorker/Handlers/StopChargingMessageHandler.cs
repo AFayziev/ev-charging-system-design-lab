@@ -12,16 +12,16 @@ using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public sealed class StopChargingCommandHandler(
+public sealed class StopChargingMessageHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
     TimeProvider clock,
     IOptions<ChargingExecutionOptions> options,
     IDbContextOutbox outbox,
-    ILogger<StopChargingCommandHandler> logger)
+    ILogger<StopChargingMessageHandler> logger)
 {
     [NonTransactional]
-    public async Task HandleAsync(StopCharging message, CancellationToken cancellationToken)
+    public async Task HandleAsync(StopChargingMessage message, CancellationToken cancellationToken)
     {
         var attempt = await AuthorizeAsync(message, cancellationToken);
         if (attempt is null)
@@ -33,8 +33,7 @@ public sealed class StopChargingCommandHandler(
         using var provider = providers.Create(attempt.IntegrationKey);
         var result = await provider.StopAsync(attempt.OperationPublicId, attempt.SessionPublicId, cancellationToken);
         database.ChangeTracker.Clear();
-        await CommandExecution.ApplyOutcomeAsync(
-            database,
+        await database.ApplyOutcomeAsync(
             clock,
             logger,
             attempt,
@@ -48,7 +47,7 @@ public sealed class StopChargingCommandHandler(
             cancellationToken);
     }
 
-    private async Task<Attempt?> AuthorizeAsync(StopCharging message, CancellationToken cancellationToken)
+    private async Task<Attempt?> AuthorizeAsync(StopChargingMessage message, CancellationToken cancellationToken)
     {
         var operationId = message.OperationId;
         int attemptNumber = message.AttemptNumber;
@@ -104,8 +103,7 @@ public sealed class StopChargingCommandHandler(
             ?? throw new InvalidOperationException("The session has no recorded start request.");
         providers.ValidateIntegration(started.IntegrationKey);
 
-        return await CommandExecution.AuthorizeAttemptAsync(
-            database,
+        return await database.AuthorizeAttemptAsync(
             transaction,
             outbox,
             options.Value,
@@ -115,7 +113,7 @@ public sealed class StopChargingCommandHandler(
                 providerId,
                 started.IntegrationKey,
                 new(started.ProviderStationId, started.ProviderChargerId, started.ProviderConnectorId)),
-            () => new CheckChargingStop(operation.Id),
+            () => new CheckChargingStopMessage(operation.Id),
             clock.GetUtcNow(),
             logger,
             cancellationToken);

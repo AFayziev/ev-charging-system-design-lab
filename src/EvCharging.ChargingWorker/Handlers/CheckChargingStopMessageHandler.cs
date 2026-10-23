@@ -10,18 +10,18 @@ using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public sealed class CheckChargingStopCommandHandler(
+public sealed class CheckChargingStopMessageHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
     TimeProvider clock,
     IOptions<ChargingExecutionOptions> options,
     IMessageBus bus,
-    ILogger<CheckChargingStopCommandHandler> logger)
+    ILogger<CheckChargingStopMessageHandler> logger)
 {
     [NonTransactional]
-    public Task<ChargingCheckResult> HandleAsync(CheckChargingStop message, CancellationToken cancellationToken) =>
-        CommandExecution.RunAutomaticCheckAsync(
-            database,
+    public Task<ChargingCheckResult> HandleAsync(
+        CheckChargingStopMessage message, CancellationToken cancellationToken) =>
+        database.RunAutomaticCheckAsync(
             clock,
             message.OperationId,
             token => CheckAsync(message.OperationId, token),
@@ -62,21 +62,19 @@ public sealed class CheckChargingStopCommandHandler(
 
         if (lookup.Value is not { } command)
         {
-            await CommandExecution.ResendAsync(
-                database,
+            await database.ResendAsync(
                 clock,
                 bus,
                 logger,
                 operation,
                 attempt,
                 options.Value.AutomaticStatusCheckInterval,
-                number => new StopCharging(operation.Id, number),
+                number => new StopChargingMessage(operation.Id, number),
                 cancellationToken);
             return Unresolved(operation, ChargingCheckOutcome.Unresolved);
         }
 
-        await CommandExecution.ResolveAsync(
-            database,
+        await database.ResolveAsync(
             clock,
             logger,
             operation,

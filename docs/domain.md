@@ -402,6 +402,6 @@ physical charger firmware coverage.
 | receipt | Session summary for the lab's usage document |
 
 Naming follows canonical nouns across documentation and contracts; casing follows
-language conventions. `SessionCompleted` is a fact; `GenerateSessionSummary` is
+language conventions. `SessionCompletedEvent` is a fact; `GenerateSessionSummaryMessage` is
 work. UI labels can be friendlier while retaining semantics: `Confirming start`
 for pending/uncertain execution, `Last reported charging` for stale observations.

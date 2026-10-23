@@ -7,15 +7,15 @@ using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public sealed class CompleteChargingSessionHandler
+public sealed class CompleteChargingSessionMessageHandler
 {
     /// <summary>
     /// Completes the session from its recorded final reading. A session that is already finished, or has no final
     /// reading, is left as it is, so a duplicate or replayed job changes nothing.
     /// </summary>
     [Transactional]
-    public async Task<SessionCompleted?> HandleAsync(
-        CompleteChargingSession message,
+    public async Task<SessionCompletedEvent?> HandleAsync(
+        CompleteChargingSessionMessage message,
         PlatformDbContext database,
         CancellationToken cancellationToken)
     {
@@ -38,6 +38,6 @@ public sealed class CompleteChargingSessionHandler
             return null;
         }
 
-        return new SessionCompleted(session.Id, session.ReservationId, energyKWh, endedAt);
+        return new SessionCompletedEvent(session.Id, session.ReservationId, energyKWh, endedAt);
     }
 }

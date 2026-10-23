@@ -6,11 +6,11 @@ using Wolverine.Attributes;
 
 namespace EvCharging.NotificationWorker.Handlers;
 
-public static class SendNotificationHandler
+public static class SendNotificationMessageHandler
 {
     [NonTransactional]
     public static async Task HandleAsync(
-        SendNotification message,
+        SendNotificationMessage message,
         PlatformDbContext database,
         INotificationDelivery delivery,
         TimeProvider clock,

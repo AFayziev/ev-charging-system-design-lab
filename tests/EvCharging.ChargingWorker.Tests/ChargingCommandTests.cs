@@ -57,13 +57,13 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
                 "charging_messages");
             options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
             options.Policies.UseDurableLocalQueues();
-            options.PublishMessage<CheckChargingStart>().ToLocalQueue("automatic-check-tests");
-            options.PublishMessage<StartCharging>().ToLocalQueue("resend-tests");
-            options.PublishMessage<CheckChargingStop>().ToLocalQueue("automatic-stop-check-tests");
-            options.PublishMessage<StopCharging>().ToLocalQueue("stop-resend-tests");
+            options.PublishMessage<CheckChargingStartMessage>().ToLocalQueue("automatic-check-tests");
+            options.PublishMessage<StartChargingMessage>().ToLocalQueue("resend-tests");
+            options.PublishMessage<CheckChargingStopMessage>().ToLocalQueue("automatic-stop-check-tests");
+            options.PublishMessage<StopChargingMessage>().ToLocalQueue("stop-resend-tests");
             options.Discovery.IncludeType<StartChargingRecorderHandler>();
             options.Discovery.IncludeType<StopChargingRecorderHandler>();
-            options.Discovery.IncludeType<ExpireReservationHandler>();
+            options.Discovery.IncludeType<ExpireReservationMessageHandler>();
         });
         _messaging = builder.Build();
         await _messaging.StartAsync();
@@ -653,7 +653,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
 
         var sent = await CheckAsync(operation.Id, queries, automatic: true);
 
-        Assert.Equal([new StartCharging(operation.Id, 2)], sent);
+        Assert.Equal([new StartChargingMessage(operation.Id, 2)], sent);
         Assert.Equal(2, queries.Calls);
     }
 
@@ -766,10 +766,10 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         var reservationId = await database.Operations.Where(value => value.Id == operationId)
             .Select(value => value.Session!.ReservationId)
             .SingleAsync();
-        await _messaging!.MessageBus().InvokeAsync(new ExpireReservation(reservationId));
+        await _messaging!.MessageBus().InvokeAsync(new ExpireReservationMessage(reservationId));
     }
 
-    private async Task<StartCharging[]> CheckAsync(Guid operationId, ProviderTransport queries, bool automatic)
+    private async Task<StartChargingMessage[]> CheckAsync(Guid operationId, ProviderTransport queries, bool automatic)
     {
         await using var database = Database();
         using var host = CreateProviderHost(database, queries);
@@ -779,14 +779,14 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         return messaging.Services.GetRequiredService<StartRecorder>().For(operationId);
     }
 
-    private CheckChargingStartCommandHandler Checker(PlatformDbContext database, IHost host, IMessageBus? bus = null) =>
+    private CheckChargingStartMessageHandler Checker(PlatformDbContext database, IHost host, IMessageBus? bus = null) =>
         new(
             database,
             host.Services.GetRequiredService<ChargingProviderClientFactory>(),
             _clock,
             Options.Create(TestExecutionOptions()),
             bus ?? _scope!.ServiceProvider.GetRequiredService<IMessageBus>(),
-            NullLogger<CheckChargingStartCommandHandler>.Instance);
+            NullLogger<CheckChargingStartMessageHandler>.Instance);
 
     private static ChargingExecutionOptions TestExecutionOptions() => new()
     {
@@ -807,8 +807,8 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
             .ToArray();
     }
 
-    private Task<CheckChargingStart[]> ScheduledChecksAsync(Guid operationId) =>
-        ScheduledAsync<CheckChargingStart>(operationId, value => value.OperationId);
+    private Task<CheckChargingStartMessage[]> ScheduledChecksAsync(Guid operationId) =>
+        ScheduledAsync<CheckChargingStartMessage>(operationId, value => value.OperationId);
 
     private async Task ExecuteAsync(
         Guid operationId,
@@ -829,13 +829,13 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
     {
         using var host = CreateProviderHost(database, transport);
         using var scope = _messaging!.Services.CreateScope();
-        var handler = new StartChargingCommandHandler(
+        var handler = new StartChargingMessageHandler(
             database,
             host.Services.GetRequiredService<ChargingProviderClientFactory>(),
             _clock,
             Options.Create(TestExecutionOptions()),
             scope.ServiceProvider.GetRequiredService<IDbContextOutbox>(),
-            NullLogger<StartChargingCommandHandler>.Instance);
+            NullLogger<StartChargingMessageHandler>.Instance);
         await handler.HandleAsync(new(operationId, attemptNumber), cancellationToken);
     }
 
@@ -932,17 +932,17 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
 
     public sealed class StartRecorder
     {
-        private readonly System.Collections.Concurrent.ConcurrentQueue<StartCharging> _messages = new();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<StartChargingMessage> _messages = new();
 
-        public void Add(StartCharging message) => _messages.Enqueue(message);
+        public void Add(StartChargingMessage message) => _messages.Enqueue(message);
 
-        public StartCharging[] For(Guid operationId) =>
+        public StartChargingMessage[] For(Guid operationId) =>
             [.. _messages.Where(value => value.OperationId == operationId)];
     }
 
     public sealed class StartChargingRecorderHandler(StartRecorder recorder)
     {
-        public void Handle(StartCharging message) => recorder.Add(message);
+        public void Handle(StartChargingMessage message) => recorder.Add(message);
     }
 
     private sealed class ProviderTransport(

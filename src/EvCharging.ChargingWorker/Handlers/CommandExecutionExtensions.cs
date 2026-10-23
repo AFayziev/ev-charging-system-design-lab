@@ -13,18 +13,8 @@ using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-/// <summary>Where a command's requests go: the provider, its integration, and the saved equipment address.</summary>
-internal sealed record ProviderBinding(Guid ProviderId, string IntegrationKey, ProviderEquipmentAddress Address);
-
-internal enum ProviderEvidence
-{
-    Applied,
-    Rejected,
-    Uncertain
-}
-
 /// <summary>Numbered-attempt mechanics shared by every kind of provider command.</summary>
-internal static class CommandExecution
+internal static class CommandExecutionExtensions
 {
     public const string TransportFailureCode = "provider_transport_failure";
     public const string InvalidResponseCode = "provider_response_unmatched";
@@ -40,7 +30,7 @@ internal static class CommandExecution
     /// cannot spend extra budget. A retry commits here; the first request also schedules its automatic checks.
     /// </summary>
     public static async Task<Attempt?> AuthorizeAttemptAsync(
-        PlatformDbContext database,
+        this PlatformDbContext database,
         IDbContextTransaction transaction,
         IDbContextOutbox outbox,
         ChargingExecutionOptions policy,
@@ -108,7 +98,7 @@ internal static class CommandExecution
     /// operation, unless a check already settled it.
     /// </summary>
     public static async Task ApplyOutcomeAsync(
-        PlatformDbContext database,
+        this PlatformDbContext database,
         TimeProvider clock,
         ILogger logger,
         Attempt authorized,
@@ -154,7 +144,7 @@ internal static class CommandExecution
     /// response was never recorded is closed with the result.
     /// </summary>
     public static async Task ResolveAsync(
-        PlatformDbContext database,
+        this PlatformDbContext database,
         TimeProvider clock,
         ILogger logger,
         Operation unresolved,
@@ -204,7 +194,7 @@ internal static class CommandExecution
     /// Authorization rechecks eligibility and the request limit; overlapping checks claim one attempt number.
     /// </summary>
     public static async Task ResendAsync(
-        PlatformDbContext database,
+        this PlatformDbContext database,
         TimeProvider clock,
         IMessageBus bus,
         ILogger logger,
@@ -280,7 +270,7 @@ internal static class CommandExecution
 
     /// <summary>Runs an automatic check inside the operation's checking window.</summary>
     public static async Task<ChargingCheckResult> RunAutomaticCheckAsync(
-        PlatformDbContext database,
+        this PlatformDbContext database,
         TimeProvider clock,
         Guid operationId,
         Func<CancellationToken, Task<ChargingCheckResult>> check,

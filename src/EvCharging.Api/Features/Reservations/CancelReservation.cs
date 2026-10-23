@@ -66,7 +66,7 @@ public sealed class CancelReservationCommandHandler(
         }
 
         outbox.Enroll(database);
-        await outbox.PublishAsync(new ReservationCancelled(reservation.Id));
+        await outbox.PublishAsync(new ReservationCancelledEvent(reservation.Id));
         await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
         return Result.Ok(reservation.ToResponse());
     }

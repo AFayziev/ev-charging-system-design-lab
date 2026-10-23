@@ -350,7 +350,7 @@ public sealed partial class ReservationTests(AppHostFixture fixture) : IAsyncLif
 
     [Fact]
     [Trait("Category", "Browser")]
-    public async Task Sweep_ExistingOverdueReservations_ExpiresEligibleAndRetainsUnresolvedStart()
+    public async Task Discovery_ExistingOverdueReservations_ExpiresEligibleAndRetainsUnresolvedStart()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         using var playwright = await Playwright.CreateAsync();

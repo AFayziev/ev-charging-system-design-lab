@@ -23,9 +23,9 @@ public static class ReservationEventTopology
                 exchange.BindTopic(CreatedTopic).ToQueue(ChargingQueue);
                 exchange.BindTopic("reservation.*").ToQueue(NotificationQueue);
             });
-        options.PublishMessagesToRabbitMqExchange<ReservationCreated>(Exchange, _ => CreatedTopic);
-        options.PublishMessagesToRabbitMqExchange<ReservationCancelled>(Exchange, _ => CancelledTopic);
-        options.PublishMessagesToRabbitMqExchange<ReservationExpired>(Exchange, _ => ExpiredTopic);
+        options.PublishMessagesToRabbitMqExchange<ReservationCreatedEvent>(Exchange, _ => CreatedTopic);
+        options.PublishMessagesToRabbitMqExchange<ReservationCancelledEvent>(Exchange, _ => CancelledTopic);
+        options.PublishMessagesToRabbitMqExchange<ReservationExpiredEvent>(Exchange, _ => ExpiredTopic);
 
         return options;
     }

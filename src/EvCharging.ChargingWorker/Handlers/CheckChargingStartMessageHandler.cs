@@ -12,17 +12,17 @@ using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public sealed class CheckChargingStartCommandHandler(
+public sealed class CheckChargingStartMessageHandler(
     PlatformDbContext database,
     ChargingProviderClientFactory providers,
     TimeProvider clock,
     IOptions<ChargingExecutionOptions> options,
     IMessageBus bus,
-    ILogger<CheckChargingStartCommandHandler> logger)
+    ILogger<CheckChargingStartMessageHandler> logger)
 {
     [NonTransactional]
     public async Task<ChargingCheckResult> HandleAsync(
-        CheckChargingStart message,
+        CheckChargingStartMessage message,
         CancellationToken cancellationToken)
     {
         if (!message.Automatic)
@@ -30,8 +30,7 @@ public sealed class CheckChargingStartCommandHandler(
             return await CheckAsync(message.OperationId, resend: false, cancellationToken);
         }
 
-        return await CommandExecution.RunAutomaticCheckAsync(
-            database,
+        return await database.RunAutomaticCheckAsync(
             clock,
             message.OperationId,
             token => CheckAsync(message.OperationId, resend: true, token),
@@ -72,23 +71,21 @@ public sealed class CheckChargingStartCommandHandler(
                 evidence.Outcome);
             if (resend && evidence.Outcome == ChargingCheckOutcome.Unresolved)
             {
-                await CommandExecution.ResendAsync(
-                    database,
+                await database.ResendAsync(
                     clock,
                     bus,
                     logger,
                     operation,
                     attempt,
                     options.Value.AutomaticStatusCheckInterval,
-                    number => new StartCharging(operation.Id, number),
+                    number => new StartChargingMessage(operation.Id, number),
                     cancellationToken);
             }
 
             return new(evidence.Outcome);
         }
 
-        await CommandExecution.ResolveAsync(
-            database,
+        await database.ResolveAsync(
             clock,
             logger,
             operation,

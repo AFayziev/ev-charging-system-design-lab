@@ -169,8 +169,8 @@ public sealed class AppHostFixture : IAsyncLifetime
             .WithEnvironment("ChargingExecution__MaximumConcurrentCommands", "2")
             .WithEnvironment("ChargingExecution__MaximumAutomaticStatusChecks", "2")
             .WithEnvironment("ChargingExecution__AutomaticStatusCheckInterval", "00:00:03")
-            .WithEnvironment("ReservationExpiry__SweepInterval", "00:05:00")
-            .WithEnvironment("ReservationExpiry__SweepBatchSize", "2")
+            .WithEnvironment("ReservationExpiry__ScanInterval", "00:05:00")
+            .WithEnvironment("ReservationExpiry__BatchSize", "2")
             .WithEnvironment("ReservationExpiry__MaximumConcurrentChecks", "2");
         builder.CreateResourceBuilder(api)
             .WithEnvironment(

@@ -10,7 +10,8 @@ public static class SessionEventTopology
 
     public static WolverineOptions AddSessionEventRouting(this WolverineOptions options)
     {
-        options.PublishMessage<SessionCompleted>().ToRabbitQueue(NotificationQueue, queue => queue.IsDurable = true);
+        options.PublishMessage<SessionCompletedEvent>()
+            .ToRabbitQueue(NotificationQueue, queue => queue.IsDurable = true);
         return options;
     }
 }

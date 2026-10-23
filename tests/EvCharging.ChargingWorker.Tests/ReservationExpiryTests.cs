@@ -50,8 +50,8 @@ public sealed class ReservationExpiryTests(PlatformDatabaseFixture fixture) :
                 "charging_messages");
             options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
             options.Policies.UseDurableLocalQueues();
-            options.PublishMessage<ReservationExpired>().ToLocalQueue("reservation-expired-tests");
-            options.Discovery.IncludeType<ExpireReservationHandler>();
+            options.PublishMessage<ReservationExpiredEvent>().ToLocalQueue("reservation-expired-tests");
+            options.Discovery.IncludeType<ExpireReservationMessageHandler>();
             options.Discovery.IncludeType<ReservationExpiredRecorderHandler>();
         });
         _messaging = builder.Build();
@@ -75,7 +75,7 @@ public sealed class ReservationExpiryTests(PlatformDatabaseFixture fixture) :
         // Deliveries of the same check serialize on the driver lock; later ones find the reservation inactive.
         await _messaging!.TrackActivity().Timeout(TimeSpan.FromSeconds(30)).ExecuteAndWaitAsync(_ =>
             Task.WhenAll(Enumerable.Range(0, 3)
-                .Select(_ => _messaging!.MessageBus().InvokeAsync(new ExpireReservation(reservation.Id)))));
+                .Select(_ => _messaging!.MessageBus().InvokeAsync(new ExpireReservationMessage(reservation.Id)))));
 
         await using var database = fixture.CreateContext();
         var saved = await database.Reservations.AsNoTracking().SingleAsync(value => value.Id == reservation.Id);
@@ -84,7 +84,8 @@ public sealed class ReservationExpiryTests(PlatformDatabaseFixture fixture) :
         var audit = await database.AuditEntries.SingleAsync(entry => entry.ResourceId == reservation.Id);
         Assert.Equal(AuditAction.Updated, audit.Action);
         Assert.Equal("charging-worker", audit.ActorSubject);
-        Assert.Equal(new ReservationExpired(reservation.Id, PastDeadline), Assert.Single(Expired.For(reservation.Id)));
+        Assert.Equal(
+            new ReservationExpiredEvent(reservation.Id, PastDeadline), Assert.Single(Expired.For(reservation.Id)));
     }
 
     [Fact]
@@ -98,7 +99,7 @@ public sealed class ReservationExpiryTests(PlatformDatabaseFixture fixture) :
         Assert.True(cancelled.Cancel(SlotStart.AddMinutes(5), hasUnresolvedStart: false).IsSuccess);
         await competing.SaveChangesAsync();
 
-        var expiry = _messaging!.MessageBus().InvokeAsync(new ExpireReservation(reservation.Id));
+        var expiry = _messaging!.MessageBus().InvokeAsync(new ExpireReservationMessage(reservation.Id));
         await fixture.WaitForLockWaiterAsync();
         await transaction.CommitAsync();
         await expiry;
@@ -141,16 +142,16 @@ public sealed class ReservationExpiryTests(PlatformDatabaseFixture fixture) :
 
     public sealed class ExpiryRecorder
     {
-        private readonly ConcurrentQueue<ReservationExpired> _events = new();
+        private readonly ConcurrentQueue<ReservationExpiredEvent> _events = new();
 
-        public void Add(ReservationExpired message) => _events.Enqueue(message);
+        public void Add(ReservationExpiredEvent message) => _events.Enqueue(message);
 
-        public ReservationExpired[] For(Guid reservationId) =>
+        public ReservationExpiredEvent[] For(Guid reservationId) =>
             [.. _events.Where(value => value.ReservationId == reservationId)];
     }
 
     public sealed class ReservationExpiredRecorderHandler(ExpiryRecorder recorder)
     {
-        public void Handle(ReservationExpired message) => recorder.Add(message);
+        public void Handle(ReservationExpiredEvent message) => recorder.Add(message);
     }
 }

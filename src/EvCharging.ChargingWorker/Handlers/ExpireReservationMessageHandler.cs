@@ -8,16 +8,14 @@ using Wolverine.Attributes;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
-public sealed record ExpireReservation(Guid ReservationId);
-
-public sealed partial class ExpireReservationHandler
+public sealed partial class ExpireReservationMessageHandler
 {
     private Guid? _publicId;
     private ReservationExpiryOutcome? _outcome;
 
     [Transactional]
-    public async Task<ReservationExpired?> HandleAsync(
-        ExpireReservation message,
+    public async Task<ReservationExpiredEvent?> HandleAsync(
+        ExpireReservationMessage message,
         PlatformDbContext database,
         TimeProvider clock,
         CancellationToken cancellationToken)
@@ -44,14 +42,14 @@ public sealed partial class ExpireReservationHandler
             _outcome = await database.ExpireReservationAsync(reservation, clock.GetUtcNow(), cancellationToken);
             if (_outcome == ReservationExpiryOutcome.Expired)
             {
-                return new ReservationExpired(reservation.Id, reservation.ExpiredAt!.Value);
+                return new ReservationExpiredEvent(reservation.Id, reservation.ExpiredAt!.Value);
             }
         }
 
         return null;
     }
 
-    public void AfterCommit(ExpireReservation message, ILogger logger)
+    public void AfterCommit(ExpireReservationMessage message, ILogger logger)
     {
         string outcome = _outcome?.ToString() ?? "Missing";
         Activity.Current?.SetTag("reservation.expiry_outcome", outcome);

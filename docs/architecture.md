@@ -296,7 +296,7 @@ Scheduled jobs route to the owning worker queues. Recurring producers rescan
 persisted due state after startup and periodically submit reconciliation or cleanup
 work. Handlers coordinate conditional transitions and recheck current state rather
 than treating a scheduled message as authority; duplicate submissions are harmless.
-An overdue reservation sweep runs at startup and periodically, submitting expiry
+Overdue reservation discovery runs at startup and periodically, submitting expiry
 checks for bounded batches of active reservations past their expiry time. It reads
 reservation state directly and complements durable message recovery; duplicate
 checks cannot repeat a completed transition.

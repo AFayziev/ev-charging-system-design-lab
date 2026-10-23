@@ -16,10 +16,11 @@ public static class ChargingCommandTopology
 
     public static WolverineOptions AddChargingCommandRouting(this WolverineOptions options)
     {
-        options.PublishMessage<StartCharging>().ToRabbitQueue(StartQueue, queue => queue.IsDurable = true);
-        options.PublishMessage<StopCharging>().ToRabbitQueue(StopQueue, queue => queue.IsDurable = true);
-        options.PublishMessage<CheckChargingStart>().ToRabbitQueue(StatusCheckQueue, queue => queue.IsDurable = true);
-        options.PublishMessage<CheckChargingStop>()
+        options.PublishMessage<StartChargingMessage>().ToRabbitQueue(StartQueue, queue => queue.IsDurable = true);
+        options.PublishMessage<StopChargingMessage>().ToRabbitQueue(StopQueue, queue => queue.IsDurable = true);
+        options.PublishMessage<CheckChargingStartMessage>()
+            .ToRabbitQueue(StatusCheckQueue, queue => queue.IsDurable = true);
+        options.PublishMessage<CheckChargingStopMessage>()
             .ToRabbitQueue(StopStatusCheckQueue, queue => queue.IsDurable = true);
         return options;
     }
