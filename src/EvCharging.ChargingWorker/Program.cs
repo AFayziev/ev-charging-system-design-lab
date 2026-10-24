@@ -11,7 +11,6 @@ using EvCharging.ObservationStream;
 using EvCharging.Persistence.Extensions;
 using Wolverine;
 using Wolverine.EntityFrameworkCore;
-using Wolverine.ErrorHandling;
 using Wolverine.RabbitMQ;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -51,12 +50,7 @@ builder.AddMessaging(
         options.Policies.ForMessagesOfType<CheckChargingStopMessage>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CompleteChargingSessionMessage>().Audit(message => message.SessionId);
         options.Policies.ForMessagesOfType<RefreshSessionEvidenceMessage>().Audit(message => message.SessionId);
-        options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure)
-            .ScheduleRetry(messagingFailureOptions.TransientDatabaseRetryDelays);
-        options.Policies
-            .OnException(
-                exception => exception is not OperationCanceledException && !exception.IsTransientDatabaseFailure())
-            .MoveToErrorQueue();
+        options.AddFailurePolicies(messagingFailureOptions);
         options.Policies.UseDurableLocalQueues();
         options.LocalQueueFor<ExpireReservationMessage>()
             .MaximumParallelMessages(reservationExpiryOptions.MaximumConcurrentChecks);

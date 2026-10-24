@@ -7,8 +7,6 @@ using EvCharging.ChargingWorker.Handlers;
 using EvCharging.ChargingWorker.Providers;
 using EvCharging.Contracts.Charging;
 using EvCharging.Domain.Charging;
-using EvCharging.Domain.Equipment;
-using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Auditing;
@@ -35,7 +33,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
     IClassFixture<PlatformDatabaseFixture>,
     IAsyncLifetime
 {
-    private const string IntegrationKey = "worker-test";
+    internal const string IntegrationKey = "worker-test";
     private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
     private IHost? _messaging;
     private IServiceScope? _scope;
@@ -787,9 +785,9 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
             bus ?? _scope!.ServiceProvider.GetRequiredService<IMessageBus>(),
             NullLogger<CheckChargingStartMessageHandler>.Instance);
 
-    private static ChargingExecutionOptions TestExecutionOptions() => new()
+    internal static ChargingExecutionOptions TestExecutionOptions(int maximumCommandRequests = 3) => new()
     {
-        MaximumCommandRequests = 3,
+        MaximumCommandRequests = maximumCommandRequests,
         MaximumConcurrentCommands = 2,
         MaximumAutomaticStatusChecks = 2,
         AutomaticStatusCheckInterval = TimeSpan.FromMinutes(1),
@@ -815,10 +813,11 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         Guid operationId,
         ProviderTransport transport,
         int attemptNumber = 1,
+        ChargingExecutionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         await using var database = Database();
-        await ExecuteAsync(operationId, transport, database, attemptNumber, cancellationToken);
+        await ExecuteAsync(operationId, transport, database, attemptNumber, options, cancellationToken);
     }
 
     private async Task ExecuteAsync(
@@ -826,6 +825,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         ProviderTransport transport,
         PlatformDbContext database,
         int attemptNumber = 1,
+        ChargingExecutionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         using var host = CreateProviderHost(database, transport);
@@ -834,7 +834,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
             database,
             host.Services.GetRequiredService<ChargingProviderClientFactory>(),
             _clock,
-            Options.Create(TestExecutionOptions()),
+            Options.Create(options ?? TestExecutionOptions()),
             scope.ServiceProvider.GetRequiredService<IDbContextOutbox>(),
             NullLogger<StartChargingMessageHandler>.Instance);
         await handler.HandleAsync(new(operationId, attemptNumber), cancellationToken);
@@ -868,69 +868,41 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         return new(options);
     }
 
-    private async Task<Operation> PrepareAsync(string? integrationKey = IntegrationKey)
-    {
-        await using var database = WriterDatabase();
-        var station = new Station { Name = "Test", Address = "Test", TimeZoneId = "UTC", AccessInstructions = "Test" };
-        var charger = new Charger { Station = station, Name = "Test" };
-        var connector = new Connector { Charger = charger, ConnectorType = "Type2", PowerSupply = "AC" };
-        var driver = Driver.Register(
-            "https://test.invalid",
-            Guid.NewGuid().ToString(),
-            EmailAddress.Create("driver@example.test").Value);
-        database.Connectors.Add(connector);
-        database.Drivers.Add(driver);
-        await database.SaveChangesAsync();
-        var now = _clock.GetUtcNow();
-        var reservation = Reservation.Book(
-            connector,
-            driver,
-            now,
-            now.AddHours(1),
-            now,
-            new(2, TimeSpan.FromHours(2), TimeSpan.FromDays(1), TimeSpan.FromMinutes(10))).Value;
-        var operation = Operation.AcceptStart(ChargingSession.AcceptStart(reservation, now).Value, Guid.NewGuid());
-        database.Operations.Add(operation);
-        var provider = new ChargingProvider
-        {
-            Name = $"Edited display {Guid.NewGuid()}",
-            IntegrationKey = integrationKey
-        };
-        var providerStation = new ProviderStation
-        {
-            ChargingProvider = provider,
-            Station = station,
-            ExternalId = Guid.NewGuid().ToString()
-        };
-        var providerCharger = new ProviderCharger
-        {
-            ProviderStation = providerStation,
-            Charger = charger,
-            ExternalId = "charger"
-        };
-        database.ProviderConnectors.Add(new()
-        {
-            ProviderCharger = providerCharger,
-            Connector = connector,
-            ExternalId = "connector"
-        });
-        await database.SaveChangesAsync();
-        return operation;
-    }
+    private Task<Operation> PrepareAsync(string? integrationKey = IntegrationKey) =>
+        StartOperationSeed.CreateAsync(fixture, _clock.GetUtcNow(), integrationKey);
 
-    private HttpResponseMessage Applied(Guid externalOperationId, string kind = "start") => new(HttpStatusCode.OK)
+    private HttpResponseMessage Applied(Guid externalOperationId, string kind = "start") =>
+        AppliedResponse(externalOperationId, _clock.GetUtcNow(), kind);
+
+    internal static HttpResponseMessage AppliedResponse(
+        Guid externalOperationId, DateTimeOffset appliedAt, string kind = "start") =>
+        new(HttpStatusCode.OK)
+        {
+            Content = JsonContent.Create(
+                new
+                {
+                    id = Guid.NewGuid(),
+                    externalOperationId,
+                    kind,
+                    outcome = "applied",
+                    sessionId = Guid.NewGuid(),
+                    appliedAt,
+                    rejection = (string?)null
+                })
+        };
+
+    // A coded rejection: the provider refused the command and recorded it.
+    internal static HttpResponseMessage CodedRejection(Guid externalOperationId) => new(HttpStatusCode.Conflict)
     {
         Content = JsonContent.Create(
             new
             {
-                id = Guid.NewGuid(),
-                externalOperationId,
-                kind,
-                outcome = "applied",
-                sessionId = Guid.NewGuid(),
-                appliedAt = _clock.GetUtcNow(),
-                rejection = (string?)null
-            })
+                status = (int)HttpStatusCode.Conflict,
+                code = "connector_unavailable",
+                commandId = Guid.NewGuid(),
+                externalOperationId
+            },
+            mediaType: new("application/problem+json"))
     };
 
     private static HttpResponseMessage Rejected(Guid externalOperationId, string kind, string rejection) =>
@@ -964,7 +936,7 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         public void Handle(StartChargingMessage message) => recorder.Add(message);
     }
 
-    private sealed class ProviderTransport(
+    internal sealed class ProviderTransport(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
     {
         private int _calls;

@@ -1,8 +1,5 @@
 using EvCharging.Api.Features.Charging;
 using EvCharging.Domain.Charging;
-using EvCharging.Domain.Equipment;
-using EvCharging.Domain.Identity;
-using EvCharging.Domain.Reservations;
 using EvCharging.Testing;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
@@ -21,8 +18,10 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) : IClass
         var connector = (await fixture.SeedConnectorsAsync(1))[0];
         var (earlierDriver, earlierIdentity) = await fixture.SeedDriverAsync();
         var (laterDriver, laterIdentity) = await fixture.SeedDriverAsync();
-        var earlier = await SeedReservationAsync(connector, earlierDriver, Boundary.AddMinutes(-5), Boundary);
-        var later = await SeedReservationAsync(connector, laterDriver, Boundary, Boundary.AddMinutes(5));
+        var earlier = await fixture.SeedReservationAsync(
+            connector, earlierDriver, Boundary.AddMinutes(-5), Boundary, Boundary.AddMinutes(-5));
+        var later = await fixture.SeedReservationAsync(
+            connector, laterDriver, Boundary, Boundary.AddMinutes(5), Boundary);
 
         // On one clock the two start windows never meet. Two instances whose clocks straddle the boundary each
         // admit their own driver, and neither driver's lock covers the other, so the connector claim decides.
@@ -42,24 +41,5 @@ public sealed class StartChargingTests(PlatformDatabaseFixture fixture) : IClass
         Assert.Equal("connector_busy", conflict.Code);
         await using var database = fixture.CreateContext();
         Assert.Equal(1, await database.Sessions.CountAsync(session => session.ConnectorId == connector.Id));
-    }
-
-    private async Task<Reservation> SeedReservationAsync(
-        Connector connector, Driver driver, DateTimeOffset start, DateTimeOffset end)
-    {
-        await using var database = fixture.CreateContext();
-        database.Attach(connector);
-        database.Attach(driver);
-        var reservation = Reservation.Book(
-            connector,
-            driver,
-            start,
-            end,
-            start,
-            new ReservationBookingLimits(
-                2, TimeSpan.FromHours(1), TimeSpan.FromDays(1), TimeSpan.FromMinutes(10))).Value;
-        database.Reservations.Add(reservation);
-        await database.SaveChangesAsync();
-        return reservation;
     }
 }
