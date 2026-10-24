@@ -47,6 +47,7 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
         connectors.Property(connector => connector.ConnectorId)
             .HasMaxLength(ProviderContractLimits.EquipmentIdentifierLength);
         connectors.Property(connector => connector.PowerKw).HasPrecision(10, 3);
+        connectors.Property(connector => connector.EnergyLimitKWh).HasPrecision(10, 3);
         connectors.HasOne<ProviderCommand>().WithMany()
             .HasForeignKey(connector => connector.ActiveCommandId)
             .OnDelete(DeleteBehavior.Restrict);
@@ -89,14 +90,15 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
     }
 
     /// <summary>
-    /// Share-locks active sessions so none can end while a reading is written; sessions a stop holds are skipped.
+    /// Locks active sessions so none can be stopped while a reading is written or the session is ended; sessions a
+    /// stop holds are skipped.
     /// The lock lasts until the open transaction ends, so the caller must have started one.
     /// </summary>
     internal Task<List<ProviderSession>> LockActiveSessionsAsync(CancellationToken cancellationToken)
     {
         RequireTransaction();
         return Sessions
-            .FromSql($"SELECT * FROM sessions WHERE ended_at IS NULL FOR SHARE SKIP LOCKED")
+            .FromSql($"SELECT * FROM sessions WHERE ended_at IS NULL FOR UPDATE SKIP LOCKED")
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }
@@ -163,6 +165,19 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
                 setters => setters.SetProperty(session => session.EndedAt, endedAt),
                 cancellationToken) == 1;
 
+    /// <summary>Ends a session once, freeing its connector with the final observation.</summary>
+    internal async Task EndSessionAsync(
+        ProviderSession session, DateTimeOffset endedAt, CancellationToken cancellationToken)
+    {
+        if (!await TryEndSessionAsync(session.Id, endedAt, cancellationToken))
+        {
+            return;
+        }
+
+        await ReleaseConnectorAsync(session, cancellationToken);
+        Observations.Add(ProviderObservation.Stopped(session, endedAt));
+    }
+
     internal Task ReleaseConnectorAsync(ProviderSession session, CancellationToken cancellationToken) =>
         Connectors
             .Where(connector => connector.StationId == session.StationId
@@ -182,11 +197,12 @@ public sealed class ProviderDbContext(DbContextOptions<ProviderDbContext> option
     internal Task ConfigureConnectorAsync(ProviderConnector connector, CancellationToken cancellationToken) =>
         Database.ExecuteSqlInterpolatedAsync(
             $"""
-            INSERT INTO connectors (station_id, charger_id, connector_id, power_kw, enabled)
+            INSERT INTO connectors (station_id, charger_id, connector_id, power_kw, enabled, energy_limit_k_wh)
             VALUES ({connector.StationId}, {connector.ChargerId}, {connector.ConnectorId},
-                {connector.PowerKw}, {connector.Enabled})
+                {connector.PowerKw}, {connector.Enabled}, {connector.EnergyLimitKWh})
             ON CONFLICT (station_id, charger_id, connector_id)
-            DO UPDATE SET power_kw = EXCLUDED.power_kw, enabled = EXCLUDED.enabled
+            DO UPDATE SET power_kw = EXCLUDED.power_kw, enabled = EXCLUDED.enabled,
+                energy_limit_k_wh = EXCLUDED.energy_limit_k_wh
             """,
             cancellationToken);
 }

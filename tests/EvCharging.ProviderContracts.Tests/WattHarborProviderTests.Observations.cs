@@ -8,6 +8,9 @@ public sealed partial class WattHarborProviderTests
 {
     private const int MaxDeliveryAttempts = 5;
 
+    /// <summary>What a limited vehicle takes: about three seconds at the connector's 22 kW.</summary>
+    private const decimal VehicleCapacityKWh = 0.02m;
+
     [Fact]
     public async Task Observations_ActiveSession_AreDeliveredWithIncreasingTimeAndEnergy()
     {
@@ -243,6 +246,71 @@ public sealed partial class WattHarborProviderTests
         Assert.All(
             after.Where(observation => observation.OccurredAt > lastBefore),
             observation => Assert.True(observation.EnergyWh > energyBefore));
+    }
+
+    [Fact]
+    public async Task Observations_EnergyLimitReached_EndsTheSessionWithOneFinalReadingAndFreesTheConnector()
+    {
+        var (request, start, _) = await StartUntilFullAsync();
+        await Task.Delay(TimeSpan.FromSeconds(1.5));
+        var received = fixture.Receiver.For(request.ExternalSessionId);
+
+        var final = Assert.Single(received, observation => observation.State == "stopped");
+        Assert.True(final.IsFinalEnergy);
+        Assert.True(final.EnergyWh >= VehicleCapacityKWh * 1000m);
+        Assert.Equal(received.Max(observation => observation.OccurredAt), final.OccurredAt);
+        Assert.Equal(received.Max(observation => observation.EnergyWh), final.EnergyWh);
+        Assert.Equal(final.EventId, received[^1].EventId);
+        var session = await fixture.Charging.GetFromJsonAsync<SessionResult>($"/sessions/{start.SessionId}");
+        Assert.NotNull(session);
+        Assert.Equal("stopped", session.State);
+        Assert.Equal(final.OccurredAt, session.EndedAt);
+        var equipment = await fixture.Charging.GetFromJsonAsync<EquipmentResult>(EquipmentPath(request));
+        Assert.NotNull(equipment);
+        Assert.False(equipment.Occupied);
+    }
+
+    [Fact]
+    public async Task Observations_StopAfterTheVehicleIsFull_IsAppliedAndKeepsTheSessionEndTime()
+    {
+        var (request, start, received) = await StartUntilFullAsync();
+        var final = received.Single(observation => observation.State == "stopped");
+
+        var stop = await StopAsync(Guid.NewGuid(), new StopRequest(request.ExternalSessionId));
+        await Task.Delay(TimeSpan.FromSeconds(1));
+
+        Assert.Equal("applied", stop.Outcome);
+        Assert.True(stop.AppliedAt > final.OccurredAt);
+        var session = await fixture.Charging.GetFromJsonAsync<SessionResult>($"/sessions/{start.SessionId}");
+        Assert.NotNull(session);
+        Assert.Equal(final.OccurredAt, session.EndedAt);
+        Assert.Single(
+            fixture.Receiver.For(request.ExternalSessionId), observation => observation.State == "stopped");
+    }
+
+    [Fact]
+    public async Task Observations_SessionWithoutAnEnergyLimit_KeepsReporting()
+    {
+        var (request, _) = await StartSessionAsync();
+
+        var received = await fixture.Receiver.WaitForAsync(
+            request.ExternalSessionId,
+            observations => observations.Any(observation => observation.EnergyWh >= VehicleCapacityKWh * 1000m),
+            "readings past the energy a limited vehicle would take");
+
+        Assert.DoesNotContain(received, observation => observation.State == "stopped");
+    }
+
+    private async Task<(StartRequest Request, CommandResult Start, IReadOnlyList<ReceivedObservation> Received)>
+        StartUntilFullAsync()
+    {
+        var request = await ConfigureAsync(energyLimitKWh: VehicleCapacityKWh);
+        var start = await StartAsync(Guid.NewGuid(), request);
+        var received = await fixture.Receiver.WaitForAsync(
+            request.ExternalSessionId,
+            observations => observations.Any(observation => observation.State == "stopped"),
+            "the vehicle to be full");
+        return (request, start, received);
     }
 
     private async Task<(StartRequest Request, CommandResult Start)> StartSessionAsync()

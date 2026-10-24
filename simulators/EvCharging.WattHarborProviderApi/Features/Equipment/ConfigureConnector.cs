@@ -3,7 +3,11 @@ using EvCharging.WattHarborProviderApi.Persistence;
 
 namespace EvCharging.WattHarborProviderApi.Features.Equipment;
 
-public sealed record ConfigureConnectorRequest([property: Range(0.001, 10000)] decimal PowerKw, bool Enabled);
+/// <param name="EnergyLimitKWh">The energy a vehicle takes before the provider ends its session; null for none.</param>
+public sealed record ConfigureConnectorRequest(
+    [property: Range(0.001, 10000)] decimal PowerKw,
+    bool Enabled,
+    [property: Range(0.001, 10000)] decimal? EnergyLimitKWh);
 
 internal sealed class ConfigureConnectorCommandHandler(ProviderDbContext database)
 {
@@ -20,7 +24,8 @@ internal sealed class ConfigureConnectorCommandHandler(ProviderDbContext databas
                 ChargerId = chargerId,
                 ConnectorId = connectorId,
                 PowerKw = request.PowerKw,
-                Enabled = request.Enabled
+                Enabled = request.Enabled,
+                EnergyLimitKWh = request.EnergyLimitKWh
             },
             cancellationToken);
 }

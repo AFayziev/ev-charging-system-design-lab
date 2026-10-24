@@ -64,17 +64,10 @@ internal sealed class ProviderObservation
             OccurredAt = at,
             State = state,
             PowerKw = session.PowerKw,
-            EnergyWh = EnergyAt(session, at),
+            EnergyWh = session.EnergyWhAt(at),
             IsFinalEnergy = state == ObservationState.Stopped,
             NextAttemptAt = at
         };
-
-    /// <summary>Cumulative energy follows from the stored start, so it continues unchanged across restarts.</summary>
-    private static decimal EnergyAt(ProviderSession session, DateTimeOffset at)
-    {
-        var elapsedSeconds = (decimal)(at - session.StartedAt).TotalSeconds;
-        return Math.Round(session.PowerKw * 1000m * Math.Max(0m, elapsedSeconds) / 3600m, 3);
-    }
 
     public void Suppress() => DeliveryStatus = ObservationDeliveryStatus.Suppressed;
 }

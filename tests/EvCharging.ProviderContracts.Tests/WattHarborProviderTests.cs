@@ -346,10 +346,11 @@ public sealed partial class WattHarborProviderTests(WattHarborFixture fixture) :
         return await fixture.Charging.SendAsync(message);
     }
 
-    private async Task<StartRequest> ConfigureAsync(bool enabled = true)
+    private async Task<StartRequest> ConfigureAsync(bool enabled = true, decimal? energyLimitKWh = null)
     {
         var request = NewStartRequest();
-        await fixture.PrepareConnectorAsync(request.StationId, request.ChargerId, request.ConnectorId, enabled);
+        await fixture.PrepareConnectorAsync(
+            request.StationId, request.ChargerId, request.ConnectorId, enabled, energyLimitKWh);
         return request;
     }
 
