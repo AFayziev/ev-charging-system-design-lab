@@ -79,11 +79,11 @@ public sealed class AppHostFixture : IAsyncLifetime
     }
 
     public async Task PrepareWattHarborConnectorAsync(
-        string stationId, string chargerId, string connectorId, bool enabled)
+        string stationId, string chargerId, string connectorId, bool enabled, decimal? energyLimitKWh = null)
     {
         await PutWattHarborControlAsync(
             $"/simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}",
-            new ProviderEquipment(22m, enabled));
+            new ProviderEquipment(22m, enabled, energyLimitKWh));
     }
 
     public async Task ConfigureWattHarborCommandFaultAsync(Guid operationId, Guid sessionId, int? lookupStatus)
@@ -132,7 +132,7 @@ public sealed class AppHostFixture : IAsyncLifetime
         return controls;
     }
 
-    private sealed record ProviderEquipment(decimal PowerKw, bool Enabled);
+    private sealed record ProviderEquipment(decimal PowerKw, bool Enabled, decimal? EnergyLimitKWh);
     private sealed record ProviderCallbackTarget(string Url, string ApiKey);
     private sealed record ProviderTelemetryFault(
         bool Duplicate, bool DeliverOutOfOrder, bool Interrupt, bool SnapshotUnavailable);

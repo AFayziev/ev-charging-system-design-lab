@@ -17,7 +17,7 @@ namespace EvCharging.WattHarborProviderApi.Migrations.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "command_kind", new[] { "start", "stop" });
@@ -147,6 +147,11 @@ namespace EvCharging.WattHarborProviderApi.Migrations.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean")
                         .HasColumnName("enabled");
+
+                    b.Property<decimal?>("EnergyLimitKWh")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("energy_limit_k_wh");
 
                     b.Property<decimal>("PowerKw")
                         .HasPrecision(10, 3)

@@ -89,12 +89,13 @@ public sealed class WattHarborFixture : IAsyncLifetime
         }
     }
 
-    public async Task PrepareConnectorAsync(string stationId, string chargerId, string connectorId, bool enabled)
+    public async Task PrepareConnectorAsync(
+        string stationId, string chargerId, string connectorId, bool enabled, decimal? energyLimitKWh = null)
     {
         var controls = _controls ?? throw new InvalidOperationException("The control client is not ready.");
         using var response = await controls.PutAsJsonAsync(
             $"/simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}",
-            new EquipmentSettings(22m, enabled));
+            new EquipmentSettings(22m, enabled, energyLimitKWh));
         response.EnsureSuccessStatusCode();
     }
 
@@ -139,7 +140,7 @@ public sealed class WattHarborFixture : IAsyncLifetime
         }
     }
 
-    private sealed record EquipmentSettings(decimal PowerKw, bool Enabled);
+    private sealed record EquipmentSettings(decimal PowerKw, bool Enabled, decimal? EnergyLimitKWh);
     private sealed record CallbackTarget(string Url, string ApiKey);
     private sealed record TelemetryFault(
         bool Duplicate, bool DeliverOutOfOrder, bool Interrupt, bool SnapshotUnavailable);

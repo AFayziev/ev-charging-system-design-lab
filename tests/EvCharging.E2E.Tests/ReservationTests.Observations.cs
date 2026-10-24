@@ -76,10 +76,10 @@ public sealed partial class ReservationTests
     }
 
     private async Task<(Guid ReservationId, Guid SessionId)> StartConfirmedSessionAsync(
-        IPage page, CancellationToken cancellationToken)
+        IPage page, CancellationToken cancellationToken, decimal? energyLimitKWh = null)
     {
         var reservation = await CurrentBookingAsync();
-        await PrepareProviderEquipmentAsync(reservation, enabled: true);
+        await PrepareProviderEquipmentAsync(reservation, enabled: true, energyLimitKWh);
         var accepted = await SubmitStartAsync(page, reservation.PublicId, Guid.NewGuid());
         Assert.Equal(202, accepted.GetProperty("status").GetInt32());
         var operationId = accepted.GetProperty("body").GetProperty("id").GetGuid();

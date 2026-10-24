@@ -683,6 +683,7 @@ public API and the resulting platform state.
 | Replay into a replacement view | Validated rebuilt projection; no charging commands or notifications |
 | Telemetry stops | Timestamped state becomes stale; silence does not imply stopped or offline |
 | Stop confirmed before final usage | Session waits for final evidence; completion and summary use matching frozen facts |
+| Provider ends the session itself (vehicle full) | The provider's final reading completes the session without a stop request, through callbacks or, when they are lost, the stale-session snapshot read; the connector claim is released on both sides and a pending stop settles |
 | Replica lag or replica lost (Azure database profile) | Lag visible; bounded fallback protects primary; immediate write confirmation remains correct |
 | Read saturation / API-worker scaling | Bounded acquisition/rejection; separate route budgets and aggregate client/server counts remain observable |
 | Gateway/API process lost | Routing reaches healthy instances; browser session remains usable across gateways; in-flight operations recover by identity |

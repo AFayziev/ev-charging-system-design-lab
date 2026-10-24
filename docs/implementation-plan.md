@@ -524,10 +524,12 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   Add isolated observation-view replay/rebuild and verify it preserves source
   times without sending charging commands or notifications.
   Depends on M07.01, M07.02, and M07.03.
-- [ ] M07.06 Deliver provider-initiated session end. A WattHarbor session
-  currently ends only on the platform's stop command, so an unstopped session
-  reports indefinitely and keeps its connector claim. This needs dedicated
-  planning and implementation time, and sub-items are defined when it starts.
+- [x] M07.06 Deliver provider-initiated session end: a WattHarbor connector can
+  carry an energy limit, and the provider ends a session on it once the vehicle
+  is full, emitting the final reading and freeing the connector. Verify that the
+  platform completes the session from that reading without a stop request, that
+  lost callbacks are recovered through the snapshot read, that a stop still
+  pending settles, and that a later stop is applied without moving the end time.
   Depends on M07.02.
 
 Acceptance: a driver sees session progress and completes charging with matching,

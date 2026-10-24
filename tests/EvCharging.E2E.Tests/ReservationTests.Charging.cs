@@ -358,7 +358,8 @@ public sealed partial class ReservationTests
         await WorkerCommandAsync(KnownResourceCommands.StopCommand, timeout.Token);
     }
 
-    private async Task PrepareProviderEquipmentAsync(Reservation reservation, bool enabled)
+    private async Task PrepareProviderEquipmentAsync(
+        Reservation reservation, bool enabled, decimal? energyLimitKWh = null)
     {
         var connector = await Storage.ProviderConnectors.Include(value => value.ProviderCharger!)
             .ThenInclude(value => value.ProviderStation)
@@ -371,7 +372,8 @@ public sealed partial class ReservationTests
             station.ExternalId,
             charger.ExternalId,
             connector.ExternalId,
-            enabled);
+            enabled,
+            energyLimitKWh);
     }
 
     private async Task AwaitStartOutcomeAsync(Guid id, CommandOutcome outcome, CancellationToken cancellationToken)

@@ -1,5 +1,6 @@
 using EvCharging.Contracts.Charging;
 using EvCharging.Contracts.Events.Sessions;
+using EvCharging.Domain.Charging;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Extensions;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,16 @@ public sealed class CompleteChargingSessionMessageHandler
             || session.Complete(energyKWh, endedAt).IsFailed)
         {
             return null;
+        }
+
+        // A stop that had not settled has nothing left to do: the end state it asked for holds.
+        var unsettledStops = await database.Operations
+            .Where(operation => operation.SessionId == session.Id && operation.Kind == ChargingCommandKind.Stop
+                && (operation.Outcome == CommandOutcome.Pending || operation.Outcome == CommandOutcome.Uncertain))
+            .ToListAsync(cancellationToken);
+        foreach (var stop in unsettledStops)
+        {
+            stop.ConfirmStop();
         }
 
         return new SessionCompletedEvent(session.Id, session.ReservationId, energyKWh, endedAt);

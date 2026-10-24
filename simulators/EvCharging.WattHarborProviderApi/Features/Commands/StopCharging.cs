@@ -87,11 +87,7 @@ internal sealed class StopChargingCommandHandler(
         }
 
         // Stopping an ended session is applied: the requested end state already holds.
-        if (await database.TryEndSessionAsync(session.Id, now, cancellationToken))
-        {
-            await database.ReleaseConnectorAsync(session, cancellationToken);
-            database.Observations.Add(ProviderObservation.Stopped(session, now));
-        }
+        await database.EndSessionAsync(session, now, cancellationToken);
 
         command.Apply(session, now);
     }

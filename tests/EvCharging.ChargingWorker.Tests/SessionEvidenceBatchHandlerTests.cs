@@ -205,6 +205,22 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
             new SessionCompletedEvent(session.Id, session.ReservationId, 7.25m, Start.AddSeconds(20)), completed);
     }
 
+    [Theory]
+    [InlineData(CommandOutcome.Pending)]
+    [InlineData(CommandOutcome.Uncertain)]
+    public async Task Handle_FinalReading_SettlesAStopTheEndOvertook(CommandOutcome outcome)
+    {
+        var session = await SeedSessionAsync(SessionLifecycle.Active);
+        var stop = await RequestStopAsync(session, outcome);
+
+        await CompleteAsync(Reading(session, 20, 7.25m, isFinal: true));
+
+        await using var database = Database();
+        var saved = await database.Operations.AsNoTracking().SingleAsync(value => value.Id == stop.Id);
+        Assert.Equal(CommandOutcome.Confirmed, saved.Outcome);
+        Assert.Equal(SessionLifecycle.Completed, (await SavedSessionAsync(session)).Lifecycle);
+    }
+
     [Fact]
     public async Task Handle_FinalReadingDeliveredAgain_CompletesOnce()
     {
@@ -290,6 +306,23 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
         await using var database = Database();
         await database.Sessions.Where(value => value.Id == session.Id)
             .ExecuteUpdateAsync(setters => setters.SetProperty(value => value.NextEvidenceReadAt, readAt));
+    }
+
+    private async Task<Operation> RequestStopAsync(ChargingSession session, CommandOutcome outcome)
+    {
+        await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(fixture.GetDataSource("platform_writer")).Options);
+        var tracked = await database.Sessions.Include(value => value.Reservation)
+            .SingleAsync(value => value.Id == session.Id);
+        var stop = Operation.AcceptStop(tracked, Guid.NewGuid(), DateTimeOffset.UtcNow).Value;
+        if (outcome == CommandOutcome.Uncertain)
+        {
+            Assert.True(stop.MarkUncertain().IsSuccess);
+        }
+
+        database.Operations.Add(stop);
+        await database.SaveChangesAsync();
+        return stop;
     }
 
     private async Task<ChargingSession> SavedSessionAsync(ChargingSession session)

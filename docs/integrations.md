@@ -87,7 +87,7 @@ outcome, including rejections.
 
 | Method and path | Purpose |
 |---|---|
-| `PUT /simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Configure simulated equipment while preserving existing occupancy |
+| `PUT /simulation/stations/{stationId}/chargers/{chargerId}/connectors/{connectorId}` | Configure simulated equipment while preserving existing occupancy. An optional energy limit makes the vehicle full: the provider ends a session on that connector once its energy reaches the limit |
 | `PUT /simulation/commands/{externalOperationId}` | Configure temporary command-scoped response loss and outcome-lookup failures, which a stop can also match by its session ID; requires the simulation control role |
 | `PUT /simulation/callbacks/observations` | Set the callback URL and key the provider delivers observations with |
 | `PUT /simulation/sessions/{externalSessionId}/telemetry` | Configure temporary duplicate delivery, older-before-newer delivery, or interrupted delivery for one session's observations |
@@ -127,7 +127,7 @@ Each lab provider provides:
 - Source event IDs unique within that provider.
 - Provider session identity, source occurrence time (the only ordering field),
   physical state, and cumulative session energy where applicable.
-- Matching terminal state and an explicitly final energy reading for ended sessions.
+- Matching terminal state and an explicitly final energy reading for ended sessions, however they end: the platform's stop or the provider's own decision (for example a full vehicle). A provider-ended session frees its connector, and no platform command is involved.
 - Event identity, sessions, and command outcomes retained across restart.
 
 Provider identity namespaces event and external IDs. Clients apply the
