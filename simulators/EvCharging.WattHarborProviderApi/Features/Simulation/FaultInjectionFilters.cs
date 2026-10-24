@@ -39,6 +39,22 @@ internal static class FaultInjectionFilters
         };
     }
 
+    public static EndpointFilterDelegate SnapshotFailure(
+        EndpointFilterFactoryContext factory, EndpointFilterDelegate next)
+    {
+        var parameters = factory.MethodInfo.GetParameters();
+        if (!parameters.Any(parameter => parameter.ParameterType == typeof(GetSessionSnapshotQueryHandler)))
+        {
+            return next;
+        }
+
+        int sessionIndex = parameters.Single(parameter => parameter.ParameterType == typeof(Guid)).Position;
+        var faults = factory.ApplicationServices.GetRequiredService<TelemetryFaults>();
+        return invocation => faults.Find(invocation.GetArgument<Guid>(sessionIndex)) is { SnapshotUnavailable: true }
+            ? ValueTask.FromResult<object?>(TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable))
+            : next(invocation);
+    }
+
     public static EndpointFilterDelegate LookupFailure(
         EndpointFilterFactoryContext factory, EndpointFilterDelegate next)
     {

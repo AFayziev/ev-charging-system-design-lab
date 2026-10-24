@@ -38,6 +38,27 @@ internal static class ApplicationServiceExtensions
                 options => options.MaximumConcurrentChecks is > 0 and <= 32,
                 "Concurrent expiry checks must be 1 to 32.")
             .ValidateOnStart();
+        services.AddOptions<ChargingFreshnessOptions>()
+            .BindConfiguration(ChargingFreshnessOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddOptions<SessionEvidenceRefreshOptions>()
+            .BindConfiguration(SessionEvidenceRefreshOptions.SectionName)
+            .Validate(
+                options => options.MinimumReadInterval > TimeSpan.Zero
+                    && options.MinimumReadInterval <= TimeSpan.FromMinutes(5),
+                "The minimum read interval must be positive and at most five minutes.")
+            .Validate(
+                options => options.MaximumReadInterval >= options.MinimumReadInterval
+                    && options.MaximumReadInterval <= TimeSpan.FromHours(1),
+                "The maximum read interval must be from the minimum interval up to one hour.")
+            .Validate(
+                options => options.BatchSize is > 0 and <= 1000,
+                "The stale session batch must be 1 to 1000.")
+            .Validate(
+                options => options.MaximumConcurrentSnapshotReads is > 0 and <= 32,
+                "Concurrent snapshot reads must be 1 to 32.")
+            .ValidateOnStart();
         return services;
     }
 }

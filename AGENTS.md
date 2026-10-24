@@ -42,8 +42,8 @@ implementation progress is recorded in the plan.
 | `EvCharging.Gateway.Migrations` | Resource | EF migrations, model snapshot, design-time tooling, and one-shot authentication-schema migrations using schema-owning credentials |
 | `EvCharging.Web` | Resource | Shared React/TypeScript browser application for drivers and backoffice operators |
 | `EvCharging.Api` | Resource | Commands/queries, transactional acceptance, file authorization, callbacks, and live delivery |
-| `EvCharging.ChargingWorker` | Resource | Charging effects, reservation expiry, reconciliation, and recovery polling |
-| `EvCharging.ObservationWorker` | Resource | Observation history/latest views, lifecycle and final-usage evidence, and stalled-session detection |
+| `EvCharging.ChargingWorker` | Resource | Charging effects, reservation expiry, reconciliation, stale-session detection, and recovery polling |
+| `EvCharging.ObservationWorker` | Resource | Observation history/latest views, and lifecycle and final-usage evidence |
 | `EvCharging.SearchIndexWorker` | Resource | Search indexing, replacement-index rebuilds, validation, and switchover |
 | `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, warming, and recovery |
 | `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, diagnostic bundles, and upload/orphan cleanup |

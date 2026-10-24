@@ -3,11 +3,11 @@ using Confluent.Kafka;
 using EvCharging.Contracts.Observations;
 using Microsoft.Extensions.Options;
 
-namespace EvCharging.Api.Streaming;
+namespace EvCharging.ObservationStream;
 
-internal sealed class KafkaObservationStream(
+internal sealed class ObservationStreamProducer(
     IProducer<string, string> producer,
-    IOptions<ObservationStreamOptions> options) : IObservationStream
+    IOptions<ObservationStreamOptions> options) : IObservationStreamProducer
 {
     public async Task AppendAsync(IReadOnlyList<ObservationEnvelope> envelopes, CancellationToken cancellationToken)
     {

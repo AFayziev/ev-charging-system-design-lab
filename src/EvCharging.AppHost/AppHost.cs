@@ -191,7 +191,11 @@ var charging = builder.AddProject<Projects.EvCharging_ChargingWorker>("charging-
         $"https+http://{wattHarborApi.Resource.Name}/")
     .WithEnvironment($"{wattHarborIntegrationPrefix}ClientId", "charging-worker")
     .WithEnvironment($"{wattHarborIntegrationPrefix}RequestTimeout", "00:00:03")
-    .WithSettings(chargingSettings, ChargingOptions.SectionName, options => options.ClockSkew)
+    .WithSettings(
+        chargingSettings,
+        ChargingOptions.SectionName,
+        options => options.FreshnessLimit,
+        options => options.ClockSkew)
     .WithEnvironment("ObservationStream__Topic", EvCharging.AppHost.ResourceExtensions.ObservationTopic)
     .WithReference(databaseAccess.ChargingMessaging, "messaging")
     .WaitForCompletion(chargingMessageMigrations)

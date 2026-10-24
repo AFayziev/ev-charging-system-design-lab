@@ -40,7 +40,7 @@ public sealed partial class ReservationTests
 
         await incrementalPower;
 
-        await fixture.ConfigureWattHarborTelemetryFaultAsync(sessionId, interrupt: true);
+        await fixture.ConfigureWattHarborTelemetryFaultAsync(sessionId, interrupt: true, snapshotUnavailable: true);
         await Expect(page.GetByText("Last reported charging", new() { Exact = true }))
             .ToBeVisibleAsync(new() { Timeout = 60_000 });
         await Expect(page.GetByText(new Regex(@"Last update \d\d:\d\d:\d\d"))).ToBeVisibleAsync();

@@ -23,6 +23,9 @@ public sealed class ChargingSession : IAuditableEntity
     public DateTimeOffset? CompletedAt { get; private set; }
     public decimal? FinalEnergyKWh { get; private set; }
 
+    /// <summary>When the provider's snapshot is next due while the session is stale. Only the recovery scan sets it.</summary>
+    public DateTimeOffset? NextEvidenceReadAt { get; private set; }
+
     public static Result<ChargingSession> AcceptStart(Reservation reservation, DateTimeOffset now)
     {
         var eligibility = reservation.ValidateChargingStart(now);

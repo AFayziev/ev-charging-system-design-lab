@@ -23,11 +23,14 @@ builder.Services.AddOptions<ObservationClockSkewOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 builder.AddObservationStreamConsumer<SessionEvidenceBatchHandler>();
+builder.AddObservationStreamProducer();
 // Wolverine is configured before the options pipeline runs; the pipeline validates these sections at startup.
 var chargingExecutionOptions = builder.Configuration.GetRequiredSection(ChargingExecutionOptions.SectionName)
     .Get<ChargingExecutionOptions>()!;
 var reservationExpiryOptions = builder.Configuration.GetRequiredSection(ReservationExpiryOptions.SectionName)
     .Get<ReservationExpiryOptions>()!;
+var sessionEvidenceRefreshOptions = builder.Configuration.GetRequiredSection(SessionEvidenceRefreshOptions.SectionName)
+    .Get<SessionEvidenceRefreshOptions>()!;
 var messagingFailureOptions = builder.Configuration.GetRequiredSection(MessagingFailureOptions.SectionName)
     .Get<MessagingFailureOptions>()!;
 builder.AddMessaging(
@@ -47,6 +50,7 @@ builder.AddMessaging(
         options.Policies.ForMessagesOfType<StopChargingMessage>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CheckChargingStopMessage>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CompleteChargingSessionMessage>().Audit(message => message.SessionId);
+        options.Policies.ForMessagesOfType<RefreshSessionEvidenceMessage>().Audit(message => message.SessionId);
         options.Policies.OnException(ExceptionExtensions.IsTransientDatabaseFailure)
             .ScheduleRetry(messagingFailureOptions.TransientDatabaseRetryDelays);
         options.Policies
@@ -58,6 +62,9 @@ builder.AddMessaging(
             .MaximumParallelMessages(reservationExpiryOptions.MaximumConcurrentChecks);
         options.LocalQueueFor<FindOverdueReservationsMessage>().Sequential();
         options.LocalQueueFor<FindUnreconciledChargingMessage>().Sequential();
+        options.LocalQueueFor<FindStaleSessionsMessage>().Sequential();
+        options.LocalQueueFor<RefreshSessionEvidenceMessage>()
+            .MaximumParallelMessages(sessionEvidenceRefreshOptions.MaximumConcurrentSnapshotReads);
         options.Schedules.ScheduleRecurring<FindOverdueReservationsMessage>(
             ParseCronSchedule(
                 $"{ReservationExpiryOptions.SectionName}:{nameof(ReservationExpiryOptions.ScanSchedule)}",
@@ -67,6 +74,10 @@ builder.AddMessaging(
                 $"{ChargingExecutionOptions.SectionName}:"
                 + nameof(ChargingExecutionOptions.ContinuedStatusCheckSchedule),
                 chargingExecutionOptions.ContinuedStatusCheckSchedule));
+        options.Schedules.ScheduleRecurring<FindStaleSessionsMessage>(
+            ParseCronSchedule(
+                $"{SessionEvidenceRefreshOptions.SectionName}:{nameof(SessionEvidenceRefreshOptions.ScanSchedule)}",
+                sessionEvidenceRefreshOptions.ScanSchedule));
         options.ListenToRabbitQueue(ReservationEventTopology.ChargingQueue)
             .MaximumParallelMessages(reservationExpiryOptions.MaximumConcurrentChecks);
         foreach (string queue in ChargingCommandTopology.ListenerQueues)

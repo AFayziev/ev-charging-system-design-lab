@@ -522,7 +522,7 @@ with these choices:
 | Transport | HTTP/JSON start and command/session lookup endpoints; typed `HttpClient` through `IHttpClientFactory`, with bounded timeouts |
 | Idempotency | Platform operation public ID as the stable provider key across attempts; retain and compare the original effect payload |
 | Atomicity | Command result, simulated session and connector claim commit in one provider transaction |
-| Fault controls | Authenticated, deterministic faults scoped to a command or a session's telemetry; apply-then-lose-response faults interrupt the response after commit. Faults are temporary and not persisted |
+| Fault controls | Authenticated, deterministic faults scoped to a command or a session's telemetry; apply-then-lose-response faults interrupt the response after commit. A session telemetry fault can also fail its snapshot reads with 503. Faults are temporary and not persisted |
 | Observations | Recorded in the provider database at the [normal simulator cadence](#22-default-timings), so sessions and their readings survive restart. The first and final readings accompany start and stop, and no reading follows the final one. Energy is in Wh on the wire |
 | Callback delivery | Recorded observations are delivered in batches to a target set through simulation control and kept across restart. Failed batches are retried with the same event identities under bounded settings, and stale observations are not delivered. Simulators exclude Messaging, so this is a small provider-side loop rather than an outbox |
 
@@ -606,6 +606,7 @@ These are overridable experiment settings, not production availability targets.
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
 | Command request limit | 3 total requests per start or stop | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and command eligibility |
 | Automatic reconciliation | Every 5 seconds, 6 scheduled checks; then continued checks until resolved, every 30 seconds at first and slowing to every 15 minutes as the operation ages (a quarter of its unresolved time) | The first window closes one interval after its final scheduled check. A scan every 30 seconds claims due operations, longest-waiting first and no more than the concurrent command limit, so checks resume after a worker or provider outage; manual or operator checks remain available |
+| Stale-session recovery | A scan every 30 seconds finds active or stopping sessions whose newest reading is older than `Charging:FreshnessLimit` and reads the provider snapshot; each session is re-read every 30 seconds at first, slowing to every 15 minutes as it stays stale (a quarter of its stale time); at most 100 sessions per scan and 4 concurrent snapshot reads | The snapshot is appended to the observation stream, so it is recorded, deduplicated and completed like a callback. A fresh or ended session is not read |
 
 Wolverine scheduled work and retry policies bound automatic reconciliation under
 the [resilience boundaries](architecture.md#12-resilience-boundaries).

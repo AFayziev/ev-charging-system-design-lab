@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <ItemGroup>
     <InternalsVisibleTo Include="EvCharging.Api.Tests" />
-    <PackageReference Include="Aspire.Confluent.Kafka" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="FluentResults" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" />
@@ -9,6 +8,7 @@
     <ProjectReference Include="../EvCharging.DocumentStore/EvCharging.DocumentStore.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <ProjectReference Include="../EvCharging.Messaging/EvCharging.Messaging.csproj" />
+    <ProjectReference Include="../EvCharging.ObservationStream/EvCharging.ObservationStream.csproj" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>
   <ItemGroup>

@@ -40,5 +40,8 @@ internal sealed class ChargingSessionConfiguration : IEntityTypeConfiguration<Ch
             .HasForeignKey(session => session.ChargingProviderId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasIndex(session => new { session.ChargingProviderId, session.ProviderSessionId });
+        // Serves FindStaleSessionsMessageHandler; the filter matches its predicate.
+        entity.HasIndex(session => new { session.NextEvidenceReadAt, session.Id })
+            .HasFilter("lifecycle IN ('active', 'stopping')");
     }
 }

@@ -77,6 +77,21 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
     }
 
     [Fact]
+    public async Task Handle_NewerReading_ClearsTheScheduledProviderRead()
+    {
+        var session = await SeedSessionAsync();
+        await HandleAsync(Reading(session, 0, 1m));
+        await ScheduleReadAsync(session, Start.AddMinutes(15));
+
+        await HandleAsync(Reading(session, 0, 1m));
+        Assert.NotNull((await SavedSessionAsync(session)).NextEvidenceReadAt);
+
+        await HandleAsync(Reading(session, 5, 2m));
+
+        Assert.Null((await SavedSessionAsync(session)).NextEvidenceReadAt);
+    }
+
+    [Fact]
     public async Task Handle_SameBatchAgain_LeavesTheRowUntouched()
     {
         var session = await SeedSessionAsync();
@@ -267,17 +282,25 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
         await _messaging!.TrackActivity().Timeout(TimeSpan.FromSeconds(30))
             .ExecuteAndWaitAsync(_ => HandleAsync(envelopes));
 
+    private PlatformDbContext Database() => new(new DbContextOptionsBuilder<PlatformDbContext>()
+        .UseNpgsql(fixture.GetDataSource("charging_messaging")).Options);
+
+    private async Task ScheduleReadAsync(ChargingSession session, DateTimeOffset readAt)
+    {
+        await using var database = Database();
+        await database.Sessions.Where(value => value.Id == session.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(value => value.NextEvidenceReadAt, readAt));
+    }
+
     private async Task<ChargingSession> SavedSessionAsync(ChargingSession session)
     {
-        await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseNpgsql(fixture.GetDataSource("charging_messaging")).Options);
+        await using var database = Database();
         return await database.Sessions.AsNoTracking().SingleAsync(value => value.Id == session.Id);
     }
 
     private async Task<SessionEvidence?> EvidenceAsync(ChargingSession session)
     {
-        await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
-            .UseNpgsql(fixture.GetDataSource("charging_messaging")).Options);
+        await using var database = Database();
         return await database.SessionEvidence.AsNoTracking()
             .SingleOrDefaultAsync(evidence => evidence.SessionId == session.Id);
     }

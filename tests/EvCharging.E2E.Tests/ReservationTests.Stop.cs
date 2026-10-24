@@ -157,7 +157,7 @@ public sealed partial class ReservationTests
             .Select(value => value.PublicId)
             .SingleAsync(timeout.Token);
         // Without the provider's final reading there is no final usage, so the session cannot complete.
-        await fixture.ConfigureWattHarborTelemetryFaultAsync(sessionId, interrupt: true);
+        await fixture.ConfigureWattHarborTelemetryFaultAsync(sessionId, interrupt: true, snapshotUnavailable: true);
         await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Stop charging", Exact = true }).ClickAsync();
         var dialog = page.GetByRole(AriaRole.Dialog, new() { Name = "Stop charging?" });
