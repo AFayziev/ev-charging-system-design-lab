@@ -440,9 +440,14 @@ Notification failure leaves accepted reservations intact and remains separately 
   unfinished by an interrupted request. Verify no SQL transaction spans an
   external call and uncertain commits resolve by operation identity.
   Depends on M06.01–M06.02.
-- [ ] M06.06 Verify cancellation/start races, queued-start expiry, retained
+- [x] M06.06 Verify cancellation/start races, queued-start expiry, retained
   uncertain claims after expiry, session exclusivity, and effect limits across
-  worker retries and redelivery. Depends on M05.03 and M06.01–M06.02.
+  worker retries and redelivery. Both orderings of start and cancellation, expiry
+  during an in-flight provider call, a retained claim blocking another driver,
+  the claim lifecycle at the database, concurrent retry deliveries against the
+  persisted limit, and a transient save failure redelivered by Wolverine without a
+  second provider call are covered by tests.
+  Depends on M05.03 and M06.01–M06.02.
 
 Acceptance: driver start/stop and operator investigation work through the gateway,
 durable workers, and the synchronous provider. Uncertain effects remain visible and

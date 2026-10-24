@@ -33,6 +33,69 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
         Assert.True(exception.IsChargingClaimConflict());
     }
 
+    [Theory]
+    [InlineData(SessionLifecycle.Starting, true)]
+    [InlineData(SessionLifecycle.Active, true)]
+    [InlineData(SessionLifecycle.Stopping, true)]
+    [InlineData(SessionLifecycle.Completed, false)]
+    [InlineData(SessionLifecycle.Failed, false)]
+    public async Task Start_ConnectorClaim_IsHeldOnlyWhileTheSessionIsOpen(SessionLifecycle lifecycle, bool held)
+    {
+        await using var connection = fixture.CreateConnection("platform_writer");
+        await using var database = Context(connection);
+        var (connector, firstDriver) = await EquipmentAsync(database);
+        var secondDriver = Driver.Register(
+            "https://test.invalid", Guid.NewGuid().ToString(), EmailAddress.Create("other@example.test").Value);
+        var start = DateTimeOffset.UtcNow.AddHours(-3);
+        var first = Booking(connector, firstDriver, start, start.AddHours(1));
+        var second = Booking(connector, secondDriver, start.AddHours(1), start.AddHours(2));
+        database.Reservations.AddRange(first, second);
+        var firstSession = ChargingSession.AcceptStart(first, first.StartsAt).Value;
+        database.Sessions.Add(firstSession);
+        await database.SaveChangesAsync();
+        await database.Sessions.Where(value => value.Id == firstSession.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(value => value.Lifecycle, lifecycle));
+
+        database.Sessions.Add(ChargingSession.AcceptStart(second, second.StartsAt).Value);
+
+        await AssertSaveAsync(database, held);
+    }
+
+    [Theory]
+    [InlineData(SessionLifecycle.Starting, true)]
+    [InlineData(SessionLifecycle.Completed, true)]
+    [InlineData(SessionLifecycle.Failed, false)]
+    public async Task Start_ReservationClaim_IsReleasedOnlyByAFailedStart(SessionLifecycle lifecycle, bool held)
+    {
+        await using var connection = fixture.CreateConnection("platform_writer");
+        await using var database = Context(connection);
+        var (connector, driver) = await EquipmentAsync(database);
+        var start = DateTimeOffset.UtcNow.AddHours(-3);
+        var reservation = Booking(connector, driver, start, start.AddHours(1));
+        database.Reservations.Add(reservation);
+        var firstSession = ChargingSession.AcceptStart(reservation, reservation.StartsAt).Value;
+        database.Sessions.Add(firstSession);
+        await database.SaveChangesAsync();
+        await database.Sessions.Where(value => value.Id == firstSession.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(value => value.Lifecycle, lifecycle));
+
+        database.Sessions.Add(ChargingSession.AcceptStart(reservation, reservation.StartsAt).Value);
+
+        await AssertSaveAsync(database, held);
+    }
+
+    private static async Task AssertSaveAsync(PlatformDbContext database, bool conflicts)
+    {
+        if (!conflicts)
+        {
+            await database.SaveChangesAsync();
+            return;
+        }
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => database.SaveChangesAsync());
+        Assert.True(exception.IsChargingClaimConflict());
+    }
+
     [Fact]
     public async Task LockDriver_TransientContention_RecognizesWrappedFailureForMessageRetry()
     {

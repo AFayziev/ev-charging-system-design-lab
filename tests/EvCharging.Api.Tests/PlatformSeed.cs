@@ -1,6 +1,7 @@
 using EvCharging.Api.Authentication;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
+using EvCharging.Domain.Reservations;
 using EvCharging.Testing;
 
 namespace EvCharging.Api.Tests;
@@ -45,5 +46,28 @@ internal static class PlatformSeed
         database.Drivers.Add(driver);
         await database.SaveChangesAsync();
         return (driver, identity);
+    }
+
+    public static async Task<Reservation> SeedReservationAsync(
+        this PlatformDatabaseFixture fixture,
+        Connector connector,
+        Driver driver,
+        DateTimeOffset start,
+        DateTimeOffset end,
+        DateTimeOffset bookedAt)
+    {
+        await using var database = fixture.CreateContext();
+        database.Attach(connector);
+        database.Attach(driver);
+        var reservation = Reservation.Book(
+            connector,
+            driver,
+            start,
+            end,
+            bookedAt,
+            new(2, TimeSpan.FromHours(2), TimeSpan.FromDays(1), TimeSpan.FromMinutes(10))).Value;
+        database.Reservations.Add(reservation);
+        await database.SaveChangesAsync();
+        return reservation;
     }
 }
