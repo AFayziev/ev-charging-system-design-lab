@@ -99,12 +99,16 @@ public sealed class WattHarborFixture : IAsyncLifetime
     }
 
     public async Task ConfigureTelemetryFaultAsync(
-        Guid externalSessionId, bool duplicate = false, bool deliverOutOfOrder = false, bool interrupt = false)
+        Guid externalSessionId,
+        bool duplicate = false,
+        bool deliverOutOfOrder = false,
+        bool interrupt = false,
+        bool snapshotUnavailable = false)
     {
         var controls = _controls ?? throw new InvalidOperationException("The control client is not ready.");
         using var response = await controls.PutAsJsonAsync(
             $"/simulation/sessions/{externalSessionId}/telemetry",
-            new TelemetryFault(duplicate, deliverOutOfOrder, interrupt));
+            new TelemetryFault(duplicate, deliverOutOfOrder, interrupt, snapshotUnavailable));
         response.EnsureSuccessStatusCode();
     }
 
@@ -137,6 +141,7 @@ public sealed class WattHarborFixture : IAsyncLifetime
 
     private sealed record EquipmentSettings(decimal PowerKw, bool Enabled);
     private sealed record CallbackTarget(string Url, string ApiKey);
-    private sealed record TelemetryFault(bool Duplicate, bool DeliverOutOfOrder, bool Interrupt);
+    private sealed record TelemetryFault(
+        bool Duplicate, bool DeliverOutOfOrder, bool Interrupt, bool SnapshotUnavailable);
     private sealed record TokenResponse([property: JsonPropertyName("access_token")] string AccessToken);
 }

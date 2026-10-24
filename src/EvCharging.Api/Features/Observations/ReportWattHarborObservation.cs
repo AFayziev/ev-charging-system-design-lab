@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using EvCharging.Api.Streaming;
 using EvCharging.Contracts.Observations;
+using EvCharging.ObservationStream;
 using FluentResults;
 using Microsoft.Extensions.Options;
 
@@ -105,7 +105,7 @@ internal sealed class ObservationStreamUnavailableError()
     : Error("The observation stream did not confirm the append.");
 
 public sealed class ReportWattHarborObservationsCommandHandler(
-    IObservationStream stream,
+    IObservationStreamProducer stream,
     TimeProvider clock,
     ILogger<ReportWattHarborObservationsCommandHandler> logger)
 {

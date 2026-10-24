@@ -93,12 +93,13 @@ public sealed class AppHostFixture : IAsyncLifetime
             new ProviderCommandFault(sessionId, true, lookupStatus));
     }
 
-    /// <summary>Stops WattHarbor from sending observations for a session, or lets it send them again.</summary>
-    public async Task ConfigureWattHarborTelemetryFaultAsync(Guid sessionId, bool interrupt)
+    /// <summary>Stops WattHarbor from sending observations for a session, or lets it send them again. Optionally the snapshot read fails too.</summary>
+    public async Task ConfigureWattHarborTelemetryFaultAsync(
+        Guid sessionId, bool interrupt, bool snapshotUnavailable = false)
     {
         await PutWattHarborControlAsync(
             $"/simulation/sessions/{sessionId}/telemetry",
-            new ProviderTelemetryFault(false, false, interrupt));
+            new ProviderTelemetryFault(false, false, interrupt, snapshotUnavailable));
     }
 
     private async Task PutWattHarborControlAsync(string path, object body)
@@ -133,7 +134,8 @@ public sealed class AppHostFixture : IAsyncLifetime
 
     private sealed record ProviderEquipment(decimal PowerKw, bool Enabled);
     private sealed record ProviderCallbackTarget(string Url, string ApiKey);
-    private sealed record ProviderTelemetryFault(bool Duplicate, bool DeliverOutOfOrder, bool Interrupt);
+    private sealed record ProviderTelemetryFault(
+        bool Duplicate, bool DeliverOutOfOrder, bool Interrupt, bool SnapshotUnavailable);
 
     private sealed record ProviderCommandFault(Guid ExternalSessionId, bool LoseResponse, int? LookupStatusCode);
     private sealed record ProviderToken([property: JsonPropertyName("access_token")] string AccessToken);
@@ -173,6 +175,9 @@ public sealed class AppHostFixture : IAsyncLifetime
             .WithEnvironment("ChargingExecution__MaximumContinuedStatusCheckInterval", "00:01:00")
             .WithEnvironment("ChargingExecution__ContinuedStatusCheckSchedule", "*/10 * * * * *")
             .WithEnvironment("ReservationExpiry__ScanSchedule", "*/10 * * * * *")
+            .WithEnvironment("SessionEvidenceRefresh__ScanSchedule", "*/10 * * * * *")
+            .WithEnvironment("SessionEvidenceRefresh__MinimumReadInterval", "00:00:10")
+            .WithEnvironment("SessionEvidenceRefresh__MaximumReadInterval", "00:01:00")
             .WithEnvironment("ReservationExpiry__BatchSize", "2")
             .WithEnvironment("ReservationExpiry__MaximumConcurrentChecks", "2");
         builder.CreateResourceBuilder(api)

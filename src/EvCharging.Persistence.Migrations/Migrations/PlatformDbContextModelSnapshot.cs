@@ -70,6 +70,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("lifecycle")
                         .HasAnnotation("Audit:Included", true);
 
+                    b.Property<DateTimeOffset?>("NextEvidenceReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_evidence_read_at");
+
                     b.Property<string>("ProviderSessionId")
                         .HasColumnType("text")
                         .HasColumnName("provider_session_id");
@@ -108,6 +112,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.HasIndex("ChargingProviderId", "ProviderSessionId")
                         .HasDatabaseName("ix_sessions_charging_provider_id_provider_session_id");
+
+                    b.HasIndex("NextEvidenceReadAt", "Id")
+                        .HasDatabaseName("ix_sessions_next_evidence_read_at_id")
+                        .HasFilter("lifecycle IN ('active', 'stopping')");
 
                     b.ToTable("sessions", "charging");
 

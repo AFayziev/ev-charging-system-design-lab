@@ -8,7 +8,9 @@ namespace EvCharging.WattHarborProviderApi.Features.Simulation;
 /// <param name="Duplicate">Send each observation twice with the same event ID.</param>
 /// <param name="DeliverOutOfOrder">Send a newer observation before the one it follows.</param>
 /// <param name="Interrupt">Do not send observations, including the terminal one.</param>
-public sealed record ConfigureTelemetryFaultRequest(bool Duplicate, bool DeliverOutOfOrder, bool Interrupt);
+/// <param name="SnapshotUnavailable">Answer snapshot reads with 503.</param>
+public sealed record ConfigureTelemetryFaultRequest(
+    bool Duplicate, bool DeliverOutOfOrder, bool Interrupt, bool SnapshotUnavailable);
 
 internal sealed class TelemetryFaults(IMemoryCache cache)
 {

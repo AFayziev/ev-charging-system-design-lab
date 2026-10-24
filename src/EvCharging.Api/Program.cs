@@ -6,10 +6,10 @@ using EvCharging.Api.Features.Observations;
 using EvCharging.Api.Features.Reservations;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
-using EvCharging.Api.Streaming;
 using EvCharging.Contracts.Observations;
 using EvCharging.DocumentStore;
 using EvCharging.Messaging;
+using EvCharging.ObservationStream;
 using EvCharging.Persistence.Extensions;
 using Wolverine.EntityFrameworkCore;
 
@@ -19,7 +19,7 @@ builder.AddApiAuthentication();
 builder.AddObservationSourceAuthentication();
 builder.AddHttpApiDefaults("/api");
 builder.AddPlatformPersistence();
-builder.AddObservationStream();
+builder.AddObservationStreamProducer();
 builder.AddObservationIngestion();
 builder.AddDocumentStore();
 builder.Services.AddOptions<ObservationClockSkewOptions>()

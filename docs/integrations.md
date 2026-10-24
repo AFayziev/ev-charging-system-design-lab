@@ -136,8 +136,8 @@ Provider identity namespaces event and external IDs. Clients apply the
 Provider callbacks target the platform gateway, which routes them to authenticated
 observation ingestion. Each provider integration authenticates its callbacks with its
 own credential, and the credential, not the payload, establishes the integration.
-Recovery polling calls provider APIs directly; the charging worker submits the
-polled observations through the gateway to the same ingestion path.
+Recovery polling calls provider APIs directly; the charging worker appends the
+polled observations to the same observation stream.
 A callback can carry several observations, within a configured limit. It is
 acknowledged only after every observation has durable stream acceptance, and one
 invalid observation rejects the whole callback. Unacknowledged delivery is retried

@@ -93,8 +93,8 @@ business validation.
 All application HTTP calls to platform-owned APIs pass through the gateway:
 browser requests, worker submissions, and provider callbacks. The gateway routes
 each request to its owning internal API. Charging-worker recovery polling calls
-the provider directly and submits the resulting observations through the gateway
-to ingestion. Outbound integration calls use external service endpoints.
+the provider directly and appends the resulting observations to the observation
+stream. Outbound integration calls use external service endpoints.
 Orchestration health checks
 address hosts directly.
 
@@ -119,8 +119,8 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 |---|---|
 | Gateway / BFF | Browser authentication sessions, identity-provider interactions, and browser/service/callback routing to runtime-balanced API services |
 | API | Command/query acceptance, transactional reservation/operation/session intent, file authorization, observation ingestion, and live connections/event subscription |
-| Charging worker | Charging-provider integrations and start/stop effects, reservation expiry, transactional lifecycle/final-usage processing, reconciliation, recovery polling through observation ingestion, and recurring due-work discovery |
-| Observation worker | Stream consumers, document history/latest views, stalled-session detection, and isolated observation-view replay |
+| Charging worker | Charging-provider integrations and start/stop effects, reservation expiry, transactional lifecycle/final-usage processing, reconciliation, stale-session detection and recovery polling that appends to the observation stream, and recurring due-work discovery |
+| Observation worker | Stream consumers, document history/latest views, and isolated observation-view replay |
 | Search index worker | Station/business-event and observation consumers, search indexing, replacement-index rebuilds, validation, and switchover |
 | Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and bounded warming/recovery |
 | Media worker | Media processing/publication, summaries, diagnostic bundles, and upload/orphan sweeps |
@@ -128,8 +128,8 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 
 Recurring producers run with their owning workload: reconciliation/recovery
 polling in the charging worker and upload/orphan sweeps in the media worker.
-Stalled-session detection submits durable reconciliation work to the charging
-worker. Each worker deployment has independent queues, concurrency budgets, retry
+Stalled-session detection also runs in the charging worker, from its session
+evidence. Each worker deployment has independent queues, concurrency budgets, retry
 policies, and durable recovery. Failure of one workload does not pause unrelated
 worker workloads.
 

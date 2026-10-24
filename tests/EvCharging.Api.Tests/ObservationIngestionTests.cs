@@ -5,8 +5,8 @@ using System.Text.Json;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using EvCharging.Api.Features.Observations;
-using EvCharging.Api.Streaming;
 using EvCharging.Contracts.Observations;
+using EvCharging.ObservationStream;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -235,7 +235,7 @@ public sealed class ObservationIngestionTests
         return values;
     }
 
-    private sealed class FakeObservationStream : IObservationStream
+    private sealed class FakeObservationStream : IObservationStreamProducer
     {
         public List<ObservationEnvelope> Appended { get; } = [];
 
@@ -279,7 +279,7 @@ public sealed class ObservationIngestionTests
             builder.AddObservationIngestion();
             builder.AddHttpApiDefaults();
             builder.Services.AddApplicationValidation();
-            builder.Services.AddSingleton<IObservationStream>(stream);
+            builder.Services.AddSingleton<IObservationStreamProducer>(stream);
             builder.Services.AddSingleton(TimeProvider.System);
             builder.UseWolverine(options =>
             {

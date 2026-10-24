@@ -1,9 +1,9 @@
 using EvCharging.Contracts.Observations;
 
-namespace EvCharging.Api.Streaming;
+namespace EvCharging.ObservationStream;
 
 /// <summary>The durable acceptance boundary for observations.</summary>
-public interface IObservationStream
+public interface IObservationStreamProducer
 {
     /// <summary>Appends the envelopes and returns only after the stream confirms every one is persisted.</summary>
     /// <exception cref="ObservationStreamException">The append was not confirmed. Some envelopes may still

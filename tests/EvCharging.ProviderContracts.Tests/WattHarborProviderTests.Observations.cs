@@ -153,6 +153,21 @@ public sealed partial class WattHarborProviderTests
     }
 
     [Fact]
+    public async Task Observations_SnapshotUnavailableFault_FailsSnapshotReadsUntilCleared()
+    {
+        var (request, _) = await StartSessionAsync();
+        var snapshotPath = $"/sessions/by-external-session/{request.ExternalSessionId}/snapshot";
+        await fixture.ConfigureTelemetryFaultAsync(request.ExternalSessionId, snapshotUnavailable: true);
+
+        using var unavailable = await fixture.Charging.GetAsync(snapshotPath);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
+
+        await fixture.ConfigureTelemetryFaultAsync(request.ExternalSessionId);
+        using var restored = await fixture.Charging.GetAsync(snapshotPath);
+        Assert.Equal(HttpStatusCode.OK, restored.StatusCode);
+    }
+
+    [Fact]
     public async Task Observations_DuplicateFault_SendsEachObservationTwiceWithTheSameEventId()
     {
         var request = await ConfigureAsync();

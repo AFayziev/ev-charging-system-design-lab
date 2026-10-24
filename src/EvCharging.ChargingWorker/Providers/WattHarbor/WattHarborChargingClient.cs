@@ -19,6 +19,7 @@ public sealed class WattHarborChargingClient(
     private const string ConnectorUnavailable = "connector_unavailable";
     private const string ExternalSessionIdConflict = "external_session_id_conflict";
     private const string SessionNotFound = "session_not_found";
+    private const decimal WattHoursPerKilowattHour = 1000m;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         RespectRequiredConstructorParameters = true,
@@ -94,6 +95,50 @@ public sealed class WattHarborChargingClient(
             $"sessions/by-external-session/{externalSessionId}",
             session => session.ExternalSessionId == externalSessionId,
             cancellationToken);
+
+    public async Task<Result<ProviderSnapshotResult?>> GetSessionSnapshotAsync(
+        Guid externalSessionId, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, $"sessions/by-external-session/{externalSessionId}/snapshot");
+        return await SendAsync(
+            request,
+            (response, body) => ReadSnapshot(response, body, externalSessionId),
+            cancellationToken);
+    }
+
+    private static Result<ProviderSnapshotResult?> ReadSnapshot(
+        HttpResponseMessage response, string body, Guid externalSessionId)
+    {
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return Result.Ok<ProviderSnapshotResult?>(null);
+        }
+
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            return Result.Fail<ProviderSnapshotResult?>(new ProviderResponseError(response.StatusCode, body));
+        }
+
+        var snapshot = Deserialize<SnapshotResponse>(body);
+        bool valid = snapshot.EventId != Guid.Empty && snapshot.ExternalSessionId == externalSessionId
+            && snapshot.OccurredAt != default && snapshot.PowerKw >= 0 && snapshot.EnergyWh >= 0
+            && !string.IsNullOrWhiteSpace(snapshot.StationId)
+            && !string.IsNullOrWhiteSpace(snapshot.ChargerId)
+            && !string.IsNullOrWhiteSpace(snapshot.ConnectorId)
+            && (!snapshot.IsFinalEnergy || snapshot.State == ProviderSessionState.Stopped);
+        return valid
+            ? Result.Ok<ProviderSnapshotResult?>(new ProviderSnapshotResult(
+                snapshot.EventId,
+                snapshot.ExternalSessionId,
+                new ProviderEquipmentAddress(snapshot.StationId, snapshot.ChargerId, snapshot.ConnectorId),
+                snapshot.OccurredAt.ToUniversalTime(),
+                snapshot.State,
+                snapshot.PowerKw,
+                snapshot.EnergyWh / WattHoursPerKilowattHour,
+                snapshot.IsFinalEnergy))
+            : Result.Fail<ProviderSnapshotResult?>(new ProviderResponseError(response.StatusCode, body));
+    }
 
     private static Result<ProviderCommandResult> ReadCommand(
         HttpResponseMessage response, string body, Guid externalOperationId, ProviderCommandKind kind)
@@ -298,6 +343,17 @@ public sealed class WattHarborChargingClient(
         string? Code = null,
         Guid? CommandId = null,
         Guid? ExternalOperationId = null);
+    private sealed record SnapshotResponse(
+        Guid EventId,
+        Guid ExternalSessionId,
+        string StationId,
+        string ChargerId,
+        string ConnectorId,
+        DateTimeOffset OccurredAt,
+        ProviderSessionState State,
+        decimal PowerKw,
+        decimal EnergyWh,
+        bool IsFinalEnergy);
     private sealed record SessionResponse(
         Guid Id,
         Guid ExternalSessionId,

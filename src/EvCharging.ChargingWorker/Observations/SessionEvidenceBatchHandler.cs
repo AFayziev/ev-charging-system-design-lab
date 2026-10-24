@@ -42,6 +42,7 @@ internal sealed class SessionEvidenceBatchHandler(
         var evidence = await database.SessionEvidence
             .Where(row => sessionIds.Contains(row.SessionId))
             .ToDictionaryAsync(row => row.SessionId, cancellationToken);
+        var advanced = new List<Guid>();
         foreach (var (sessionId, sessionReadings) in readings)
         {
             if (!evidence.TryGetValue(sessionId, out var row))
@@ -50,6 +51,7 @@ internal sealed class SessionEvidenceBatchHandler(
                 database.SessionEvidence.Add(row);
             }
 
+            var observedBefore = row.LastObservedAt;
             bool finalised = false;
             foreach (var reading in sessionReadings.OrderBy(envelope => envelope.OccurredAt)
                 .ThenBy(envelope => envelope.SourceEventId))
@@ -63,10 +65,25 @@ internal sealed class SessionEvidenceBatchHandler(
                     clockSkew.Value.ClockSkew);
             }
 
+            if (row.LastObservedAt != observedBefore)
+            {
+                advanced.Add(sessionId);
+            }
+
             if (finalised)
             {
                 await outbox.PublishAsync(new CompleteChargingSessionMessage(sessionId));
             }
+        }
+
+        if (advanced.Count > 0)
+        {
+            // A session that reported again starts its next stale period with a read as soon as it is due.
+            await database.Sessions
+                .Where(session => advanced.Contains(session.Id) && session.NextEvidenceReadAt != null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(session => session.NextEvidenceReadAt, (DateTimeOffset?)null),
+                    cancellationToken);
         }
 
         await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);

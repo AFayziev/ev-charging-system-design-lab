@@ -507,13 +507,13 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   - [x] M07.02.3 Completion notification: prepare one email from the completion
     event and deliver it through the notification worker. Verify the frozen
     content and redelivery. Depends on M07.02.1 and M05.04.
-- [ ] M07.03 Deliver stalled-session detection and recovery polling:
-  stalled-session detection submits durable reconciliation work to the charging
-  worker, which polls the provider snapshot and submits it through the gateway
-  with service credentials. Verify that interrupted telemetry makes the view
-  stale rather than stopped, that polling restores freshness and supplies missing
-  final usage for a `Stopping` session, and that replay does not refresh
-  timestamps. Depends on M07.01.5 and M07.02.
+- [x] M07.03 Deliver stalled-session detection and recovery polling:
+  the charging worker finds active or stopping sessions whose newest reading is
+  older than the freshness limit, reads the provider snapshot with backoff, and
+  appends it to the observation stream. Verify that interrupted telemetry makes
+  the view stale rather than stopped, that polling restores freshness and
+  supplies missing final usage for a `Stopping` session, and that replay does
+  not refresh timestamps. Depends on M07.01.5 and M07.02.
 - [ ] M07.04 Deliver assigned-operator observation history and anomaly inspection
   alongside SQL attempts and provider evidence. Verify authorization, timestamp
   skew, duplicate/out-of-order observations, and missing/decreasing energy

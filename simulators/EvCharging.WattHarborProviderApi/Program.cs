@@ -37,7 +37,8 @@ app.UseAuthorization();
 app.MapHttpApiDiagnostics("wattharbor-provider-api");
 var publicApi = app.MapGroup("")
     .AddEndpointFilterFactory(FaultInjectionFilters.ResponseLoss)
-    .AddEndpointFilterFactory(FaultInjectionFilters.LookupFailure);
+    .AddEndpointFilterFactory(FaultInjectionFilters.LookupFailure)
+    .AddEndpointFilterFactory(FaultInjectionFilters.SnapshotFailure);
 publicApi.MapCommandEndpoints();
 publicApi.MapSessionEndpoints();
 app.MapCommandFaultEndpoints();
