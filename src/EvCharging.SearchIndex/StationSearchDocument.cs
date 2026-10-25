@@ -1,6 +1,6 @@
 using Elastic.Clients.Elasticsearch;
 
-namespace EvCharging.SearchIndexWorker.Indexing;
+namespace EvCharging.SearchIndex;
 
 public sealed record StationSearchDocument(
     Guid PublicId,
@@ -10,5 +10,3 @@ public sealed record StationSearchDocument(
     int ChargerCount,
     int ConnectorCount,
     IReadOnlyList<ConnectorSearchDocument> Connectors);
-
-public sealed record ConnectorSearchDocument(string ConnectorType, string PowerSupply, decimal RatedPowerKW);

@@ -118,6 +118,55 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
     }
 
     [Fact]
+    [Trait("Category", "Api")]
+    public async Task Search_Anonymous_FindsSeededStationsThroughTheGateway()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        await fixture.App.ResourceNotifications.WaitForResourceHealthyAsync("search-api", timeout.Token);
+        using var client = fixture.App.CreateHttpClient("gateway", "http");
+
+        // The search worker builds the index after startup, so the first answers can be the typed unavailable error.
+        JsonElement result;
+        while (true)
+        {
+            using var response = await client.GetAsync(
+                "/api/search/stations?q=north&connectorType=Type2",
+                timeout.Token);
+            if (response.StatusCode == HttpStatusCode.OK)
+            {
+                result = await response.Content.ReadFromJsonAsync<JsonElement>(timeout.Token);
+                if (result.GetProperty("stations").GetArrayLength() > 0)
+                {
+                    break;
+                }
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), timeout.Token);
+        }
+
+        var station = result.GetProperty("stations")[0];
+        Assert.Equal("North Station", station.GetProperty("name").GetString());
+        Assert.Equal(JsonValueKind.Null, station.GetProperty("distanceKm").ValueKind);
+        var browse = await client.GetFromJsonAsync<JsonElement>("/api/stations?limit=50", timeout.Token);
+        Assert.Contains(
+            browse.GetProperty("stations").EnumerateArray(),
+            browsed => browsed.GetProperty("id").GetGuid() == station.GetProperty("id").GetGuid());
+
+        var firstPage = await client.GetFromJsonAsync<JsonElement>("/api/search/stations?limit=1", timeout.Token);
+        string cursor = firstPage.GetProperty("nextCursor").GetString()!;
+        var secondPage = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/search/stations?cursor={cursor}&limit=1", timeout.Token);
+        Assert.NotEqual(
+            firstPage.GetProperty("stations")[0].GetProperty("id").GetGuid(),
+            secondPage.GetProperty("stations")[0].GetProperty("id").GetGuid());
+
+        using var invalid = await client.GetAsync("/api/search/stations?lat=95&lon=0", timeout.Token);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        using var write = await client.PostAsync("/api/search/stations", new StringContent("{}"), timeout.Token);
+        Assert.Equal(HttpStatusCode.Unauthorized, write.StatusCode);
+    }
+
+    [Fact]
     [Trait("Category", "Browser")]
     public async Task Browse_Operator_PublicCatalogueAndProtectedBoundaries()
     {

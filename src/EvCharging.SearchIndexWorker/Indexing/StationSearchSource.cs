@@ -1,3 +1,5 @@
+using EvCharging.SearchIndex;
+
 namespace EvCharging.SearchIndexWorker.Indexing;
 
 internal sealed record StationSearchSource(

@@ -5,6 +5,7 @@ using Elastic.Clients.Elasticsearch.IndexManagement;
 using Elastic.Transport;
 using EvCharging.Contracts.Events.Stations;
 using EvCharging.Persistence;
+using EvCharging.SearchIndex;
 using EvCharging.SearchIndexWorker.Handlers;
 using EvCharging.SearchIndexWorker.Indexing;
 using EvCharging.Testing;

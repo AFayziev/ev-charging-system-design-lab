@@ -28,6 +28,7 @@
     <ProjectReference Include="../EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
     <ProjectReference Include="../EvCharging.ObservationWorker/EvCharging.ObservationWorker.csproj" />
     <ProjectReference Include="../EvCharging.SearchIndexWorker/EvCharging.SearchIndexWorker.csproj" />
+    <ProjectReference Include="../EvCharging.SearchApi/EvCharging.SearchApi.csproj" />
     <ProjectReference Include="../EvCharging.CacheWorker/EvCharging.CacheWorker.csproj" />
     <ProjectReference Include="../EvCharging.MediaWorker/EvCharging.MediaWorker.csproj" />
     <ProjectReference Include="../EvCharging.NotificationWorker/EvCharging.NotificationWorker.csproj" />

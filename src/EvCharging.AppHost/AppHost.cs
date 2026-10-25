@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 var builder = DistributedApplication.CreateBuilder(args);
 var chargingProviders = BindValidatedConfigSection<ChargingProviderOptions>(ChargingProviderOptions.SectionName);
 var chargingSettings = BindValidatedConfigSection<ChargingOptions>(ChargingOptions.SectionName);
+var searchSettings = BindValidatedConfigSection<SearchOptions>(SearchOptions.SectionName);
 
 var database = builder.AddPlatformDatabase();
 var databaseAccess = builder.AddDatabaseAccess(database);
@@ -40,6 +41,7 @@ var broker = builder.AddMessageBroker();
 var stream = builder.AddObservationStream();
 var streamProvisioning = builder.AddObservationStreamProvisioning(stream);
 var searchIndex = builder.AddSearchIndex();
+var (searchReader, searchIndexProvisioning) = builder.AddSearchIndexAccess(searchIndex);
 var (storage, storageAccessKey, storageSecretKey) = builder.AddObjectStorage();
 
 var apiCount = await InstanceCountAsync("api-instances");
@@ -58,8 +60,6 @@ var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: 
     .WithHttpHealthCheck("/health");
 
 api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
-    .WithReference(searchIndex)
-    .WaitFor(searchIndex)
     .WithReference(databaseAccess.Write)
     .WithReference(databaseAccess.Read)
     .WithReference(databaseAccess.Write, "messaging")
@@ -81,6 +81,21 @@ api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
         $"ObservationSources__Sources__{chargingProviders.WattHarborIntegrationKey}__ApiKeys__0",
         wattHarborCallbackKey);
 
+var searchApiCount = await InstanceCountAsync("search-api-instances");
+var searchApi = builder.AddProject<Projects.EvCharging_SearchApi>("search-api", launchProfileName: null)
+    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithSettings(
+        searchSettings,
+        SearchOptions.SectionName,
+        options => options.RequestTimeout,
+        options => options.RetryAttempts,
+        options => options.RetryDelay)
+    .WithHttpEndpoint()
+    .WithReplicas(searchApiCount)
+    .WithHttpHealthCheck("/health")
+    .WithReference(searchReader)
+    .WaitForCompletion(searchIndexProvisioning);
+
 var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchProfileName: null)
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
     .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode
@@ -88,11 +103,13 @@ var gateway = builder.AddProject<Projects.EvCharging_Gateway>("gateway", launchP
     .WithReplicas(gatewayCount)
     .WithHttpHealthCheck("/health")
     .WithReference(api)
-    .WaitFor(api);
+    .WaitFor(api)
+    .WithReference(searchApi)
+    .WithSettings(searchSettings, SearchOptions.SectionName, options => options.GatewayTimeout);
 
 if (builder.Environment.IsDevelopment())
 {
-    foreach (var httpApi in new[] { api, gateway })
+    foreach (var httpApi in new[] { api, searchApi, gateway })
     {
         httpApi.WithUrlForEndpoint(
             "http",

@@ -1,0 +1,9 @@
+{
+  "cluster": [],
+  "indices": [
+    {
+      "names": [ "stations" ],
+      "privileges": [ "read" ]
+    }
+  ]
+}

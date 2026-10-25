@@ -317,6 +317,15 @@ Requires Docker for the Elasticsearch and PostgreSQL integration tests.
 dotnet test tests/EvCharging.SearchIndexWorker.Tests
 ```
 
+### Search API tests
+
+Requires Docker for the secured Elasticsearch integration tests, which run the
+real read-only role provisioning.
+
+```sh
+dotnet test tests/EvCharging.SearchApi.Tests
+```
+
 ### Frontend component tests
 
 Supply the browser timezone fixture through the process environment before

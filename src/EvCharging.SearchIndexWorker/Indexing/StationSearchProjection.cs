@@ -1,5 +1,6 @@
 using Elastic.Clients.Elasticsearch;
 using EvCharging.Domain.Equipment;
+using EvCharging.SearchIndex;
 using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.SearchIndexWorker.Indexing;

@@ -1,6 +1,6 @@
 using Elastic.Clients.Elasticsearch.Mapping;
 
-namespace EvCharging.SearchIndexWorker.Indexing;
+namespace EvCharging.SearchIndex;
 
 /// <summary>Names and mapping of the station index. Searches use <see cref="Alias" />.</summary>
 public static class StationSearchIndex
@@ -17,7 +17,7 @@ public static class StationSearchIndex
 
     public const string MappingVersionKey = "mappingVersion";
 
-    internal static Properties<StationSearchDocument> StationProperties() => new()
+    public static Properties<StationSearchDocument> StationProperties() => new()
     {
         { document => document.PublicId, new KeywordProperty() },
         { document => document.Name, TextWithKeyword() },

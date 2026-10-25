@@ -22,6 +22,8 @@
     <Project Path="src/EvCharging.ObservationWorker/EvCharging.ObservationWorker.csproj" />
     <Project Path="src/EvCharging.Persistence/EvCharging.Persistence.csproj" />
     <Project Path="src/EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />
+    <Project Path="src/EvCharging.SearchIndex/EvCharging.SearchIndex.csproj" />
+    <Project Path="src/EvCharging.SearchApi/EvCharging.SearchApi.csproj" />
     <Project Path="src/EvCharging.SearchIndexWorker/EvCharging.SearchIndexWorker.csproj" />
     <Project Path="src/EvCharging.CacheWorker/EvCharging.CacheWorker.csproj" />
     <Project Path="src/EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
@@ -42,6 +44,7 @@
     <Project Path="tests/EvCharging.ProviderContracts.Tests/EvCharging.ProviderContracts.Tests.csproj" />
     <Project Path="tests/EvCharging.NotificationWorker.Tests/EvCharging.NotificationWorker.Tests.csproj" />
     <Project Path="tests/EvCharging.SearchIndexWorker.Tests/EvCharging.SearchIndexWorker.Tests.csproj" />
+    <Project Path="tests/EvCharging.SearchApi.Tests/EvCharging.SearchApi.Tests.csproj" />
     <Project Path="tests/EvCharging.Testing/EvCharging.Testing.csproj" />
     <Project Path="tests/EvCharging.E2E.Tests/EvCharging.E2E.Tests.csproj" />
   </Folder>

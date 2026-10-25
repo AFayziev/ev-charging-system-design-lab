@@ -45,6 +45,7 @@ dotnet test tests/EvCharging.ChargingWorker.Tests
 dotnet test tests/EvCharging.ObservationWorker.Tests   # MongoDB via Testcontainers
 dotnet test tests/EvCharging.Persistence.Tests         # PostgreSQL via Testcontainers
 dotnet test tests/EvCharging.Gateway.Tests             # PostgreSQL via Testcontainers
+dotnet test tests/EvCharging.SearchApi.Tests           # secured Elasticsearch via Testcontainers
 dotnet test tests/EvCharging.ProviderContracts.Tests   # starts the provider AppHost
 dotnet test tests/EvCharging.E2E.Tests --filter "Category=Api"   # full stack; needs Chromium for browser tests
 dotnet test tests/EvCharging.Domain.Tests --filter "FullyQualifiedName~SomeTestName"   # single test
@@ -58,7 +59,7 @@ Match verification to the change. Do not run the whole E2E suite after small cha
 
 Two independent Aspire AppHosts:
 
-- `src/EvCharging.AppHost` is the platform. Hosts are `Gateway` (YARP/BFF, browser sessions, auth), `Api` (commands/queries, vertical slices under `Features/<Feature>`), the `*Worker` hosts (charging, observation, search-index, cache, media, notification), and the Vite `Web` app.
+- `src/EvCharging.AppHost` is the platform. Hosts are `Gateway` (YARP/BFF, browser sessions, auth), `Api` (commands/queries, vertical slices under `Features/<Feature>`), `SearchApi` (anonymous station search over a read-only index role), the `*Worker` hosts (charging, observation, search-index, cache, media, notification), and the Vite `Web` app.
 - `simulators/EvCharging.Providers.AppHost` runs the external charging-provider simulators with their own Keycloak and PostgreSQL. `WattHarborProviderApi` is synchronous with command deduplication. `AmpTrailProviderApi` returns queued acknowledgements with no deduplication. The platform does not start them. `tools/dev.ps1` discovers their dynamic URLs and passes them to the platform.
 
 Shared libraries:
@@ -67,6 +68,7 @@ Shared libraries:
 - `Domain`: entities and pure policies, with no persistence concerns.
 - `Persistence`: EF mappings for the charging schema, consumed by the API and workers.
 - `DocumentStore`: MongoDB observation documents and collections, written by the observation worker and read by the API.
+- `SearchIndex`: station search document, index names and mapping, shared by the search index worker and the search API.
 - `Persistence.Migrations` and `Gateway.Migrations`: own migrations and seed data, and run as one-shot resources with schema-owning credentials. Runtime roles have narrower permissions. `DocumentStore.Migrations` is the one-shot that creates the MongoDB indexes.
 - `Messaging`: Wolverine configuration and routing, with inbox/outbox. Excluded from the provider simulators.
 - `ServiceDefaults`: discovery, HTTP resilience, OpenTelemetry, health. Every app and provider host calls `AddServiceDefaults`.

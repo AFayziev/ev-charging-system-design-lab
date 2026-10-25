@@ -2,6 +2,7 @@ using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.Core.Bulk;
 using Elastic.Clients.Elasticsearch.IndexManagement;
 using EvCharging.Persistence;
+using EvCharging.SearchIndex;
 using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.SearchIndexWorker.Indexing;

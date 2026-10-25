@@ -1,4 +1,4 @@
-using EvCharging.SearchIndexWorker.Indexing;
+using EvCharging.SearchIndex;
 using EvCharging.Testing;
 using Microsoft.EntityFrameworkCore;
 using Xunit;

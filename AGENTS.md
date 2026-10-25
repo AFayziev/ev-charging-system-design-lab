@@ -45,6 +45,8 @@ implementation progress is recorded in the plan.
 | `EvCharging.ChargingWorker` | Resource | Charging effects, reservation expiry, reconciliation, stale-session detection, and recovery polling |
 | `EvCharging.ObservationWorker` | Resource | Observation history/latest views, and lifecycle and final-usage evidence |
 | `EvCharging.SearchIndexWorker` | Resource | Search indexing |
+| `EvCharging.SearchApi` | Resource | Anonymous station search over a read-only index role, with typed unavailability, routed by the gateway |
+| `EvCharging.SearchIndex` | Library | Station search document, index names and mapping shared by the indexer and the search API |
 | `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, warming, and recovery |
 | `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, and upload/orphan cleanup |
 | `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |

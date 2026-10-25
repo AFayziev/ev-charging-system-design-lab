@@ -5,6 +5,7 @@ namespace EvCharging.AppHost;
 internal static class ResourceExtensions
 {
     internal const string PostgresImageTag = "18.6-bookworm";
+    internal const string SearchIndexImageTag = "9.5.4";
     internal const string KafkaImageTag = "4.3.1";
     internal const string ObservationTopic = "observations";
 
@@ -171,12 +172,40 @@ internal static class ResourceExtensions
         builder.AddElasticsearch("elasticsearch", password: builder.AddPersistentSecret("elasticsearch-password"))
             .WithImageRegistry("docker.elastic.co")
             .WithImage("elasticsearch/elasticsearch")
-            .WithImageTag("9.5.4")
+            .WithImageTag(SearchIndexImageTag)
             .WithDataVolume()
             .WithEnvironment("xpack.security.http.ssl.enabled", "false")
             .WithEnvironment("xpack.security.transport.ssl.enabled", "false")
             .WithEnvironment("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
             .WithLocalElasticvue();
+
+    // The role definition lives in infra/elasticsearch/platform/search-reader-role.json.
+    public static (IResourceBuilder<ConnectionStringResource> Reader, IResourceBuilder<ContainerResource> Provisioning)
+        AddSearchIndexAccess(
+            this IDistributedApplicationBuilder builder,
+            IResourceBuilder<ElasticsearchResource> searchIndex)
+    {
+        var readerPassword = builder.AddPersistentSecret("search-reader-password");
+        var endpoint = searchIndex.Resource.PrimaryEndpoint;
+        var hostPort = ReferenceExpression.Create(
+            $"{endpoint.Property(EndpointProperty.Host)}:{endpoint.Property(EndpointProperty.Port)}");
+        var provisioning = builder.AddDockerfile("search-index-provisioning", "../../infra/elasticsearch/platform")
+            .WithBuildArg("ELASTICSEARCH_IMAGE", $"docker.elastic.co/elasticsearch/elasticsearch:{SearchIndexImageTag}")
+            .WithEnvironment("ELASTICSEARCH_URL", ReferenceExpression.Create($"http://{hostPort}"))
+            .WithEnvironment("ELASTIC_PASSWORD", searchIndex.Resource.PasswordParameter)
+            .WithEnvironment("SEARCH_READER_PASSWORD", readerPassword)
+            .WaitFor(searchIndex);
+
+        if (builder.ExecutionContext.IsRunMode)
+        {
+            provisioning.WithImageTag("local");
+        }
+
+        var reader = builder.AddConnectionString(
+            "search-reader",
+            ReferenceExpression.Create($"http://search_reader:{readerPassword}@{hostPort}"));
+        return (reader, provisioning);
+    }
 
     private static IResourceBuilder<MongoDBServerResource> WithLocalMongoExpress(
         this IResourceBuilder<MongoDBServerResource> database)

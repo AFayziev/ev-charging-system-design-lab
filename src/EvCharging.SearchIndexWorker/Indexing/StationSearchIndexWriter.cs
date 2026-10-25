@@ -1,5 +1,6 @@
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.Core.Bulk;
+using EvCharging.SearchIndex;
 
 namespace EvCharging.SearchIndexWorker.Indexing;
 

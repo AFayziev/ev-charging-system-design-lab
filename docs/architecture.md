@@ -62,8 +62,10 @@ flowchart LR
     SQL --> Replica[Readable replica]
     Primary -->|Replication| Replica
     Gateway --> API[API replicas and live endpoint]
+    Gateway --> SearchQuery[Search query service]
+    SearchQuery --> SearchIndex[Search index]
     API --> SQL
-    API --> Views[Cache, search index, document views]
+    API --> Views[Cache, document views]
     API --> Objects[Private and public object storage]
     Primary --> Relay[Outbox relays]
     Relay --> Broker[Message broker]
@@ -121,6 +123,7 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 | API | Command/query acceptance, transactional reservation/operation/session intent, file authorization, observation ingestion, and live connections/event subscription |
 | Charging worker | Charging-provider integrations and start/stop effects, reservation expiry, transactional lifecycle/final-usage processing, reconciliation, stale-session detection and recovery polling that appends to the observation stream, and recurring due-work discovery |
 | Observation worker | Stream consumers and document history/latest views |
+| Search query service | Station discovery queries over the search index, with read-only access and its own typed unavailable response |
 | Search index worker | Station/business-event and observation consumers and search indexing |
 | Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and bounded warming/recovery |
 | Media worker | Media processing/publication, summaries, and upload/orphan sweeps |
@@ -229,8 +232,9 @@ view. The [lab profile](lab.md#22-default-timings) defines lag tolerance. Writes
 return committed identifiers/state, so a lagging history list cannot erase their
 immediate confirmation.
 
-Search failure makes discovery visibly unavailable without affecting commands
-for known equipment. Cache bypass uses bounded fallback and gradual warm-up.
+Search is served by its own query service behind the gateway. Search failure, whether
+the index or the service, makes discovery visibly unavailable without affecting
+browsing, commands for known equipment, or the gateway's start. Cache bypass uses bounded fallback and gradual warm-up.
 
 ## 6. Relational topology and pooling
 

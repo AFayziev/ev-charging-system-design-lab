@@ -1,4 +1,5 @@
 using Elastic.Clients.Elasticsearch;
+using EvCharging.SearchIndex;
 using EvCharging.SearchIndexWorker.Indexing;
 using EvCharging.Testing;
 using Xunit;

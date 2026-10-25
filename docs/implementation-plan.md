@@ -539,10 +539,13 @@ bounded fallback protects the backing stores.
   - [x] M09.01.2 Initial indexing and rebuild: bulk-load into a versioned index
     behind an alias, then swap. Verify rebuild from empty and a rebuild racing
     live edits. Depends on M09.01.1.
-  - [ ] M09.01.3 Search API: text, connector type, power supply, minimum power,
-    and optional distance sorting, with an opaque cursor and a typed unavailable
-    error. Browsing stays on SQL. Verify filters, paging, and outage isolation
-    from browsing and reservations. Depends on M09.01.2.
+  - [ ] M09.01.3 Search API as its own service behind the gateway, anonymous like
+    station browsing, over a read-only role on the station index: text, connector
+    type, power supply, minimum power, and optional distance sorting, with an opaque
+    cursor and a typed unavailable error. Browsing stays on SQL. Verify filters,
+    paging, the role's denials, and that neither an index outage (typed error) nor
+    the service being down (gateway error) affects browsing or reservations.
+    Depends on M09.01.2.
   - [ ] M09.01.4 Frontend discovery: search field and filters on the catalog with
     URL state, a "Near me" option, no-matches and search-unavailable states with a
     fallback to the SQL catalog. Verify denied geolocation and search outage.
