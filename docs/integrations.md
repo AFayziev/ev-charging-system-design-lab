@@ -148,7 +148,7 @@ not a reconstruction of every missed historical observation.
 
 Fault injection can delay acknowledgement, apply an effect then lose its response,
 return rejection, rate-limit requests, interrupt telemetry, deliver duplicates or
-older events, skew timestamps, and report anomalous energy. Injected behavior is
+older events, and fail snapshot reads. Injected behavior is
 visible in provider records so [lab scenarios](lab.md#24-fault-scenarios) can compare
 platform conclusions with simulated physical truth.
 

@@ -32,7 +32,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Observation stream | Confluent.Kafka client; Kafka in KRaft mode |
 | Object storage / CDN | RustFS locally, Cloudflare R2 hosted; AWSSDK.S3 / Cloudflare CDN |
 | Notification delivery | [Local Mailpit adapter and external-provider options](#18-notification-adapters) |
-| File processing | SkiaSharp images, PDFsharp summaries, .NET ZIP/JSON diagnostics |
+| File processing | SkiaSharp images, PDFsharp summaries |
 | HTTP resilience | Microsoft.Extensions.Http.Resilience and Polly |
 | Default diagnostics | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export to Aspire Dashboard |
 | Optional observability profile | OpenTelemetry Collector, Prometheus, Loki, Tempo, Grafana |
@@ -81,21 +81,21 @@ constraint. These mechanisms enforce the [domain rules](domain.md#5-reservations
 The local baseline uses one application database without a replica or server
 pooler. Logical routes remain separate across environments:
 
-| Connection | Local baseline | Azure database profile |
+| Route | Local baseline | Azure database profile |
 |---|---|---|
-| `platform-write` | Application database | Primary through managed PgBouncer |
-| `platform-read` | Same database with a read-only application role | Readable replica, with managed pooling when enabled |
-| `platform-migration` | Direct connection with charging-schema owner credentials | Direct primary for charging migrations |
+| Write | Application database | Primary through managed PgBouncer |
+| Read | Same database with a read-only application role | Readable replica, with managed pooling when enabled |
+| Migration | Direct connection with charging-schema owner credentials | Direct primary for charging migrations |
 
-The application database uses `gateway_auth` for gateway persistence and `charging`
-for shared business records, each with its own migration history and schema-owning
+The application database has separate schemas for gateway authentication and
+shared charging records, each with its own migration history and schema-owning
 credentials. Gateway runtime access is limited to authentication records; platform
 writer/reader roles access charging records. Provisioning owns database-wide
 permissions and extensions. Schema migration jobs gate their consumers.
 Host-specific Wolverine schemas are introduced with message durability.
 
-Application roles enforce route permissions; read/write paths retain separate
-Npgsql data sources and budgets. Authoritative reads use the write route; replica
+Application roles enforce route permissions; read and write routes keep separate
+connection pools and budgets. Authoritative reads use the write route; replica
 queries tolerate asynchronous lag. Changing topology changes connection settings,
 not application routing or consistency rules.
 
@@ -119,201 +119,40 @@ and client pooling. Npgsql multi-host routing is an optional direct-connection c
 [Azure read replicas](https://learn.microsoft.com/en-us/azure/postgresql/read-replica/concepts-read-replicas),
 [Azure HA](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/concepts-high-availability)
 
-#### Read consistency routing options
+#### Read-your-write routing options
 
-Current routing:
+Current routing: reservation list and detail read the primary through the write
+route, including history; catalog queries use the read route. Locally both routes
+reach the same server, so replica lag appears only in the Azure database profile.
+[Architecture](architecture.md#5-read-and-write-paths) owns the consistency
+boundaries. The options below are pending selection.
 
-- Reservation [list](../src/EvCharging.Api/Features/Reservations/ListReservations.cs)
-  and [detail](../src/EvCharging.Api/Features/Reservations/GetReservation.cs) use
-  `PlatformDbContext` through `platform-write`, with untracked entity reads.
-  Entire pages, including history, read primary.
-- Catalog queries retain `PlatformReadDbContext`; no global override is applied.
-- Both routes reach the same server locally; replica lag requires the Azure profile.
+**Option 1: fixed routing by use case**
 
-The following approaches are drafts, not configured routes.
-[Architecture](architecture.md#5-read-and-write-paths) owns the consistency boundaries.
+Each query has one fixed destination; queries that must show current state
+always read the primary.
 
-**Approach 1: fixed routing by use case**
+| Area | Work |
+|---|---|
+| Database access | Add a read-only connection to the primary with reader credentials, beside the write and ordinary read connections |
+| Queries | Reservation list/detail and operation status use the primary read connection; other queries keep the ordinary read route, which can move to a replica |
+| Gateway and frontend | No change; command responses keep updating the frontend cache |
 
-One explicitly configured read context per query handler, with reservation
-list/detail reads targeting the primary through reader credentials.
+**Option 2: temporary primary window after a write**
 
-1. **Add a primary read context using the existing EF model.**
+Reads go to the primary for a configurable period after the browser's last
+successful write, following
+[Rails' automatic database switching](https://guides.rubyonrails.org/active_record_multiple_databases.html#activating-automatic-role-switching).
 
-   In `EvCharging.Persistence`:
+| Area | Work |
+|---|---|
+| Gateway | After a successful mutating browser request, set a short-lived, protected, HttpOnly cookie; later writes renew it and failed validation does not start it. While it is valid, add an internal primary-read hint to upstream requests and strip any browser-supplied hint |
+| API | Choose the read connection once per request from the hint; both destinations use reader credentials and query handlers stay unaware of the choice |
+| Configuration | Window duration matched to the expected replica lag |
+| Current-status queries | Worker-updated state, such as operation status, does not renew the window and needs primary routing independent of it |
 
-   ```csharp
-   public sealed class PlatformPrimaryReadDbContext(
-       DbContextOptions<PlatformPrimaryReadDbContext> options)
-       : PlatformDbContext(options);
-   ```
-
-   The three contexts then have clear responsibilities:
-
-   | Context | Destination | Permissions |
-   |---|---|---|
-   | `PlatformReadDbContext` | Ordinary read destination, potentially a replica | Reader |
-   | `PlatformPrimaryReadDbContext` | Primary | Reader |
-   | `PlatformDbContext` | Primary | Writer |
-
-   This extra type makes ordinary constructor injection sufficient. It avoids
-   a custom selector or middleware.
-
-2. **Provide the primary reader connection through AppHost.**
-
-   Reuse `AddConnection` and the existing reader credentials:
-
-   ```csharp
-   var primaryRead = AddConnection(
-       "platform-primary-read",
-       "platform_reader",
-       readerPassword);
-   ```
-
-   Add it to `DatabaseConnectionResources`:
-
-   ```csharp
-   /// <summary>Read-only connection to the primary for current state.</summary>
-   public required IResourceBuilder<ConnectionStringResource> PrimaryRead
-   {
-       get;
-       init;
-   }
-   ```
-
-   Reference it from the API alongside the existing connections:
-
-   ```csharp
-   .WithReference(databaseAccess.PrimaryRead)
-   ```
-
-   Today both reader connections reach the same PostgreSQL instance. When a
-   replica is introduced, the ordinary read connection can move there while
-   this connection remains on primary.
-
-3. **Register it through the existing persistence extension.**
-
-   Extend the existing data-source registration loop with:
-
-   ```csharp
-   public const string PrimaryReadRoute = "platform-primary-read";
-   ```
-
-   Then register the context:
-
-   ```csharp
-   builder.Services.AddDbContext<PlatformPrimaryReadDbContext>(
-       (services, options) =>
-           options.UseNpgsql(
-               services.GetRequiredKeyedService<NpgsqlDataSource>(
-                   PrimaryReadRoute)));
-
-   builder.EnrichNpgsqlDbContext<PlatformPrimaryReadDbContext>(
-       settings => settings.DisableRetry = true);
-   ```
-
-   It receives no audit interceptor. Database grants enforce reader permissions.
-   Retry configuration remains subject to the separately recorded review.
-
-4. **Change only the reservation query dependencies.**
-
-   ```csharp
-   public sealed class ListReservationsQueryHandler(
-       PlatformPrimaryReadDbContext database)
-   {
-       // Existing query implementation.
-   }
-
-   public sealed class GetReservationQueryHandler(
-       PlatformPrimaryReadDbContext database)
-   {
-       // Existing query implementation.
-   }
-   ```
-
-   Their queries, ownership checks, pagination and response mappings stay
-   together. The existing shared mapping accepts `PlatformDbContext`, so the
-   derived read context already fits.
-
-   Catalog queries continue using `PlatformReadDbContext`. Booking, cancellation
-   and charging-start commands use the writer context for their transactions.
-
-5. **Keep frontend behavior independent of database topology.**
-
-   Existing endpoints and query keys remain unchanged. Successful commands
-   update the TanStack cache with their returned state, then refresh the affected
-   queries. Reservation refreshes and status polling consistently reach the
-   primary through the backend configuration.
-
-   This removes the need for page-level primary mode, separate consistency cache
-   keys, or rules for switching back to a replica.
-
-**Approach 2: temporary primary routing window**
-
-Server-side primary affinity for a configurable period after a successful write,
-following [Rails' automatic database switching](https://guides.rubyonrails.org/active_record_multiple_databases.html#activating-automatic-role-switching).
-
-1. **The gateway records the window.**
-
-   After a successful mutating browser API response—`POST`, `PUT`, `PATCH` or
-   `DELETE`—a YARP response transform sets a short-lived, protected, `HttpOnly`
-   cookie. Each subsequent successful write renews it. Failed validation does
-   not start the window.
-
-   The duration belongs to validated application configuration, for example
-   `ReadRouting:PrimaryWindow`. A specific value should reflect the expected
-   replica lag.
-
-2. **The gateway selects the routing hint on subsequent requests.**
-
-   A request transform validates the cookie. While it remains valid, the gateway
-   adds an internal header indicating primary reads. It removes any
-   browser-supplied version of that header before setting its own.
-
-   The cookie naturally follows refreshes, navigation and other tabs in the same
-   browser. Gateway replicas would share Data Protection keys. YARP supports
-   both request and response transforms; ASP.NET Core provides protected payloads
-   with expiration.
-
-3. **The API selects the read connection once per request.**
-
-   Keep `PlatformReadDbContext`. Its existing scoped registration chooses the
-   data source using the routing hint:
-
-   ```csharp
-   builder.Services.AddDbContext<PlatformReadDbContext>(
-       (services, options) =>
-       {
-           var routing = services.GetRequiredService<ReadRoutingContext>();
-
-           var route = routing.UsePrimary
-               ? PrimaryReadRoute
-               : ReadRoute;
-
-           options.UseNpgsql(
-               services.GetRequiredKeyedService<NpgsqlDataSource>(route));
-       });
-   ```
-
-   `ReadRoutingContext` is a small request-scoped decision established before
-   Wolverine invokes the handler. Both data sources use **reader credentials**.
-   Commands retain their writer context.
-
-   Handlers receive one read context and contain no connection-selection branches.
-
-4. **Expiry returns ordinary reads to the replica.**
-
-   Reads do not renew the window. React keeps using the same endpoints and query
-   keys, updating its cache from command responses as usual.
-
-An illustrative five-second window behaves like this:
-
-```text
-12:00:00  Booking commits; gateway issues the routing cookie
-12:00:01  Reservation list reads primary
-12:00:03  Page refresh reads primary
-12:00:05  Window expires; ordinary reads use replica
-```
+With a five-second window, reads within five seconds of a booking reach the
+primary, including page refreshes and other tabs; later reads return to the replica.
 
 **Trade-offs**
 
@@ -321,19 +160,19 @@ An illustrative five-second window behaves like this:
 |---|---|---|
 | Primary load | All reservation list/detail traffic, including history | Browser reads during the window, plus explicitly current-status queries |
 | Replica offloading | Other queries that tolerate lag | Ordinary reads outside the window |
-| Coordination | Context registration and connection wiring | Gateway cookie/transforms and API request-scoped selection |
+| Coordination | One extra connection and a per-query destination | Gateway cookie and hint handling plus per-request selection in the API |
 | Read-your-write | Reads after commit reach primary | Assumes replica catches up before the window expires |
 | Worker updates | Subsequent primary reads see committed updates | Do not renew the browser window; current-status checks need independent primary routing |
 | Lost write response | Subsequent reads still use primary | May prevent the cookie reaching the browser |
 | In-flight older reads | Can still overwrite frontend state | Can still overwrite frontend state |
 
-Both approaches retain reader permissions for queries and primary-side checks
-inside command transactions. Neither makes multiple response queries one atomic
-snapshot. Native TanStack cache updates and cancellation of superseded reads
-preserve immediate command results. Npgsql server-role routing does not track
-recent writes or prove replica freshness.
+Both options keep reader permissions for queries and primary-side checks inside
+command transactions. Neither makes several queries one atomic snapshot. Frontend
+cache updates from command responses and cancellation of superseded reads preserve
+immediate command results. Driver-level server-role routing does not track recent
+writes or prove replica freshness.
 
-Pending selection: routing approach, window duration, and designation of
+Pending selection: routing option, window duration, and designation of
 current-status queries. The Azure profile can compare primary load, lag beyond
 the window, and user-visible state regression.
 
@@ -366,32 +205,29 @@ business transitions also protect against independently submitted duplicate work
 
 | Area | Choice |
 |---|---|
-| Topic | One observations topic with six partitions and seven-day retention, defined in `infra/kafka/topics.txt` and created by the one-shot `kafka-provisioning` resource before the API and observation consumers start; existing topics keep their partition count |
+| Topic | One observations topic with six partitions and seven-day retention, provisioned before the API and observation consumers start; existing topics keep their partition count |
 | Partition key | Integration key and provider station, charger and connector address |
-| Producer | Idempotent, `acks=all`, bounded delivery timeout, configured through the Aspire Confluent producer settings; its health check is disabled so a stream outage fails callbacks without removing the API from gateway rotation |
-| Batch limit | A callback carries at most `ObservationIngestion:MaximumBatchSize` observations (default 100); the request size limit follows from it |
-| Callback credential | One API key per provider integration in the `ObservationSources` settings, supplied by a persistent AppHost secret; the key identifies the integration and several keys may be active for rotation. ASP.NET Core provides no API-key scheme, so a small authentication handler validates the key |
+| Producer | Idempotent, all-replica acknowledgement, bounded delivery timeout; a stream outage fails callbacks without removing the API from gateway rotation |
+| Batch limit | A callback carries a configured maximum number of observations; the request size limit follows from it |
+| Callback credential | One API key per provider integration, supplied as a persistent AppHost secret; the key identifies the integration and several keys may be active for rotation |
 
 #### Observation views
 
 | Area | Choice |
 |---|---|
-| Consumer | The observation worker reads the topic as its own consumer group with the Confluent client, in batches (`ObservationProcessing:BatchSize`, `BatchWait`). Offsets are stored only after the batch is written |
-| Documents | Two MongoDB collections in the `observations` database: history, one document per source event, and latest, one document per provider session. The API reads the latest view for the progress query. The indexes are created by the one-shot `document-store-migrations` resource before the worker starts |
+| Consumer | The observation worker reads the topic as its own consumer group, in configured batches. Offsets are stored only after the batch is written |
+| Documents | Two MongoDB collections: history, one document per source event, and latest, one document per provider session. The API reads the latest view for the progress query. Indexes are created before the worker starts |
 | Writes | Idempotent bulk writes with majority, journaled acknowledgement. The latest view is replaced only by a strictly newer occurrence time |
-| Session evidence | The charging worker reads the topic as a second consumer group, `session-evidence`, with the same batching and retry settings. It records per-session evidence in PostgreSQL, one transaction per batch; duplicates and replay change nothing |
-| Clock skew | One setting, `Charging:ClockSkew`, owned by the AppHost and passed to both workers and the API. A reading dated more than the skew ahead of its receipt stays history, and the API leaves readings dated more than the skew ahead of its clock out of the power history |
-| Power history | The API reads history in one-minute buckets of source time with a MongoDB aggregation on the by-session index, so a request from the last bucket held returns one bucket |
-| Unprocessable messages | An invalid or unsupported-version envelope is logged and skipped. Stream and document-store failures are retried with exponential backoff and no attempt limit using a `Microsoft.Extensions.Resilience` pipeline |
+| Session evidence | The charging worker reads the topic as a second consumer group with the same batching and retry settings. It records per-session evidence in PostgreSQL, one transaction per batch; duplicates and replay change nothing |
+| Clock skew | One clock-skew setting, owned by the AppHost and shared by both workers and the API. A reading dated more than the skew ahead of its receipt stays history, and the API leaves readings dated more than the skew ahead of its clock out of the power history |
+| Power history | The API reads history in one-minute buckets of source time, so a request from the last bucket held returns one bucket |
+| Unprocessable messages | An invalid or unsupported-version envelope is logged and skipped. Stream and document-store failures are retried with exponential backoff and no attempt limit |
 
 ### 1.5 Storage and delivery
 
 The local storage service runs as a single-node container.
 [RustFS](https://github.com/rustfs/rustfs) uses the Apache-2.0 license.
-Storage compatibility checks cover upload/download, HEAD
-verification, publication copy, deletion, and presigned transfers. Contract tests
-cover both the selected local service and R2. Browser transfers require storage
-CORS rules for the application origin.
+Browser transfers require storage CORS rules for the application origin.
 [RustFS S3 compatibility](https://docs.rustfs.com/en/reference/s3-compatibility)
 
 Public assets use an R2 custom domain in the same Cloudflare account/zone as the
@@ -410,8 +246,7 @@ Frontend behavior follows the [live-delivery design](architecture.md#11-frontend
 Valkey cache and SignalR backplane traffic use separate key/channel prefixes,
 connections, and budgets. Live-route cookie affinity
 keeps negotiation and transport on the same API. Authentication-session and
-live-affinity cookies serve separate purposes. Client/server contract checks cover
-fan-out, disconnect, and reconnection.
+live-affinity cookies serve separate purposes.
 [SignalR scaling](https://learn.microsoft.com/en-us/aspnet/core/signalr/scale?view=aspnetcore-10.0),
 [Valkey compatibility](https://valkey.io/topics/migration/),
 [YARP affinity](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/yarp/session-affinity?view=aspnetcore-10.0)
@@ -471,19 +306,15 @@ interactive OIDC flow.
 
 ### 1.8 Notification adapters
 
-Reservation emails use Handlebars.Net for embedded plain-text and HTML
-[templates](../src/EvCharging.NotificationWorker/Templates/). Email styling follows
-the browser application's
-[theme](../src/EvCharging.Web/src/app/bootstrap.tsx) and
-[semantic colours](../src/EvCharging.Web/src/app/global.css), using inline styles
-for email-client compatibility.
+Notification emails use Handlebars.Net plain-text and HTML templates. Email
+styling follows the browser application's theme and semantic colours, using
+inline styles for email-client compatibility.
 Email timestamps use explicit UTC labels.
 
-Local email uses Mailpit's HTTP API and a dedicated `notification-mail` mailbox,
-independent of registration email. Mailpit provides content inspection; persisted
-attempts provide failure evidence. Configuration belongs to
-[worker options](../src/EvCharging.NotificationWorker/Configuration/NotificationDeliveryOptions.cs);
-delivery semantics belong to [integrations](integrations.md#4-notification-providers).
+Local email uses Mailpit's HTTP API and a dedicated mailbox, independent of
+registration email. Mailpit provides content inspection; persisted attempts
+provide failure evidence. Delivery semantics belong to
+[integrations](integrations.md#4-notification-providers).
 
 External-provider selection remains unresolved among Cloudflare Email Service,
 Azure Communication Services Email, and Amazon SES. Hosted setup depends on that selection.
@@ -505,10 +336,9 @@ Tokens, form values, and signed URLs are excluded.
 | Source-map access | Source maps remain private and match the deployed release; excluded from public CDN assets |
 
 Local builds with Sentry disabled require no Sentry account or upload credentials.
-Runtime settings are defined by [gateway diagnostics options](../src/EvCharging.Gateway/Diagnostics/FrontendDiagnosticsOptions.cs);
-[frontend initialization](../src/EvCharging.Web/src/lib/diagnostics/sentry.ts) applies collection controls and
-[Vite build configuration](../src/EvCharging.Web/vite.config.ts) controls private source-map upload.
-The build and startup release identifiers must refer to the same deployed build.
+The gateway supplies runtime settings, and the frontend build uploads private
+source maps. The build and startup release identifiers must refer to the same
+deployed build.
 
 ### 1.10 WattHarbor charging provider
 
@@ -517,14 +347,14 @@ with these choices:
 
 | Area | Choice |
 |---|---|
-| Persistence | Provider-owned PostgreSQL server, database and credentials; EF model and migrations independent of platform persistence |
+| Persistence | Provider-owned PostgreSQL server, database and credentials; schema and migrations independent of platform persistence |
 | Authentication | Provider-owned Keycloak realm and storage; client-credentials accounts for the charging worker and simulation controls, with a separate provider audience and control permissions |
-| Transport | HTTP/JSON start and command/session lookup endpoints; typed `HttpClient` through `IHttpClientFactory`, with bounded timeouts |
+| Transport | HTTP/JSON start and command/session lookup endpoints, with bounded timeouts |
 | Idempotency | Platform operation public ID as the stable provider key across attempts; retain and compare the original effect payload |
 | Atomicity | Command result, simulated session and connector claim commit in one provider transaction |
 | Fault controls | Authenticated, deterministic faults scoped to a command or a session's telemetry; apply-then-lose-response faults interrupt the response after commit. A session telemetry fault can also fail its snapshot reads with 503. Faults are temporary and not persisted |
 | Observations | Recorded in the provider database at the [normal simulator cadence](#22-default-timings), so sessions and their readings survive restart. The first and final readings accompany start and stop, and no reading follows the final one. Energy is in Wh on the wire |
-| Callback delivery | Recorded observations are delivered in batches to a target set through simulation control and kept across restart. Failed batches are retried with the same event identities under bounded settings, and stale observations are not delivered. Simulators exclude Messaging, so this is a small provider-side loop rather than an outbox |
+| Callback delivery | Recorded observations are delivered in batches to a target set through simulation control and kept across restart. Failed batches are retried with the same event identities under bounded settings, and stale observations are not delivered. Delivery is a provider-side loop; simulators have no outbox |
 
 Endpoint tables separate the [public provider API](integrations.md#public-provider-api)
 from the [internal simulation API](integrations.md#internal-simulation-api).
@@ -547,16 +377,14 @@ Testing treats the provider as a black box:
 | Profile | Resources and purpose |
 |---|---|
 | Local baseline | Aspire processes/containers: multiple gateway/API instances, independent workers, one application PostgreSQL server, a separate identity database server, MongoDB, Valkey, Elasticsearch, one RabbitMQ broker, Kafka, an S3-compatible storage container, Keycloak, simulators, and Aspire Dashboard diagnostics |
-| Optional `observability` | Adds the [selected observability backends](#11-technology-selections) for telemetry routing, backend queries, custom dashboards, and export/backend failure exercises; startup/health gates apply only when enabled |
+| Optional `observability` | Adds the [selected observability backends](#11-technology-selections) for telemetry routing, backend queries, and custom dashboards; startup/health gates apply only when enabled |
 | Optional Sentry | Enables [frontend diagnostics](#19-frontend-diagnostics); requires a hosted project and build-upload credentials |
-| Broker leader loss | Three RabbitMQ nodes with quorum queues; leader-loss and recovery behavior |
 | Cloudflare files/CDN | R2 and Cloudflare CDN deliver versioned frontend assets and published media through a custom domain; real presigned transfers, warm/cold cache behavior, and purge |
 | External notification delivery | Provider selection unresolved; test recipients and recorded provider/delivery outcomes |
 | Azure database failover | Managed PostgreSQL HA plus readable replica/pooler routes; provider-supported failover exposes application interruption and recovery |
 
-The local baseline covers redelivery, outbox recovery, projection replay, cache
-loss, and dependency interruptions. Clustered profiles cover quorum/leader behavior;
-the Azure database profile covers replication and managed pooling. Local application
+The local baseline covers redelivery, outbox recovery, cache loss, and
+dependency interruptions. The Azure database profile covers replication and managed pooling. Local application
 replicas share a host failure boundary and do not demonstrate multi-zone availability.
 
 MongoDB, Valkey, Elasticsearch, RabbitMQ, and Kafka need no cloud subscriptions.
@@ -600,18 +428,18 @@ These are overridable experiment settings, not production availability targets.
 |---|---|---|
 | Telemetry interval | 2 seconds | Normal simulator cadence |
 | Freshness limit | 10 seconds | Greater source-observation age is stale. A started session with no observation is stale once it is older than this |
-| Driver progress polling | 5 seconds; power history 30 seconds | The charging page stops polling a session that sent its final reading, or that the API reports silent for longer than the silence limit (`Charging:SilenceLimit`), and offers a manual refresh |
+| Driver progress polling | 5 seconds; power history 30 seconds | The charging page stops polling a session that sent its final reading, or that the API reports silent for longer than the silence limit, and offers a manual refresh |
 | Silence limit | 10 minutes | A running session whose provider has been quiet longer than this is no longer polled; it must exceed the freshness limit. The API also reports the session's elapsed time, so the page does not depend on the device clock |
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
 | Command request limit | 3 total requests per start or stop | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and command eligibility |
 | Automatic reconciliation | Every 5 seconds, 6 scheduled checks; then continued checks until resolved, every 30 seconds at first and slowing to every 15 minutes as the operation ages (a quarter of its unresolved time) | The first window closes one interval after its final scheduled check. A scan every 30 seconds claims due operations, longest-waiting first and no more than the concurrent command limit, so checks resume after a worker or provider outage; manual or operator checks remain available |
-| Stale-session recovery | A scan every 30 seconds finds active or stopping sessions whose newest reading is older than `Charging:FreshnessLimit` and reads the provider snapshot; each session is re-read every 30 seconds at first, slowing to every 15 minutes as it stays stale (a quarter of its stale time); at most 100 sessions per scan and 4 concurrent snapshot reads | The snapshot is appended to the observation stream, so it is recorded, deduplicated and completed like a callback. A fresh or ended session is not read |
+| Stale-session recovery | A scan every 30 seconds finds active or stopping sessions whose newest reading is older than the freshness limit and reads the provider snapshot; each session is re-read every 30 seconds at first, slowing to every 15 minutes as it stays stale (a quarter of its stale time); at most 100 sessions per scan and 4 concurrent snapshot reads | The snapshot is appended to the observation stream, so it is recorded, deduplicated and completed like a callback. A fresh or ended session is not read |
 
 Wolverine scheduled work and retry policies bound automatic reconciliation under
 the [resilience boundaries](architecture.md#12-resilience-boundaries).
-Operator reconciliation requests are audited. Scenario records define request
-retry and admission limits.
+Operator reconciliation requests are audited; their retry and admission limits
+are set per scenario.
 
 Pool limits, worker concurrency, instance counts, stream/document/file retention,
 and load are set per scenario. Deliberately small budgets expose saturation without a large
@@ -629,12 +457,7 @@ The initial booking-limit experiment configures admission limits as follows.
 | Maximum advance-booking horizon | 24 hours |
 | Arrival allowance | 15 minutes |
 
-Quota experiments also use a limit greater than one to verify configurable
-admission under concurrent API instances. Policy-change experiments verify that
-accepted deadlines remain stable and a lower quota prevents further bookings
-without cancelling accepted allocations.
-
-### 2.3 Verification tools and signals
+### 2.3 Verification tools
 
 | Area | Tool |
 |---|---|
@@ -655,18 +478,6 @@ and correlated logs and traces for troubleshooting. A history of every provider
 request and response is outside scope. Provider behavior is verified through its
 public API and the resulting platform state.
 
-| Boundary | Evidence |
-|---|---|
-| Requests | Latency, errors, admission rejection, active requests, selected replicas |
-| SQL and pooling | Client counts by route/process, acquisition waits, transaction/query duration, locks; server-pool counts and replay lag in Azure |
-| Jobs | Queue depth/age, oldest outbox age, attempts, dead letters, uncertain operations |
-| Streams/documents | Consumer lag, processing errors, retained history, latest-view age |
-| Providers | Physical state, command/correlation records, latency, rate limiting, circuit state, reconciliation results |
-| Search/cache | Index freshness/rebuild status, hit rate, fallback load |
-| Files/CDN | Pending uploads, processing attempts, object versions, origin errors, edge hits/misses |
-| Frontend | Reconnects, operation identity/results, unavailable dependencies, stale progress |
-| Frontend diagnostics (Sentry enabled) | Readable JavaScript/component stacks, release, breadcrumbs, grouped issues, alert delivery, and correlated request traces |
-
 ### 2.4 Fault scenarios
 
 | Scenario | Expected behavior and acceptance evidence |
@@ -680,7 +491,6 @@ public API and the resulting platform state.
 | Start applies but response is lost | One logical operation; visible uncertainty resolves against provider evidence without blind resubmission |
 | Worker dies after effect before acknowledgement | Redelivery retains operation/attempt identity; SQL mutations deduplicate and provider ambiguity follows its contract |
 | Duplicate/late observations | Historical evidence retained; current state follows source-time ordering |
-| Replay into a replacement view | Validated rebuilt projection; no charging commands or notifications |
 | Telemetry stops | Timestamped state becomes stale; silence does not imply stopped or offline |
 | Stop confirmed before final usage | Session waits for final evidence; completion and summary use matching frozen facts |
 | Provider ends the session itself (vehicle full) | The provider's final reading completes the session without a stop request, through callbacks or, when they are lost, the stale-session snapshot read; the connector claim is released on both sides and a pending stop settles |
@@ -688,22 +498,17 @@ public API and the resulting platform state.
 | Read saturation / API-worker scaling | Bounded acquisition/rejection; separate route budgets and aggregate client/server counts remain observable |
 | Gateway/API process lost | Routing reaches healthy instances; browser session remains usable across gateways; in-flight operations recover by identity |
 | Gateway unavailable during observation submission | Worker/provider submissions retain event identity and follow bounded retry/recovery; acknowledgement still requires durable ingestion, and no caller bypasses the gateway |
-| Primary lost; managed pooler lost in Azure | Interrupted work is visible; reconnect is bounded and uncertain commits are checked |
-| Managed database failover (Azure database profile) | Endpoint/pool recovery, transaction outcomes, recovery time, and any lost commits recorded |
+| Managed database failover or pooler loss (Azure database profile) | Interrupted work is visible; reconnect is bounded and uncertain commits are checked by operation identity |
 | Broker outage and recovery | Outbox retains pending work, exposes age, and drains without duplicate mutations |
-| Clustered broker leader lost | Quorum queue behavior and publisher/consumer recovery observed |
 | Stream unavailable | No false durable acknowledgement; bounded callback retry/polling and visible observation uncertainty |
 | Observation consumer stalled / MongoDB unavailable | Observation-view lag increases; catch-up succeeds within retention or its recovery limit is exposed |
-| Search index worker instances lost and restored | Index updates pause and catch up from retained inputs; cache maintenance and observation/session-evidence processing continue |
-| Cache worker instances lost and restored | Cached query views expire or become visibly stale; API fallback remains bounded, warming resumes, and search/observation processing continue |
+| Search index, cache, media, or notification worker instances lost and restored | That workload pauses and resumes from durable state or retained stream input; cached views expire or show as stale with bounded API fallback; other workloads and charging execution continue |
 | Cache flushed/unavailable | Bounded fallback and warm-up; no loss of authoritative records |
 | Valkey backplane unavailable and restored | Cross-instance live fan-out interruption is visible; bounded polling/reconnect obtains current snapshots, then fan-out resumes |
-| Search unavailable/rebuilt | Limited lookup or visible unavailability; replacement index validated before switchover |
+| Search unavailable | Discovery is visibly unavailable; booking and commands for known equipment continue |
 | Provider rate-limited/down | Its work isolated; retries bounded and durable intent retained |
 | Upload succeeds but completion notice is lost | Sweep verifies object and safely resumes processing |
 | Media worker fails after writing variants | Retry converges, old publication remains usable, orphan cleanup is visible |
-| Media worker instances lost and restored | Media/document queues pause and resume from durable state; notification delivery and charging execution remain available |
-| Notification worker instances lost and restored | Notification delivery pauses and resumes from durable state; media/document processing and charging execution remain available |
 | Signed upload URL reused | Immutable published bytes cannot be overwritten |
 | Object storage lost | Files can fail while charging continues; processing retries retain references |
 | Warm and uncached synthetic objects deleted at the R2 origin | Warm edge hits can serve until expiry/eviction; cache misses fail and unavailable media shows placeholders; purge removes stale cached publication |
@@ -715,13 +520,8 @@ public API and the resulting platform state.
 | Authentication session store unavailable | Protected routes fail explicitly; no anonymous downgrade or use of disposable cache as session authority |
 | Concurrent token refresh / logout | Concurrent requests follow the identity provider's supported refresh policy; logout revokes refresh tokens and removes the shared ticket |
 | Browser authentication boundaries | No OIDC tokens exposed to JavaScript; login uses gateway routes, state-changing requests require antiforgery, and API access still enforces ownership |
-| Dashboard export unavailable | Bounded buffering/drop; core processing continues and export loss is observable through local diagnostics |
-| Collector or observability backend lost (optional profile) | Bounded buffering/drop and inspectable pipeline loss; core processing continues and telemetry delivery resumes after recovery |
 | Frontend render/async failure (Sentry enabled) | Error report identifies the deployed source location and preceding activity; repeated failures group into an issue and trigger the configured alert |
 | Sentry disabled or unreachable | Disabled mode sends no Sentry telemetry; failed export is bounded and does not prevent navigation or platform requests |
 
-Each scenario records topology/version, settings, workload, initial state, fault
-injection point/duration, expected behavior, correlated observations, final state,
-and cleanup. Recovery is judged by business outcomes and durable evidence, not
-merely a restarted process. Tests remain separated into domain, real-dependency,
-contract, UI, resilience, and load concerns.
+Recovery is judged by business outcomes and durable evidence, not merely a
+restarted process.

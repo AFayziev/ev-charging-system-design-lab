@@ -9,24 +9,13 @@ and fault scenarios for acceptance.
 Milestones deliver complete application flows within the selected topology;
 component responsibilities and domain policies remain consistent throughout implementation.
 
-Task IDs are tracking references. Completed task IDs remain stable. Unchecked
-tasks are incomplete. Tasks and subtasks are checked only when their full scope
-has been reviewed, required verification has passed, and the changes are ready
-to commit. Initial implementation or a successful build alone does not establish
-completion. Milestone status is one of `Planned`, `In progress`, `Blocked`, or
-`Done`. A blocked item records the specific dependency. `Done` requires every
-required task and the milestone's
-acceptance criteria.
-Optional and hosted gates remain independently tracked and do not
-block baseline local acceptance. Optional-profile gates apply when that profile
-is enabled; hosted gates require their provider setup.
-Independent follow-up tasks retain their IDs and specify their own dependencies
-and acceptance gates; they do not block their original milestone.
-Milestone status is recorded in the table below.
-
+Task IDs are stable tracking references; unchecked tasks are incomplete. A task
+is checked when its scope is implemented and its tests pass. Milestone status is
+`Planned`, `In progress`, `Blocked` (recording the dependency), or `Done` (every
+required task and the acceptance criteria). Optional, hosted, and independent
+follow-up tasks keep their own dependencies and do not block their milestone.
 Task checkboxes and milestone status are updated in the same commit as the
-implementation. Verification summaries belong in pull request descriptions
-when applicable.
+implementation.
 
 ## 2. Suggested order and dependencies
 
@@ -42,7 +31,7 @@ by later flows.
 Driver-facing screens follow the approved [UI concept](mockups/driver-ui-concept.png).
 User-facing flows support desktop and portrait smartphones, with readable layouts,
 touch-friendly controls, accessible navigation, and no horizontal page scrolling.
-End-to-end verification covers both desktop and phone viewports.
+A small set of browser journeys covers the phone viewport.
 
 Entry dependencies identify the earliest usable slice of a milestone. Completion
 requires its task dependencies and acceptance criteria. Existing checks count
@@ -60,10 +49,11 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | In progress |
 | M08 | Live updates and cached views | M07.01 | Planned |
 | M09 | Search and station discovery | M04.01, M05.01; availability requires M07.01 | Planned |
-| M10 | Station media, session summaries, and diagnostics | M04.02, M05.01; summaries require M07.02 | Planned |
+| M10 | Station media and session summaries | M04.02, M05.01; summaries require M07.02 | Planned |
 | M11 | Hosted R2 and Cloudflare CDN | M10.01 | Planned |
 | M12 | Managed PostgreSQL pooling, replication, and failover | M04; charging failover requires M08 | Planned |
-| M13 | Complete lab demonstrations and fault verification | M01–M12, M04.03; hosted email gate M05.07 | Planned |
+| M15 | API rate limiting | M08 | Planned |
+| M13 | Lab demonstrations and fault tooling | M01–M12, M15; hosted email gate M05.07 | Planned |
 | M14 | AmpTrail queued-provider integration | M06, M07 | Planned |
 
 M04.01 is the first charging-domain feature: a visitor browses
@@ -151,17 +141,14 @@ criteria.
 #### Independent follow-up tasks
 
 - [ ] M01.12 Optional profile gate, after M01.06: wire the
-  [`observability` profile](lab.md#21-execution-profiles). Verify export routing,
-  backend queries, custom dashboards, restart, and its
-  [fault scenarios](lab.md#24-fault-scenarios).
+  [`observability` profile](lab.md#21-execution-profiles) with custom dashboards
+  querying each backend.
 - [x] M01.13 Before M02 frontend acceptance, after M01.03, M01.04, and M01.06:
   implement [frontend diagnostics](lab.md#19-frontend-diagnostics), startup
   configuration, gateway tunnel, and build integration. Verify disabled behavior,
   capture metadata, bounded export failure, and local builds without hosted credentials.
-- [ ] M01.14 Optional hosted gate, after M01.13: verify the Sentry execution
-  profile against a configured project using a built frontend,
-  [diagnostic signals](lab.md#23-verification-tools-and-signals), and
-  [fault scenarios](lab.md#24-fault-scenarios).
+- [ ] M01.14 Optional hosted gate, after M01.13: verify that a built frontend
+  reports readable stacks, release, and grouped issues to a configured Sentry project.
 
 ### M02 — Gateway authentication and shared frontend shell
 
@@ -199,14 +186,11 @@ access.
 #### Independent follow-up tasks
 
 - [ ] M02.08 Optional, after M02.06 and an established frontend visual design:
-  customize the Keycloak login theme to match the application's branding and
-  verify authentication flows with the themed pages.
+  customize the Keycloak login theme to match the application's branding.
 - [x] M02.09 After M02.05 and M03.03: deliver driver registration with required
   verified email, idempotent profile provisioning before browser sign-in, and
   local verification-email capture. Verify registration and repeated sign-in
   with real dependencies, retaining existing synthetic account identities.
-- [ ] M02.10 After M02.09: deliver verified account-email changes and explicit
-  synchronization to the stored driver profile.
 
 ### M03 — Domain and seeded persistence baseline
 
@@ -244,14 +228,6 @@ owners and migration histories. Reset preserves authentication data.
 Acceptance: visitors browse seeded equipment and an assigned operator
 edits station content. Read and write routes use separate pools. Permission and
 dependency failures are visible without reporting unsuccessful writes as saved.
-
-#### Independent follow-up tasks
-
-- [ ] M04.03 Deferred to final fault verification, after feature delivery:
-  exercise browsing/editing during database interruption and gateway/API
-  instance loss. Use the actual feature workload to verify read/write routing,
-  aggregate client-pool budgets, saturation, bounded rejection, and recovery.
-  Depends on M04.01 and M04.02; required for M13 acceptance.
 
 ### M05 — Reservations, expiry, and notifications
 
@@ -314,16 +290,11 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   - [x] Add recipient data, notification records, and durable send jobs.
   - [x] Implement direct local mail-sink delivery and persisted attempts with safe failure handling.
   - [x] Review the complete flow and verify notification isolation and outcomes.
-- [ ] M05.05 Exercise application outcomes during interrupted message processing:
-  accepted bookings eventually expire, duplicate processing does not repeat
-  transitions or notifications, and failed work does not block unrelated bookings
-  or subscribers. Use selected broker/worker interruptions and existing diagnostics
-  to verify these guarantees without reproducing messaging-library durability tests.
-  Observe queue/outbox age and independently delivered subscriber outcomes.
+- [ ] M05.05 Exercise a broker outage with reservation workloads: bookings,
+  cancellations, and expiry commit while the broker is down, and each pending
+  event reaches its subscribers once after recovery. Worker restart, duplicate
+  expiry, and notification isolation are covered by M05.02–M05.04.
   Depends on M05.01–M05.04.
-- [ ] M05.06 Add three-node RabbitMQ quorum queues and verify leader loss and
-  publisher/consumer recovery with reservation/notification workloads.
-  Depends on M05.05.
 
 Acceptance: a driver books, views, and cancels eligible slots. Configured admission
 limits and overlap protection hold across replicas; due, eligible bookings release
@@ -426,9 +397,9 @@ Notification failure leaves accepted reservations intact and remains separately 
     no change to settled operations.
   - [ ] M06.04.2 Operator investigation: expose execution attempts, provider
     identifiers, outcomes, failure summaries, and checking state to assigned
-    operators, and list operations that continued checks have not settled. Make
-    the unresolved operation's public reference available in the driver view and
-    support lookup by that reference. Verify assignment denial and retained
+    operators alongside the session's observation history, and list operations
+    that continued checks have not settled. Make the unresolved operation's public
+    reference available in the driver view and support lookup by that reference. Verify assignment denial and retained
     uncertainty when evidence is absent.
   - [ ] M06.04.3 Audited reconciliation requests: operator requests trigger an
     immediate check through the durable worker path with bounded admission,
@@ -442,12 +413,7 @@ Notification failure leaves accepted reservations intact and remains separately 
   Depends on M06.01–M06.02.
 - [x] M06.06 Verify cancellation/start races, queued-start expiry, retained
   uncertain claims after expiry, session exclusivity, and effect limits across
-  worker retries and redelivery. Both orderings of start and cancellation, expiry
-  during an in-flight provider call, a retained claim blocking another driver,
-  the claim lifecycle at the database, concurrent retry deliveries against the
-  persisted limit, and a transient save failure redelivered by Wolverine without a
-  second provider call are covered by tests.
-  Depends on M05.03 and M06.01–M06.02.
+  worker retries and redelivery. Depends on M05.03 and M06.01–M06.02.
 
 Acceptance: driver start/stop and operator investigation work through the gateway,
 durable workers, and the synchronous provider. Uncertain effects remain visible and
@@ -519,16 +485,6 @@ recoverable without authorizing conflicting starts. Final completion depends on 
   the view stale rather than stopped, that polling restores freshness and
   supplies missing final usage for a `Stopping` session, and that replay does
   not refresh timestamps. Depends on M07.01.5 and M07.02.
-- [ ] M07.04 Deliver assigned-operator observation history and anomaly inspection
-  alongside SQL attempts and provider evidence. Verify authorization, timestamp
-  skew, duplicate/out-of-order observations, and missing/decreasing energy
-  (including a final total below earlier totals) in these views.
-  Depends on M06.04 and M07.01.
-- [ ] M07.05 Exercise progress/completion through stream outage and ambiguous
-  append, observation-worker loss/stall, MongoDB outage, and offset recovery.
-  Add isolated observation-view replay/rebuild and verify it preserves source
-  times without sending charging commands or notifications.
-  Depends on M07.01, M07.02, and M07.03.
 - [x] M07.06 Deliver provider-initiated session end: a WattHarbor connector can
   carry an energy limit, and the provider ends a session on it once the vehicle
   is full, emitting the final reading and freeing the connector. Verify that the
@@ -539,7 +495,7 @@ recoverable without authorizing conflicting starts. Final completion depends on 
 
 Acceptance: a driver sees session progress and completes charging with matching,
 immutable final usage. Accepted observations survive document-store interruption;
-replay rebuilds views without repeating effects or making old evidence fresh.
+replayed evidence neither repeats effects nor makes old evidence fresh.
 
 ### M08 — Live updates and cached views
 
@@ -553,13 +509,10 @@ replay rebuilds views without repeating effects or making old evidence fresh.
 - [ ] M08.02 Serve catalog/progress query views through Valkey with expiry and
   version-conditional writes. Introduce transactional catalog-change events,
   independent cache-worker updates/invalidation, bounded SQL/MongoDB fallback,
-  stampede protection, warming, and cache-hit/fallback metrics. Verify operator
-  edits and charging observations reach the browser without stale updates
-  overwriting newer versions. Depends on M04.02, M05.01, and M07.01.
-- [ ] M08.03 Exercise feature workloads through cache flush/outage, cache-worker
-  loss/recovery, backplane outage, missed updates, API loss, and affinity-target
-  loss. Verify bounded fallback and independent recovery from search/observations.
-  Depends on M08.01 and M08.02.
+  warming, and cache-hit/fallback metrics. Verify operator edits and charging
+  observations reach the browser without stale updates overwriting newer
+  versions, and bounded fallback during a cache outage.
+  Depends on M04.02, M05.01, and M07.01.
 
 Acceptance: two API instances deliver updates through the backplane. Reconnecting
 clients recover current snapshots. Cache loss preserves authoritative facts and
@@ -576,16 +529,12 @@ bounded fallback protects the backing stores.
 - [ ] M09.02 Enrich discovery with observation-driven advisory availability and
   freshness labels. Verify search results cannot bypass primary-side booking
   eligibility. Depends on M07.01 and M09.01.
-- [ ] M09.03 Exercise discovery during delayed/duplicate updates, search outage,
-  and search index worker loss. Add bounded SQL lookup, visible degraded results,
-  replacement-index rebuild/validation/switchover, and freshness metrics; verify
-  recovery independently of cache and observations. Depends on M09.01 and M09.02.
 
 Acceptance: drivers discover equipment through an independent index with visible
-freshness limits. Rebuilds publish validated replacements and search failure
-preserves unrelated commands for known equipment.
+freshness limits. Search failure is visible and preserves unrelated commands for
+known equipment.
 
-### M10 — Station media, session summaries, and diagnostics
+### M10 — Station media and session summaries
 
 - [ ] M10.01 Deliver assigned-operator upload/publication and driver station
   media. Introduce the S3 adapter, private/public buckets, CORS, direct presigned
@@ -598,37 +547,29 @@ preserves unrelated commands for known equipment.
   private PDFsharp documents from frozen completion facts in the media worker,
   with deterministic regeneration and visible pending/failure states.
   Depends on M07.02 and M10.01.
-- [ ] M10.03 Deliver assigned-operator diagnostic-bundle downloads using sanitized
-  ZIP/JSON evidence from SQL attempts, MongoDB observations, and provider records.
-  Verify private access and secret exclusion. Depends on M07.04 and M10.01.
-- [ ] M10.04 Exercise media/document flows through upload-notice loss, worker
-  crash after writing variants, storage outage, partial writes, expired/reused
-  upload URLs, cross-user access, and summary failure after session completion.
-  Add missing-notice reconciliation and abandoned-upload/orphan cleanup with
-  observable queue/recovery outcomes. Verify media failures remain independent
-  of notification delivery and charging execution. Depends on M10.01–M10.03.
+- [ ] M10.04 Add missing-upload-notice reconciliation and abandoned-upload/orphan
+  cleanup. Verify that a lost upload notice and a worker crash after writing
+  variants converge while the previous publication stays usable.
+  Depends on M10.01.
 
 Acceptance: station media appears only after publication and published bytes
 cannot be overwritten through original upload URLs. Summaries reproduce frozen
-usage; diagnostic downloads expose authorized evidence without secrets. File
-failure leaves charging completion intact.
+usage. File failure leaves charging completion intact.
 
 ### M11 — Hosted R2 and Cloudflare CDN
 
-- [ ] M11.01 Add the hosted files profile, R2 credentials/endpoints, and private
-  and public buckets through environment configuration.
-- [ ] M11.02 Attach the public bucket to a configured subdomain of the existing
-  Cloudflare-managed domain; keep private buckets off public delivery routes.
-- [ ] M11.03 Run adapter contract tests against R2, including browser CORS,
-  presigned transfers, metadata/checksum handling, publication copy, and deletion.
-- [ ] M11.04 Publish versioned frontend assets and media through CDN cache rules;
-  the frontend entry page references the matching asset build.
-- [ ] M11.05 Implement the CDN purge adapter and publication/removal workflow,
-  exposing hit/miss/age and purge results for synthetic assets.
-- [ ] M11.06 Verify warm versus cold requests, origin deletion, cache expiry/purge,
-  unavailable-media placeholders, and separation of private transfer URLs from CDN URLs.
-- [ ] M11.07 Add repeatable profile setup/cleanup and record usage/cost evidence
-  without changing unrelated DNS records or persisting credentials.
+- [ ] M11.01 Add the hosted files profile: R2 credentials/endpoints, private and
+  public buckets through environment configuration, and the public bucket on a
+  configured subdomain of the existing Cloudflare-managed domain, with private
+  buckets off public delivery routes. Run adapter contract tests against R2,
+  including browser CORS, presigned transfers, metadata/checksum handling,
+  publication copy, and deletion.
+- [ ] M11.02 Publish versioned frontend assets and media through CDN cache rules,
+  with the entry page referencing the matching asset build, and add the CDN purge
+  adapter to the publication/removal workflow. Verify warm versus cold requests
+  after origin deletion, purge, and unavailable-media placeholders. Add repeatable
+  profile setup/cleanup without changing unrelated DNS records or persisting
+  credentials. Depends on M11.01.
 
 Acceptance: real edge caching and R2 signing are demonstrated on the lab domain.
 Authentication/API routes and private files are excluded from shared caching.
@@ -646,45 +587,42 @@ and purge removes the old publication. Setup and cleanup are reproducible.
   Verify primary, replica, identity, and gateway-session pool budgets and read-only
   permissions. Depends on M12.01 and M04.
 - [ ] M12.03 Run active charging/observation workloads during provider-supported
-  failover and record endpoint/pool recovery and transaction interruption.
+  failover. Verify uncertain-commit lookup, durable work recovery,
+  browser-session continuity, and authoritative mutation results.
   Depends on M12.02 and M08.
-- [ ] M12.04 Verify uncertain-commit lookup, operation resubmission, durable work
-  recovery, browser-session continuity, authoritative mutation-result display,
-  and replica lag/fallback during the exercise.
-- [ ] M12.05 Record any observed lost commits, recovered outcomes, bounded waits,
-  and measured recovery time; automate teardown and record remaining-resource costs.
+- [ ] M12.05 Automate profile teardown.
 - [ ] M12.06 Verify transaction-pooling compatibility of EF Core and durable
-  messaging, direct routes for session-affine coordination, server-pool budgets and
-  saturation, replica read-only behavior, lag detection, replica interruption, and
-  bounded primary fallback. Depends on M12.02 and M05.01; this gate can run
-  ahead of the full M08-dependent failover workflows.
+  messaging, direct routes for session-affine coordination, and server-pool
+  saturation. Depends on M12.02 and M05.01; this gate can run ahead of the
+  M08-dependent failover workflow.
 
 Acceptance: the provider performs database promotion; the application handles
 interrupted transactions and connections without inventing commit outcomes or
 duplicating operations. The same application binaries use configured managed
 routes; transaction pooling, bounded fallback, and server-pool contention are
 demonstrated. HA standby and query replica roles are separately visible.
-The exercise ends with recorded business outcomes and resource cleanup.
+The exercise ends with resource cleanup.
 
-### M13 — Complete lab demonstrations and fault verification
+### M15 — API rate limiting
+
+- [ ] M15.01 Enforce API rate limits consistently across replicas under the
+  [resilience boundaries](architecture.md#12-resilience-boundaries): select
+  gateway enforcement or instance middleware backed by a shared store, return
+  Problem Details for rejected requests, and show them in the frontend. Verify
+  that limits hold across replicas. Depends on M08.
+
+Acceptance: browser and machine callers exceeding their limits are rejected
+consistently regardless of the replica that receives the request.
+
+### M13 — Lab demonstrations and fault tooling
 
 - [ ] M13.01 Assemble repeatable driver and operator demonstrations covering
   discovery, booking, charging, final usage, files, notification, and reconciliation.
 - [ ] M13.02 Add k6/Toxiproxy scenario tooling for small concurrency/pool budgets,
   queue/consumer backlogs, provider isolation, and dependency interruption.
-- [ ] M13.03 Complete and index evidence for the
-  [fault scenarios](lab.md#24-fault-scenarios) in their applicable profiles.
-- [ ] M13.04 Verify the [diagnostic signals](lab.md#23-verification-tools-and-signals)
-  across integrated workflows; extend M01.12 dashboards when that profile is enabled.
-- [ ] M13.05 Add reproducible restore/build, migrations, seeding/reset, test commands,
-  profile start/stop, cloud cleanup, and troubleshooting references under `tools`
-  and `docs` as needed.
-- [ ] M13.06 Verify startup from a clean checkout and rerun the full demonstration
-  after controlled faults; document retained state and explicit recovery limits.
 
 Acceptance: every selected component participates in an observable application
-flow. Every applicable lab fault scenario has repeatable injection and recorded
-business outcomes. Local demonstrations require no cloud subscription; hosted exercises
+flow. Local demonstrations require no cloud subscription; hosted exercises
 use the same application contracts with configured provider endpoints.
 
 ### M14 — AmpTrail queued-provider integration
@@ -697,55 +635,54 @@ AmpTrail lab provider remains a stub host until then.
   Verify lost acknowledgements, delayed effects, and interrupted requests without
   blind resubmission. Add AmpTrail coverage to charging progress.
   Depends on M06.02 and M07.01.
-- [ ] M14.02 Exercise both provider flows through crash after external effect,
-  provider restart, rate limiting, circuit opening, and per-provider concurrency
-  isolation. Depends on M06.05 and M14.01.
+- [ ] M14.02 Exercise the AmpTrail flow through crash after external effect,
+  provider restart, rate limiting, and circuit opening, and verify per-provider
+  concurrency isolation. Depends on M06.05 and M14.01.
 
 Acceptance: driver start/stop, progress, and operator investigation work against
 both providers. Uncertain AmpTrail effects remain visible and recoverable without
 blind resubmission.
 
-## 4. Component and verification coverage
+## 4. Component coverage
 
-| Component / boundary | Implementation | Principal verification |
-|---|---|---|
-| Aspire, process hosts, OCI containers | M01; resource wiring in each milestone | M01 startup/restart; M03 fixtures/reset; M13 clean-checkout demonstrations |
-| Ingress, gateway, and runtime replicas | M01, M02, M08 | Logical destination health, replica selection/loss, affinity, authentication continuity |
-| React, Mantine, TanStack Query | M01, M02, M04–M12 | Role workflows, stale/pending states, reconnect, private access |
-| Keycloak, BFF, shared ticket/key state | M02 | Browser boundaries, refresh/logout races, identity/session-store outage |
-| PostgreSQL, EF Core, Npgsql | M02, M03; runtime feature access M04–M07, M10 | Route permissions, client pooling, conflicts, ordering, commits, ownership, completion |
-| Managed read replica and PgBouncer | M12; application routes introduced in M04 | Lag, read-only routes, server-pool saturation, reconnect/failover |
-| RabbitMQ jobs/topics, Wolverine inbox/outbox | Reservation expiry M05.02; independent subscribers M05.04 onward | Publish/ack crash windows, redelivery, independent subscribers |
-| Durable scheduler / reconciliation | Reservation expiry M05.02; charging M06, files M10 | Restart, deadlines, exhaustion, expiry races, missing notices |
-| Provider simulators, HTTP resilience | M06, M07; queued provider M14 | Lost responses, idempotency differences, rate limits, physical evidence |
-| Notification mail sink/adapters and worker | Reservation notifications M05.04; completion M07.02; external exercise M05.07 | Local capture, real email delivery, ambiguity, independent retry |
-| Kafka and observation consumers | M07 | Durable acceptance, lag, offset recovery, replay |
-| MongoDB | M07, M10 | Latest/history ordering, outage catch-up, diagnostic queries |
-| Valkey and SignalR backplane | M08 | Cache flush, bounded fallback, fan-out loss/recovery |
-| Elasticsearch | M09 | Index freshness, outage, validated rebuild |
-| Independent cache and search index workers | M08, M09 | Separate lag/checkpoint recovery, worker loss, warming/rebuild without session effects |
-| S3 adapter / local container | Compatibility selection M01.08; station-media flow M10.01 | Transfer authorization, partial writes, cleanup, immutable publication |
-| SkiaSharp, PDFsharp, ZIP/JSON | M10 | Processing recovery, frozen summary facts, diagnostic sanitization |
-| R2 and Cloudflare CDN | M11 | Real signing, cache hits/misses, origin deletion, purge |
-| Azure managed PostgreSQL | M12 | Provider failover, pool/session recovery, uncertain commits |
-| OpenTelemetry and Aspire Dashboard | M01.06 onward; M13 views | Correlated evidence, resource health, bounded export during outage |
-| Optional observability profile | M01.12; M13 profile scenarios | Telemetry routing, queries/custom dashboards, bounded buffering/drop during outage |
-| Frontend diagnostics / Sentry | M01.13; hosted gate M01.14 | [Signals](lab.md#23-verification-tools-and-signals), [fault scenarios](lab.md#24-fault-scenarios) |
-| xUnit and Aspire testing | M01.07 onward | Domain, contract, topology, resilience verification |
-| Testcontainers | M02.03 onward | Isolated real-dependency integration tests within functional milestones |
-| Vitest, React Testing Library, Playwright | M01 onward | UI semantics and authenticated browser workflows |
-| k6 and Toxiproxy | M13; available for earlier gates | Saturation and network-fault evidence |
+| Component / boundary | Implementation |
+|---|---|
+| Aspire, process hosts, OCI containers | M01; resource wiring in each milestone |
+| Ingress, gateway, and runtime replicas | M01, M02, M08; rate limiting M15 |
+| React, Mantine, TanStack Query | M01, M02, M04–M12 |
+| Keycloak, BFF, shared ticket/key state | M02 |
+| PostgreSQL, EF Core, Npgsql | M02, M03; runtime feature access M04–M07, M10 |
+| Managed read replica and PgBouncer | M12; application routes introduced in M04 |
+| RabbitMQ jobs/topics, Wolverine inbox/outbox | Reservation expiry M05.02; independent subscribers M05.04 onward |
+| Durable scheduler / reconciliation | Reservation expiry M05.02; charging M06, files M10 |
+| Provider simulators, HTTP resilience | M06, M07; queued provider M14 |
+| Notification mail sink/adapters and worker | Reservation notifications M05.04; completion M07.02; external exercise M05.07 |
+| Kafka and observation consumers | M07 |
+| MongoDB | M07; operator investigation M06.04.2 |
+| Valkey and SignalR backplane | M08 |
+| Elasticsearch | M09 |
+| Independent cache and search index workers | M08, M09 |
+| S3 adapter / local container | Compatibility selection M01.08; station-media flow M10.01 |
+| SkiaSharp, PDFsharp | M10 |
+| R2 and Cloudflare CDN | M11 |
+| Azure managed PostgreSQL | M12 |
+| OpenTelemetry and Aspire Dashboard | M01.06 onward |
+| Optional observability profile | M01.12 |
+| Frontend diagnostics / Sentry | M01.13; hosted gate M01.14 |
+| xUnit and Aspire testing | M01.07 onward |
+| Testcontainers | M02.03 onward |
+| Vitest, React Testing Library, Playwright | M01 onward |
+| k6 and Toxiproxy | M13; available for earlier gates |
 
-Scenario definitions remain in [the lab reference](lab.md#24-fault-scenarios).
-Milestone gates verify relevant faults as their boundary becomes usable; M13
-closes coverage gaps and repeats the integrated demonstrations.
+Milestone tasks verify relevant [fault scenarios](lab.md#24-fault-scenarios) as
+their boundary becomes usable.
 
 ## 5. Pending implementation selections
 
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
 | Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
-| API rate limiting | Deferred separately from M06.01.4.1; enforce limits at the gateway or through instance middleware backed by a central store (for example, Redis), consistently across replicas | Pending design and implementation |
+| API rate limiting | Enforce limits at the gateway or through instance middleware backed by a central store (for example, Redis), consistently across replicas | M15.01 |
 | External email provider and test recipients | Provider selection, sender onboarding, scoped credentials, and real-delivery setup | M05.07 |
-| Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.02 |
+| Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.01 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

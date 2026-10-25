@@ -28,8 +28,8 @@ Reservations, charging controls, personal records, and operator workflows requir
 authentication and their applicable role, ownership, or station assignment.
 
 Drivers access their own reservations, sessions, and summaries. Assigned operator
-users edit station content, inspect operations, request reconciliation, and access
-diagnostic bundles. An operator role does not grant access to every station.
+users edit station content, inspect operations, and request reconciliation.
+An operator role does not grant access to every station.
 Account administration, assignment-management workflows, and manual overrides of
 physical charging state are outside the feature set.
 
@@ -38,8 +38,8 @@ by the identity provider or obtained through a supported external sign-in provid
 The platform creates a driver profile before granting access to driver workflows.
 Email is required on that profile. Signing in, creating a reservation, and
 cancelling a reservation do not change it. Notifications use the driver's current
-stored email when prepared. Account email changes require verification and explicit
-synchronization to the profile.
+stored email when prepared. Account email changes are outside the feature set;
+the profile keeps the email verified at registration.
 
 Station content edits reject a stale editor version rather than overwrite changes
 saved after that version was loaded. Rejected edits do not create a saved-change audit record.
@@ -366,10 +366,9 @@ source timestamps.
 | Published media | Validated version referenced by publication metadata |
 | Signed URL | Time-limited transfer permission, not stable file identity |
 | Session summary | Private usage document from completed facts; not an invoice or fiscal receipt |
-| Diagnostic bundle | Private sanitized observations, attempts, and provider responses for investigation |
 
 Uploaded, processed, and published are distinct milestones. Object existence alone
-does not make media visible. Diagnostic generation does not modify the session.
+does not make media visible.
 
 ## 10. Industry terminology
 

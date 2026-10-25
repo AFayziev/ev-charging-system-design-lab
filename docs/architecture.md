@@ -9,7 +9,7 @@ external effects.
 
 Drivers discover stations, reserve connectors, control charging, follow progress,
 and download session summaries. Operator users maintain assigned station content,
-inspect sessions and attempts, request reconciliation, and download diagnostics.
+inspect sessions and attempts, and request reconciliation.
 Infrastructure fault injection belongs to the test harness rather than the UI.
 
 Billing, payments, tariffs, roaming, route planning, fleet management, and a
@@ -120,10 +120,10 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 | Gateway / BFF | Browser authentication sessions, identity-provider interactions, and browser/service/callback routing to runtime-balanced API services |
 | API | Command/query acceptance, transactional reservation/operation/session intent, file authorization, observation ingestion, and live connections/event subscription |
 | Charging worker | Charging-provider integrations and start/stop effects, reservation expiry, transactional lifecycle/final-usage processing, reconciliation, stale-session detection and recovery polling that appends to the observation stream, and recurring due-work discovery |
-| Observation worker | Stream consumers, document history/latest views, and isolated observation-view replay |
-| Search index worker | Station/business-event and observation consumers, search indexing, replacement-index rebuilds, validation, and switchover |
+| Observation worker | Stream consumers and document history/latest views |
+| Search index worker | Station/business-event and observation consumers and search indexing |
 | Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and bounded warming/recovery |
-| Media worker | Media processing/publication, summaries, diagnostic bundles, and upload/orphan sweeps |
+| Media worker | Media processing/publication, summaries, and upload/orphan sweeps |
 | Notification worker | External notification delivery through a provider adapter, retries, and persisted delivery attempts |
 
 Recurring producers run with their owning workload: reconciliation/recovery
@@ -137,8 +137,8 @@ Notification jobs remain provider-independent. Delivery acceptance and uncertain
 follow the [notification integration contract](integrations.md#4-notification-providers).
 
 Search indexing and cache maintenance use separate deployments, subscriber queues,
-and stream consumer groups. Each owns its checkpoints and recovery. Loss or rebuild
-of either derived store does not pause observation history or session-evidence
+and stream consumer groups. Each owns its checkpoints and recovery. Loss of either
+derived store does not pause observation history or session-evidence
 processing. API cache reads, request-time fills, and bounded fallback remain in
 the API; the cache worker owns asynchronous maintenance of cached query views.
 Live-update fan-out remains an API responsibility.
@@ -161,7 +161,7 @@ operation.
 | Observation history, latest observations | Document database projections | Cache and diagnostic queries |
 | Hot query results | Cache | Reconstructable from owning stores |
 | Station text, location, capabilities, advisory availability | Search index | Rebuildable discovery index |
-| Originals, media variants, summaries, diagnostic bytes | Object storage | CDN or private signed transfers |
+| Originals, media variants, summaries | Object storage | CDN or private signed transfers |
 
 The relational database owns platform decisions; the charging provider owns
 physical state. The stream is the durable acceptance boundary for observations,
@@ -194,8 +194,8 @@ structured details.
 
 - Automatic change records use add/update/delete actions and explicitly selected
   entity properties.
-- Explicit events express business intent, including publication, reconciliation
-  requests, and diagnostic access. Each action uses one capture path to avoid
+- Explicit events express business intent, including publication and reconciliation
+  requests. Each action uses one capture path to avoid
   duplicate records.
 
 Business changes and their audit records commit together; a failed transaction
@@ -219,7 +219,7 @@ can lag and expose their freshness.
 | Catalog and session-history lists | Replica, optionally cache |
 | Station discovery | Search index |
 | Current progress | Document latest view / cache, plus live updates |
-| Diagnostics | Document observations and relational attempt records |
+| Operator investigation | Document observations and relational attempt records |
 | Published media | CDN |
 | Private files | Authorized signed object-storage URL |
 
@@ -229,10 +229,8 @@ view. The [lab profile](lab.md#22-default-timings) defines lag tolerance. Writes
 return committed identifiers/state, so a lagging history list cannot erase their
 immediate confirmation.
 
-Search failure permits a limited relational station lookup within an admission budget.
-Cache bypass uses bounded fallback, stampede controls, and gradual warm-up.
-The search index rebuilds from canonical station data and selected observations;
-replacement indexes are validated before switchover.
+Search failure makes discovery visibly unavailable without affecting commands
+for known equipment. Cache bypass uses bounded fallback and gradual warm-up.
 
 ## 6. Relational topology and pooling
 
@@ -329,9 +327,7 @@ another. Cached progress is written by the cache worker's group. The document
 latest view is only the read fallback after cache loss.
 
 Consumer lag is visible and limited by stream retention. Aggregation state has
-recoverable checkpoints. Replay uses isolated consumers and rebuild targets,
-validates the new view, then switches its published version. Rebuild consumers
-cannot dispatch external effects. The identity, ordering, and freshness semantics
+recoverable checkpoints. The identity, ordering, and freshness semantics
 remain those of the [domain reference](domain.md#8-time-identity-and-ordering).
 
 ## 9. Charging workflows
@@ -434,7 +430,6 @@ summary and deliver notifications; their failures do not roll back charging fact
 | Versioned frontend assets and published station media | Public objects through the CDN |
 | Originals and pending variants | Private direct upload and worker access |
 | Session summaries | Private short-lived download URL after ownership check |
-| Diagnostic bundles | Private short-lived download URL after assignment check |
 
 The storage adapter exposes upload authorization, verification, publication, and
 download operations. Transfers use object-specific, short-lived signed URLs after
@@ -442,7 +437,7 @@ platform authorization. Local and hosted storage implementations use the same
 adapter boundary.
 
 Public assets use a dedicated delivery origin.
-Originals, pending uploads, summaries, and diagnostics remain in private storage
+Originals, pending uploads, and summaries remain in private storage
 and bypass the CDN.
 
 Media publication proceeds through private upload allocation, direct browser
@@ -462,7 +457,7 @@ everywhere. Warm caches can survive origin loss until expiry/eviction; cold
 requests require the origin. Missing media produces a visible placeholder.
 
 Signed URLs can remain valid until expiry. Tokens and signed URLs are redacted
-from logs and bundles. Hosted exercises verify real signing, caching, and invalidation.
+from logs. Hosted exercises verify real signing, caching, and invalidation.
 [Storage setup](lab.md#15-storage-and-delivery)
 
 ## 11. Frontend and live delivery
@@ -540,8 +535,7 @@ stores the verified email from the validated identity. Issuer and subject unique
 identify the account; repeated provisioning returns the existing profile without
 changing its email. Identity registration and platform provisioning are separate
 transactions. A provisioning failure leaves browser sign-in incomplete, and a
-subsequent sign-in can retry without duplicating the profile. Verified account
-email changes use a separate synchronization flow.
+subsequent sign-in can retry without duplicating the profile.
 
 A relational session store holds authentication and protected token state shared
 by gateway replicas. The browser receives a protected session-reference cookie.
@@ -606,4 +600,4 @@ contracts. Replicas belong to a service deployment; individual
 instance identities are diagnostic information rather than application routing
 contracts. Environment-specific configuration supplies scaling, discovery,
 certificates, secrets, and managed-resource bindings without changing application
-flows. Deployment artifacts and execution are verified alongside local runs.
+flows.

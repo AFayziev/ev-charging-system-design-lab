@@ -44,9 +44,9 @@ implementation progress is recorded in the plan.
 | `EvCharging.Api` | Resource | Commands/queries, transactional acceptance, file authorization, callbacks, and live delivery |
 | `EvCharging.ChargingWorker` | Resource | Charging effects, reservation expiry, reconciliation, stale-session detection, and recovery polling |
 | `EvCharging.ObservationWorker` | Resource | Observation history/latest views, and lifecycle and final-usage evidence |
-| `EvCharging.SearchIndexWorker` | Resource | Search indexing, replacement-index rebuilds, validation, and switchover |
+| `EvCharging.SearchIndexWorker` | Resource | Search indexing |
 | `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, warming, and recovery |
-| `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, diagnostic bundles, and upload/orphan cleanup |
+| `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, and upload/orphan cleanup |
 | `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
 | `EvCharging.WattHarborProviderApi` | Resource | WattHarbor lab provider with authoritative synchronous results and command deduplication |
 | `EvCharging.WattHarborProviderApi.Migrations` | Resource | Provider-owned EF migrations and one-shot database initialization |

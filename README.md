@@ -22,7 +22,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 - Authentication, resource authorization, API gateway, load balancing, and replicas.
 - PostgreSQL read/write routing and Npgsql connection pools, with managed
   replication, PgBouncer, and database failover in the Azure exercise.
-- MongoDB document storage, Valkey caching, Elasticsearch, and rebuildable read models.
+- MongoDB document storage, Valkey caching, Elasticsearch, and derived read models.
 - RabbitMQ work queues and publish/subscribe, Kafka observation streams, and
   Wolverine inbox/outbox and durable scheduling.
 - External provider integrations, telemetry processing, and reconciliation.
@@ -188,7 +188,7 @@ An existing Keycloak realm is retained across restarts. Apply registration and S
 changes through its Admin Console; the source configuration is
 [the realm definition](infra/keycloak/platform/evcharging-realm.json), and SMTP connection
 values come from the Keycloak resource environment. Restart does not reimport
-an existing realm. Account-email changes are a separate delivery task.
+an existing realm.
 
 ### Detached execution
 
