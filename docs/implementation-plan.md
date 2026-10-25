@@ -536,7 +536,7 @@ bounded fallback protects the backing stores.
     events in order, with unavailable dependencies retried indefinitely. Add the
     mapping and a read-only worker role. Verify redelivered and back-to-back
     events and recovery from an index outage. Depends on M04.02.
-  - [ ] M09.01.2 Initial indexing and rebuild: bulk-load into a versioned index
+  - [x] M09.01.2 Initial indexing and rebuild: bulk-load into a versioned index
     behind an alias, then swap. Verify rebuild from empty and a rebuild racing
     live edits. Depends on M09.01.1.
   - [ ] M09.01.3 Search API: text, connector type, power supply, minimum power,

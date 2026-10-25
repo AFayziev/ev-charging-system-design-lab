@@ -43,22 +43,66 @@ public sealed class ElasticsearchFixture : IAsyncLifetime
         new SingleNodePool(Address),
         new HttpRequestInvoker((handler, _) => new DelayingHandler(handler))));
 
+    public ElasticsearchClient CreateClient(IndexAliasSwapGate gate) => new(new ElasticsearchClientSettings(
+        new SingleNodePool(Address),
+        new HttpRequestInvoker((handler, _) => gate.Wrap(handler))));
+
     // Runs the station-changed handler as the search worker does: its own database role, reading the committed row.
+    // The command it returns when no index exists is handled as the worker does, then the event is handled again.
     public async Task IndexStationAsync(
         PlatformDatabaseFixture database, Guid stationId, StationSearchIndexWriter? writer = null)
     {
-        await using var workerDatabase = new PlatformDbContext(
-            new DbContextOptionsBuilder<PlatformDbContext>()
-                .UseNpgsql(database.GetDataSource("search_messaging"))
-                .Options);
-        writer ??= new StationSearchIndexWriter(Client);
-        await StationChangedEventHandler.HandleAsync(
-            new StationChangedEvent(stationId), workerDatabase, writer, CancellationToken.None);
+        if (await HandleEventAsync(database, stationId, writer) is not null)
+        {
+            await BuildIndexAsync(database);
+            Assert.Null(await HandleEventAsync(database, stationId, writer));
+        }
     }
+
+    public async Task<EnsureStationSearchIndexCommand?> HandleEventAsync(
+        PlatformDatabaseFixture database, Guid stationId, StationSearchIndexWriter? writer = null)
+    {
+        await using var workerDatabase = CreateWorkerDatabase(database);
+        return await StationChangedEventHandler.HandleAsync(
+            new StationChangedEvent(stationId),
+            workerDatabase,
+            writer ?? new StationSearchIndexWriter(Client),
+            CancellationToken.None);
+    }
+
+    public async Task BuildIndexAsync(PlatformDatabaseFixture database, ElasticsearchClient? client = null)
+    {
+        await using var workerDatabase = CreateWorkerDatabase(database);
+        await new StationSearchIndexBuilder(client ?? Client).EnsureAsync(
+            workerDatabase, Guid.NewGuid(), CancellationToken.None);
+    }
+
+    public async Task<IReadOnlyList<string>> IndicesBehindAsync(string alias)
+    {
+        var response = await Client.Indices.GetAliasAsync(request => request.Name(alias));
+        return response.IsValidResponse
+            ? response.Aliases!.Keys.Select(name => name.ToString()).ToList()
+            : [];
+    }
+
+    public async Task DeleteStationIndicesAsync()
+    {
+        // Wildcard deletes are refused by default, so each index is deleted by name.
+        var indices = await Client.Indices.GetAsync(StationSearchIndex.IndexPattern);
+        foreach (var index in indices.Indices.Keys)
+        {
+            await Client.Indices.DeleteAsync(index);
+        }
+    }
+
+    private static PlatformDbContext CreateWorkerDatabase(PlatformDatabaseFixture database) => new(
+        new DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql(database.GetDataSource("search_messaging"))
+            .Options);
 
     public async Task<StationSearchDocument?> GetStationAsync(Guid publicId)
     {
-        var response = await Client.GetAsync<StationSearchDocument>(StationSearchIndexWriter.Alias, publicId);
+        var response = await Client.GetAsync<StationSearchDocument>(StationSearchIndex.Alias, publicId);
         return response.Found ? response.Source : null;
     }
 
@@ -81,7 +125,7 @@ public sealed class ElasticsearchFixture : IAsyncLifetime
         var response = await Client.Indices.PutSettingsAsync(
             new PutIndicesSettingsRequest
             {
-                Indices = StationSearchIndexWriter.Alias,
+                Indices = StationSearchIndex.Alias,
                 Settings = new IndexSettings { Blocks = new IndexSettingBlocks { Write = blocked } }
             });
         Assert.True(response.IsValidResponse, response.DebugInformation);

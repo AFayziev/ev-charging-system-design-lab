@@ -57,25 +57,17 @@ public sealed class StationIndexingTests(ElasticsearchFixture search, PlatformDa
     }
 
     [Fact]
-    public async Task Index_AfterTheIndexIsDeleted_FailsOnceThenRecreatesTheIndexWithTheAlias()
+    public async Task Handle_EventWithNoIndex_RequestsABuildInsteadOfWriting()
     {
         var station = await database.SeedStationAsync();
-        var writer = new StationSearchIndexWriter(search.Client);
-        await search.IndexStationAsync(database, station.Id, writer);
-        await search.Client.Indices.DeleteAsync(StationSearchIndexWriter.InitialIndex);
+        await search.DeleteStationIndicesAsync();
 
-        await Assert.ThrowsAsync<SearchIndexUnavailableException>(
-            () => search.IndexStationAsync(database, station.Id, writer));
-        await search.IndexStationAsync(database, station.Id, writer);
-
-        var aliases = await search.Client.Indices.GetAliasAsync(
-            request => request.Name(StationSearchIndexWriter.Alias));
-        Assert.Equal([StationSearchIndexWriter.InitialIndex], aliases.Aliases!.Keys.Select(name => name.ToString()));
-        Assert.NotNull(await search.GetStationAsync(station.PublicId));
+        Assert.NotNull(await search.HandleEventAsync(database, station.Id));
+        Assert.Empty(await search.IndicesBehindAsync(StationSearchIndex.Alias));
     }
 
     [Fact]
-    public async Task Index_UnreachableElasticsearch_ThrowsUnavailableAndDoesNotSucceed()
+    public async Task Handle_UnreachableElasticsearch_ThrowsUnavailableAndDoesNotSucceed()
     {
         var station = await database.SeedStationAsync();
         var unreachable = new ElasticsearchClient(

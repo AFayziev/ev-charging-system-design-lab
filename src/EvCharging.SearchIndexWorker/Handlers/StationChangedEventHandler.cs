@@ -1,4 +1,3 @@
-using Elastic.Clients.Elasticsearch;
 using EvCharging.Contracts.Events.Stations;
 using EvCharging.Persistence;
 using EvCharging.SearchIndexWorker.Indexing;
@@ -9,7 +8,8 @@ namespace EvCharging.SearchIndexWorker.Handlers;
 public static class StationChangedEventHandler
 {
     // Events for one station run one at a time, and each reads the committed row, so the last write is the newest.
-    public static async Task HandleAsync(
+    // With no index at all the edit is not lost: the rebuild requested here reads the committed row.
+    public static async Task<EnsureStationSearchIndexCommand?> HandleAsync(
         StationChangedEvent message,
         PlatformDbContext database,
         StationSearchIndexWriter writer,
@@ -18,36 +18,10 @@ public static class StationChangedEventHandler
         var station = await database.Stations
             .AsNoTracking()
             .Where(station => station.Id == message.StationId)
-            .Select(
-                station => new
-                {
-                    station.PublicId,
-                    station.Name,
-                    station.Address,
-                    station.Latitude,
-                    station.Longitude,
-                    ChargerCount = station.Chargers.Count,
-                    Connectors = station.Chargers
-                        .SelectMany(charger => charger.Connectors)
-                        .OrderBy(connector => connector.Id)
-                        .Select(connector => new ConnectorSearchDocument(
-                            connector.ConnectorType, connector.PowerSupply, connector.RatedPowerKW))
-                        .ToList()
-                })
+            .ToSources()
             .SingleAsync(cancellationToken);
-        var document = new StationSearchDocument(
-            station.PublicId,
-            station.Name,
-            station.Address,
-            GeoLocation.LatitudeLongitude(new LatLonGeoLocation
-            {
-                Lat = (double)station.Latitude,
-                Lon = (double)station.Longitude
-            }),
-            station.ChargerCount,
-            station.Connectors.Count,
-            station.Connectors);
 
-        await writer.IndexAsync(document, cancellationToken);
+        var indexed = await writer.IndexAsync(StationSearchProjection.ToDocument(station), cancellationToken);
+        return indexed ? null : new EnsureStationSearchIndexCommand();
     }
 }

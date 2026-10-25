@@ -1,4 +1,5 @@
 using EvCharging.Messaging;
+using EvCharging.SearchIndexWorker.Handlers;
 using Microsoft.Extensions.Options;
 using Wolverine;
 using Wolverine.RabbitMQ;
@@ -7,6 +8,8 @@ namespace EvCharging.SearchIndexWorker.Configuration;
 
 internal sealed class SearchMessagingExtension(IOptions<SearchIndexingOptions> indexing) : IWolverineExtension
 {
+    private const string IndexBuildQueue = "search-index-build";
+
     public void Configure(WolverineOptions options)
     {
         options.AddSearchFailurePolicies(indexing.Value.RetryDelays);
@@ -16,5 +19,9 @@ internal sealed class SearchMessagingExtension(IOptions<SearchIndexingOptions> i
         options.ListenToRabbitQueue(StationEventTopology.SearchQueue)
             .ExclusiveNodeWithParallelism()
             .PartitionProcessingByGroupId(indexing.Value.IndexingSlots);
+
+        // One index build at a time across all instances.
+        options.PublishMessage<EnsureStationSearchIndexCommand>().ToRabbitQueue(IndexBuildQueue);
+        options.ListenToRabbitQueue(IndexBuildQueue).ListenWithStrictOrdering();
     }
 }

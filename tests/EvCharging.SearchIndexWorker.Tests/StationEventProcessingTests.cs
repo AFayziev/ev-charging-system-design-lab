@@ -21,6 +21,8 @@ namespace EvCharging.SearchIndexWorker.Tests;
 public sealed class StationEventProcessingTests(ElasticsearchFixture search, PlatformDatabaseFixture database)
 {
     private const string Queue = "search-station-events-test";
+    private const string IndexBuildQueue = "search-index-build-test";
+
     [Fact]
     public async Task Events_BackToBackEditsWithSlowWrites_EndAtTheNewestState()
     {
@@ -43,6 +45,21 @@ public sealed class StationEventProcessingTests(ElasticsearchFixture search, Pla
             await Task.Delay(TimeSpan.FromMilliseconds(100));
             Assert.Equal($"Second {round}", (await search.GetStationAsync(station.PublicId))!.Name);
         }
+    }
+
+    [Fact]
+    public async Task Events_WithNoIndex_BuildTheIndexAndIndexTheStation()
+    {
+        var station = await database.SeedStationAsync();
+        await search.DeleteStationIndicesAsync();
+        using var host = await StartHostAsync();
+
+        await PublishAsync(host.Services.GetRequiredService<IMessageBus>(), station.Id);
+
+        await search.WaitForStationAsync(
+            station.PublicId,
+            value => value.Name == "Search test",
+            TimeSpan.FromSeconds(60));
     }
 
     [Fact]
@@ -85,17 +102,22 @@ public sealed class StationEventProcessingTests(ElasticsearchFixture search, Pla
             options => options.UseNpgsql(database.GetDataSource("search_messaging")));
         builder.Services.AddSingleton(client ?? search.Client);
         builder.Services.AddSingleton<StationSearchIndexWriter>();
+        builder.Services.AddSingleton(
+            provider => new StationSearchIndexBuilder(provider.GetRequiredService<ElasticsearchClient>()));
         builder.UseWolverine(options =>
         {
             options.UseEntityFrameworkCoreTransactions();
             options.Discovery.DisableConventionalDiscovery();
             options.Discovery.IncludeType(typeof(StationChangedEventHandler));
+            options.Discovery.IncludeType(typeof(EnsureStationSearchIndexCommandHandler));
             options.PersistMessagesWithPostgresql(database.GetConnectionString("platform_migrator"), "search_messages");
             options.AutoBuildMessageStorageOnStartup = AutoCreate.CreateOrUpdate;
             options.Policies.UseDurableLocalQueues();
             options.Durability.ScheduledJobPollingTime = TimeSpan.FromMilliseconds(100);
             options.AddSearchFailurePolicies([TimeSpan.FromMilliseconds(200)]);
             options.PublishMessage<StationChangedEvent>().ToLocalQueue(Queue);
+            options.PublishMessage<EnsureStationSearchIndexCommand>().ToLocalQueue(IndexBuildQueue);
+            options.LocalQueue(IndexBuildQueue).Sequential();
             options.LocalQueue(Queue).PartitionProcessingByGroupId(PartitionSlots.Five);
         });
         var host = builder.Build();

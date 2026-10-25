@@ -15,6 +15,7 @@ internal static class ApplicationServiceExtensions
                 "Configure one to five positive retry delays, each at most five minutes.")
             .ValidateOnStart();
         services.AddSingleton<StationSearchIndexWriter>();
+        services.AddSingleton<StationSearchIndexBuilder>();
         services.AddSingleton<IWolverineExtension, SearchMessagingExtension>();
         return services;
     }
