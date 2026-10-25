@@ -290,10 +290,13 @@ dependency failures are visible without reporting unsuccessful writes as saved.
   - [x] Add recipient data, notification records, and durable send jobs.
   - [x] Implement direct local mail-sink delivery and persisted attempts with safe failure handling.
   - [x] Review the complete flow and verify notification isolation and outcomes.
-- [ ] M05.05 Exercise a broker outage with reservation workloads: bookings,
+- [x] M05.05 Exercise a broker outage with reservation workloads: bookings,
   cancellations, and expiry commit while the broker is down, and each pending
   event reaches its subscribers once after recovery. Worker restart, duplicate
-  expiry, and notification isolation are covered by M05.02–M05.04.
+  expiry, and notification isolation are covered by M05.02–M05.04. Verified
+  manually against the running stack, with the broker data kept and with a fresh
+  empty broker. No automated test: the outage could not be reproduced reliably
+  in E2E.
   Depends on M05.01–M05.04.
 
 Acceptance: a driver books, views, and cancels eligible slots. Configured admission
