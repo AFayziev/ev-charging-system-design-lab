@@ -2,11 +2,14 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
+using EvCharging.Contracts.Events.Stations;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Wolverine;
+using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
 
@@ -21,6 +24,7 @@ public sealed record UpdateStationCommand(Guid Id, UpdateStationRequest Request)
 
 public sealed class UpdateStationCommandHandler(
     PlatformDbContext database,
+    IDbContextOutbox outbox,
     IAuthorizationService authorization)
 {
     public async Task<Result<StationEditorResponse>> HandleAsync(
@@ -62,9 +66,15 @@ public sealed class UpdateStationCommandHandler(
     private async Task<Result<StationEditorResponse>> SaveStationAsync(
         Station station, CancellationToken cancellationToken)
     {
+        outbox.Enroll(database);
+        // One group per station lets the search worker apply a station's events strictly in order.
+        await outbox.PublishAsync(
+            new StationChangedEvent(station.Id),
+            new DeliveryOptions { GroupId = station.Id.ToString() });
+
         try
         {
-            await database.SaveChangesAsync(cancellationToken);
+            await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {

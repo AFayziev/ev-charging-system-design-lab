@@ -3,7 +3,14 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="EvCharging.SearchIndexWorker.Tests" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Aspire.Elastic.Clients.Elasticsearch" />
+    <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="WolverineFx.EntityFrameworkCore" />
+    <ProjectReference Include="../EvCharging.Contracts/EvCharging.Contracts.csproj" />
+    <ProjectReference Include="../EvCharging.Persistence/EvCharging.Persistence.csproj" />
+    <ProjectReference Include="../EvCharging.Messaging/EvCharging.Messaging.csproj" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>
 </Project>

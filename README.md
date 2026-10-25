@@ -309,6 +309,14 @@ Requires Docker for delivery-state integration tests.
 dotnet test tests/EvCharging.NotificationWorker.Tests
 ```
 
+### Search index worker tests
+
+Requires Docker for the Elasticsearch and PostgreSQL integration tests.
+
+```sh
+dotnet test tests/EvCharging.SearchIndexWorker.Tests
+```
+
 ### Frontend component tests
 
 Supply the browser timezone fixture through the process environment before

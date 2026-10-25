@@ -27,6 +27,7 @@ public sealed class PlatformDatabaseFixture : IAsyncLifetime
             .WithEnvironment("PLATFORM_MIGRATION_PASSWORD", _password)
             .WithEnvironment("CHARGING_MESSAGING_PASSWORD", _password)
             .WithEnvironment("NOTIFICATION_MESSAGING_PASSWORD", _password)
+            .WithEnvironment("SEARCH_MESSAGING_PASSWORD", _password)
             .WithResourceMapping(Path.Combine(AppContext.BaseDirectory, "provisioning"), "/provisioning/")
             .Build();
     }

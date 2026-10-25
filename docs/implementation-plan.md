@@ -529,6 +529,27 @@ bounded fallback protects the backing stores.
   controls. Connect transactional catalog-change events and independent subscriptions
   and checkpoints. Verify discovery and operator-edit visibility.
   Depends on M04.01 and M05.01; edit coverage requires M04.02.
+  Sub-items are sequenced as follows:
+  - [x] M09.01.1 Station events and search projection: publish a thin station-changed
+    event through the outbox, grouped by station. The search worker reads the
+    committed station from the primary and indexes it, applying one station's
+    events in order, with unavailable dependencies retried indefinitely. Add the
+    mapping and a read-only worker role. Verify redelivered and back-to-back
+    events and recovery from an index outage. Depends on M04.02.
+  - [ ] M09.01.2 Initial indexing and rebuild: bulk-load into a versioned index
+    behind an alias, then swap. Verify rebuild from empty and a rebuild racing
+    live edits. Depends on M09.01.1.
+  - [ ] M09.01.3 Search API: text, connector type, power supply, minimum power,
+    and optional distance sorting, with an opaque cursor and a typed unavailable
+    error. Browsing stays on SQL. Verify filters, paging, and outage isolation
+    from browsing and reservations. Depends on M09.01.2.
+  - [ ] M09.01.4 Frontend discovery: search field and filters on the catalog with
+    URL state, a "Near me" option, no-matches and search-unavailable states with a
+    fallback to the SQL catalog. Verify denied geolocation and search outage.
+    Depends on M09.01.3.
+  - [ ] M09.01.5 Edit visibility: verify through the browser that an operator edit
+    appears in search, and that an index outage neither fails the save nor loses
+    the update. Depends on M09.01.3.
 - [ ] M09.02 Enrich discovery with observation-driven advisory availability and
   freshness labels. Verify search results cannot bypass primary-side booking
   eligibility. Depends on M07.01 and M09.01.

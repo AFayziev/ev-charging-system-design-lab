@@ -26,7 +26,8 @@ public static class FindStaleSessionsMessageHandler
         var due = await DueSessions(database, now, staleBefore)
             .OrderBy(session => session.NextEvidenceReadAt)
             .ThenBy(session => session.Id)
-            .Select(session => new
+            .Select(
+                session => new
                 {
                     session.Id,
                     ObservedAt = database.SessionEvidence

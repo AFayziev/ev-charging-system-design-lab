@@ -156,7 +156,8 @@ public sealed partial class ChargingCommandTests
         bool isFinalEnergy = false) =>
         new((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent.Create(new
+            Content = JsonContent.Create(
+                new
                 {
                     eventId,
                     externalSessionId = sessionPublicId,

@@ -34,6 +34,7 @@ builder.AddMessaging(
         options.UseEntityFrameworkCoreTransactions();
         options.AddApplicationHandlers();
         options.AddReservationEventRouting();
+        options.AddStationEventRouting();
         options.AddChargingCommandRouting();
     });
 builder.Services.AddApplicationServices();

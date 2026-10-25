@@ -27,6 +27,8 @@ var chargingMessageMigrations = builder.AddMessageStorageMigration(
     "charging", databaseAccess.Migration, databaseAccess.Provisioning);
 var notificationMessageMigrations = builder.AddMessageStorageMigration(
     "notification", databaseAccess.Migration, databaseAccess.Provisioning);
+var searchMessageMigrations = builder.AddMessageStorageMigration(
+    "search", databaseAccess.Migration, databaseAccess.Provisioning);
 
 var gatewayOidcSecret = builder.AddPersistentSecret("gateway-oidc-secret");
 var wattHarborCallbackKey = builder.AddPersistentSecret("wattharbor-callback-key");
@@ -209,7 +211,12 @@ var observation = builder.AddProject<Projects.EvCharging_ObservationWorker>("obs
     .WithSettings(chargingSettings, ChargingOptions.SectionName, options => options.ClockSkew);
 
 var search = builder.AddProject<Projects.EvCharging_SearchIndexWorker>("search-index-worker")
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
+    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithReference(databaseAccess.SearchMessaging, "messaging")
+    .WaitForCompletion(searchMessageMigrations)
+    .WaitForCompletion(platformMigrations)
+    .WithReference(broker)
+    .WaitFor(broker);
 
 var cache = builder.AddProject<Projects.EvCharging_CacheWorker>("cache-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
@@ -227,7 +234,7 @@ var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("n
     .WithReference(notificationMail.GetEndpoint("http"))
     .WaitFor(notificationMail);
 
-foreach (var worker in new[] { charging, observation, search, cache, media })
+foreach (var worker in new[] { charging, observation, cache, media })
 {
     worker.WithReference(databaseAccess.Write)
         .WaitForCompletion(platformMigrations)
@@ -251,10 +258,7 @@ observation.WithReference(documents)
     .WaitFor(documents)
     .WaitForCompletion(documentMigrations)
     .WithEnvironment("ObservationStream__Topic", EvCharging.AppHost.ResourceExtensions.ObservationTopic);
-foreach (var reader in new[] { search, cache })
-{
-    reader.WithReference(databaseAccess.Read);
-}
+cache.WithReference(databaseAccess.Read);
 
 cache.WithReference(cacheStore).WaitFor(cacheStore);
 search.WithReference(searchIndex).WaitFor(searchIndex);

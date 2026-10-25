@@ -25,6 +25,7 @@ public sealed class DatabaseAccessTests(PlatformDatabaseFixture database)
     [InlineData("gateway_auth_runtime", "charging")]
     [InlineData("gateway_auth_migrator", "charging")]
     [InlineData("notification_messaging", "gateway_auth")]
+    [InlineData("search_messaging", "gateway_auth")]
     public Task SchemaAccess_OtherOwner_Denied(string role, string schema) =>
         AssertDeniedAsync(role, $"SELECT id FROM {schema}.sessions");
 
@@ -37,6 +38,8 @@ public sealed class DatabaseAccessTests(PlatformDatabaseFixture database)
     [InlineData("gateway_auth_runtime", "public")]
     [InlineData("notification_messaging", "charging")]
     [InlineData("notification_messaging", "notification_messages")]
+    [InlineData("search_messaging", "charging")]
+    [InlineData("search_messaging", "search_messages")]
     public Task RuntimeRole_CreateTable_Denied(string role, string schema) =>
         AssertDeniedAsync(role, $"CREATE TABLE {schema}.unauthorized (id bigint)");
 
@@ -45,6 +48,7 @@ public sealed class DatabaseAccessTests(PlatformDatabaseFixture database)
     [InlineData("platform_reader", "charging")]
     [InlineData("gateway_auth_runtime", "gateway_auth")]
     [InlineData("notification_messaging", "charging")]
+    [InlineData("search_messaging", "charging")]
     public Task RuntimeRole_MigrationHistory_Denied(string role, string schema) =>
         AssertDeniedAsync(role, $"SELECT * FROM {schema}.ef_migrations_history");
 
@@ -60,6 +64,29 @@ public sealed class DatabaseAccessTests(PlatformDatabaseFixture database)
     [InlineData("SELECT * FROM api_messages.wolverine_incoming_envelopes")]
     [InlineData("SELECT * FROM charging_messages.wolverine_incoming_envelopes")]
     public Task NotificationRole_OtherEffects_Denied(string sql) => AssertDeniedAsync("notification_messaging", sql);
+
+    [Theory]
+    [InlineData("INSERT INTO charging.stations (name) VALUES ('denied')")]
+    [InlineData("UPDATE charging.stations SET name = name")]
+    [InlineData("DELETE FROM charging.stations")]
+    [InlineData("UPDATE charging.connectors SET connector_type = connector_type")]
+    [InlineData("SELECT * FROM charging.reservations")]
+    [InlineData("SELECT * FROM charging.drivers")]
+    [InlineData("SELECT * FROM api_messages.wolverine_incoming_envelopes")]
+    [InlineData("SELECT * FROM notification_messages.wolverine_incoming_envelopes")]
+    public Task SearchRole_OtherEffects_Denied(string sql) => AssertDeniedAsync("search_messaging", sql);
+
+    [Theory]
+    [InlineData("SELECT id FROM charging.stations")]
+    [InlineData("SELECT id FROM charging.chargers")]
+    [InlineData("SELECT id FROM charging.connectors")]
+    public async Task SearchRole_StationRead_Allowed(string sql)
+    {
+        await using var connection = database.CreateConnection("search_messaging");
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
 
     [Theory]
     [InlineData("platform_writer", "SELECT * FROM charging.notifications")]

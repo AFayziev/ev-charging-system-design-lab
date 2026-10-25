@@ -1,10 +1,21 @@
+using EvCharging.Messaging;
+using EvCharging.Persistence.Extensions;
+using EvCharging.SearchIndexWorker.Configuration;
+using Wolverine.EntityFrameworkCore;
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
+builder.AddPlatformPersistence();
+builder.AddElasticsearchClient("elasticsearch");
+builder.Services.AddApplicationServices();
+builder.AddMessaging(
+    options =>
+    {
+        options.AddMessageStorage(builder.Configuration, "search");
+        options.UseEntityFrameworkCoreTransactions();
+        options.AddStationEventRouting();
+    });
 
 using var host = builder.Build();
-
-host.Services.GetRequiredService<ILoggerFactory>()
-    .CreateLogger("SearchIndexWorker")
-    .LogInformation("Search index worker stub; no indexes are updated or rebuilt.");
 
 await host.RunAsync();
