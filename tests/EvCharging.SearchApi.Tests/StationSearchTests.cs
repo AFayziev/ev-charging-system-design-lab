@@ -42,11 +42,13 @@ public sealed class StationSearchTests(SecuredSearchIndexFixture index) : IAsync
         Connector("Type2", "AC", 7),
         Connector("CCS2", "DC", 150));
 
+    private StationSearchDocument[] AllStations => [_riverside, _canaryWharf, _heathrow, _oxfordStreet];
+
     private SearchApiHost _host = null!;
 
     public async Task InitializeAsync()
     {
-        await index.ResetIndexAsync(_riverside, _canaryWharf, _heathrow, _oxfordStreet);
+        await index.ResetIndexAsync(AllStations);
         _host = await SearchApiHost.StartAsync(index.ReaderConnectionString);
     }
 
@@ -112,6 +114,9 @@ public sealed class StationSearchTests(SecuredSearchIndexFixture index) : IAsync
     [InlineData("bay alpha", "Oxford Street Charge")]
     [InlineData("gate one", "Heathrow Park")]
     [InlineData("wattharbor", "Oxford Street Charge")]
+    [InlineData("watt", "Oxford Street Charge")]
+    [InlineData("bay al", "Oxford Street Charge")]
+    [InlineData("riverside hu", "Riverside Hub")]
     [InlineData("volta", "Heathrow Park")]
     [InlineData("chademo", null)]
     public async Task Search_Text_MatchesChargerAndProviderNamesOnly(string text, string? expectedName)
@@ -236,6 +241,30 @@ public sealed class StationSearchTests(SecuredSearchIndexFixture index) : IAsync
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(problem.GetProperty("errors").TryGetProperty(property, out _), problem.ToString());
+    }
+
+    [Fact]
+    public async Task Search_Total_CountsEveryMatchNotThePage()
+    {
+        var response = await SearchAsync("limit=1");
+
+        Assert.Single(response.Stations);
+        Assert.Equal(AllStations.Length, response.Total);
+        Assert.True(response.TotalIsExact);
+    }
+
+    [Fact]
+    public async Task Search_Total_WhenMoreStationsMatchThanAreCounted_IsALowerBound()
+    {
+        await index.ResetIndexAsync(
+            Enumerable.Range(0, StationSearchLimits.TrackedTotal + 1)
+                .Select(number => Station($"Station {number}", "1 Road", 51.5, -0.1, Connector("Type2", "AC", 22)))
+                .ToArray());
+
+        var response = await SearchAsync("limit=1");
+
+        Assert.Equal(StationSearchLimits.TrackedTotal, response.Total);
+        Assert.False(response.TotalIsExact);
     }
 
     [Fact]

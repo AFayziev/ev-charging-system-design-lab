@@ -1,5 +1,6 @@
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.Core.Search;
+using Elastic.Transport.Products.Elasticsearch;
 using EvCharging.SearchIndex;
 using Polly;
 using Polly.Registry;
@@ -17,7 +18,29 @@ internal sealed class StationSearchService(
     {
         var request = page.Request;
         var search = request.ToSearchRequest(page.After);
-        var response = await _pipeline.ExecuteAsync(
+        var response = await ExecuteAsync(search, cancellationToken);
+
+        var hits = response.Hits;
+        var kept = hits.Take(request.Limit).ToArray();
+        var nextCursor = hits.Count > kept.Length ? StationSearchCursor.Encode(request, kept[^1].Sort!) : null;
+        var (total, exact) = Total(response);
+        return new StationSearchResponse(
+            kept.Select(hit => ToResult(hit, request.Sort)).ToArray(),
+            nextCursor,
+            total,
+            exact);
+    }
+
+    public async Task<StationSearchOptionsResponse> GetOptionsAsync(CancellationToken cancellationToken)
+    {
+        var search = StationSearchOptionsQuery.ToSearchRequest();
+        return StationSearchOptionsQuery.ToResponse(await ExecuteAsync(search, cancellationToken));
+    }
+
+    private async Task<SearchResponse<StationSearchDocument>> ExecuteAsync(
+        SearchRequest search,
+        CancellationToken cancellationToken) =>
+        await _pipeline.ExecuteAsync(
             async token =>
             {
                 var attempt = await client.SearchAsync<StationSearchDocument>(search, token);
@@ -30,11 +53,13 @@ internal sealed class StationSearchService(
             },
             cancellationToken);
 
-        var hits = response.Hits;
-        var kept = hits.Take(request.Limit).ToArray();
-        var nextCursor = hits.Count > kept.Length ? StationSearchCursor.Encode(request, kept[^1].Sort!) : null;
-        return new StationSearchResponse(kept.Select(hit => ToResult(hit, request.Sort)).ToArray(), nextCursor);
-    }
+    private static (long Total, bool Exact) Total(SearchResponse<StationSearchDocument> response) =>
+        response.HitsMetadata.Total switch
+        {
+            { Value1: { } counted } => (counted.Value, counted.Relation == TotalHitsRelation.Eq),
+            { Value2: { } exact } => (exact, true),
+            _ => (response.Hits.Count, true)
+        };
 
     private static StationSearchResultResponse ToResult(Hit<StationSearchDocument> hit, StationSearchSort sort)
     {
@@ -62,7 +87,7 @@ internal sealed class StationSearchService(
     private static double? DistanceKm(Hit<StationSearchDocument> hit) =>
         hit.Sort?.FirstOrDefault() is { } value && value.TryGetDouble(out var distance) ? distance : null;
 
-    private void ThrowFailed(SearchResponse<StationSearchDocument> response, CancellationToken cancellationToken)
+    private void ThrowFailed(ElasticsearchResponse response, CancellationToken cancellationToken)
     {
         // An abandoned request is not an index outage.
         cancellationToken.ThrowIfCancellationRequested();

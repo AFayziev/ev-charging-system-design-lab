@@ -14,6 +14,7 @@ internal static class StationSearchEndpoints
     public static WebApplication MapStationSearch(this WebApplication app)
     {
         app.MapGet("/search/stations", Search);
+        app.MapGet("/search/stations/options", GetOptions);
         return app;
     }
 
@@ -39,11 +40,27 @@ internal static class StationSearchEndpoints
         }
         catch (SearchUnavailableException)
         {
-            return TypedResults.Problem(
-                statusCode: StatusCodes.Status503ServiceUnavailable,
-                title: "Search unavailable",
-                detail: "Station search is temporarily unavailable.",
-                extensions: new Dictionary<string, object?> { ["code"] = UnavailableCode });
+            return Unavailable();
         }
     }
+
+    private static async Task<Results<Ok<StationSearchOptionsResponse>, ProblemHttpResult>> GetOptions(
+        StationSearchService searcher,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return TypedResults.Ok(await searcher.GetOptionsAsync(cancellationToken));
+        }
+        catch (SearchUnavailableException)
+        {
+            return Unavailable();
+        }
+    }
+
+    private static ProblemHttpResult Unavailable() => TypedResults.Problem(
+        statusCode: StatusCodes.Status503ServiceUnavailable,
+        title: "Search unavailable",
+        detail: "Station search is temporarily unavailable.",
+        extensions: new Dictionary<string, object?> { ["code"] = UnavailableCode });
 }

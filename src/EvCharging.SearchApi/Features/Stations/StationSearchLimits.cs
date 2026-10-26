@@ -12,4 +12,7 @@ internal static class StationSearchLimits
     public const double MinimumRadiusKm = 0.001;
     public const double MaximumRadiusKm = 500;
     public const int MaximumCursorLength = 4096;
+
+    /// <summary>The index counts matches up to this many; beyond it the total is a lower bound.</summary>
+    public const int TrackedTotal = 500;
 }

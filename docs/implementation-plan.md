@@ -516,6 +516,12 @@ replayed evidence neither repeats effects nor makes old evidence fresh.
   observations reach the browser without stale updates overwriting newer
   versions, and bounded fallback during a cache outage.
   Depends on M04.02, M05.01, and M07.01.
+- [ ] M08.03 Cache search read paths in Valkey, read and filled by the search
+  service itself: the filter options, which only change when stations are
+  indexed, and optionally popular search pages. Use expiry first, with the index
+  as bounded fallback during a cache outage and hit/fallback metrics. Verify
+  options are served from the cache across search replicas and that an outage
+  falls back to the index. Depends on M08.02 and M09.01.3.
 
 Acceptance: two API instances deliver updates through the backplane. Reconnecting
 clients recover current snapshots. Cache loss preserves authoritative facts and

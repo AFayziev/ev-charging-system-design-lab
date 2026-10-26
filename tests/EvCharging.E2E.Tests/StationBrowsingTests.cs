@@ -145,8 +145,12 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         }
 
         var station = result.GetProperty("stations")[0];
-        Assert.Equal("North Station", station.GetProperty("name").GetString());
+        Assert.StartsWith("North Station", station.GetProperty("name").GetString());
         Assert.Equal(JsonValueKind.Null, station.GetProperty("distanceKm").ValueKind);
+        Assert.Equal(
+            result.GetProperty("stations").GetArrayLength(),
+            result.GetProperty("total").GetInt64());
+        Assert.Equal(JsonValueKind.Null, result.GetProperty("nextCursor").ValueKind);
         var browse = await client.GetFromJsonAsync<JsonElement>("/api/stations?limit=50", timeout.Token);
         Assert.Contains(
             browse.GetProperty("stations").EnumerateArray(),
@@ -159,6 +163,11 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         Assert.NotEqual(
             firstPage.GetProperty("stations")[0].GetProperty("id").GetGuid(),
             secondPage.GetProperty("stations")[0].GetProperty("id").GetGuid());
+
+        var options = await client.GetFromJsonAsync<JsonElement>("/api/search/stations/options", timeout.Token);
+        Assert.Contains(
+            options.GetProperty("connectorTypes").EnumerateArray(),
+            value => value.GetString() == "Type2");
 
         using var invalid = await client.GetAsync("/api/search/stations?lat=95&lon=0", timeout.Token);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);

@@ -27,12 +27,12 @@ internal static class StationSearchQuery
         Location, ChargerNames, ProviderNames, ConnectorText
     };
     private static readonly Field PublicId = Infer.Field<StationSearchDocument>(document => document.PublicId);
-    private static readonly Field Connectors = Infer.Field<StationSearchDocument>(document => document.Connectors);
-    private static readonly Field ConnectorType = Infer.Field<StationSearchDocument>(
+    internal static readonly Field Connectors = Infer.Field<StationSearchDocument>(document => document.Connectors);
+    internal static readonly Field ConnectorType = Infer.Field<StationSearchDocument>(
         document => document.Connectors[0].ConnectorType);
-    private static readonly Field PowerSupply = Infer.Field<StationSearchDocument>(
+    internal static readonly Field PowerSupply = Infer.Field<StationSearchDocument>(
         document => document.Connectors[0].PowerSupply);
-    private static readonly Field RatedPowerKW = Infer.Field<StationSearchDocument>(
+    internal static readonly Field RatedPowerKW = Infer.Field<StationSearchDocument>(
         document => document.Connectors[0].RatedPowerKW);
 
     /// <summary>Asks for one more station than the page holds, to tell whether another page follows.</summary>
@@ -43,7 +43,7 @@ internal static class StationSearchQuery
             Size = request.Limit + 1,
             Sort = ToSort(request),
             SearchAfter = after.Length > 0 ? after : null,
-            TrackTotalHits = new TrackHits(false),
+            TrackTotalHits = new TrackHits(StationSearchLimits.TrackedTotal),
             Source = new SourceConfig(new SourceFilter { Excludes = NotReturned })
         };
 
@@ -54,11 +54,25 @@ internal static class StationSearchQuery
 
         if (!string.IsNullOrWhiteSpace(request.Q))
         {
-            must.Add(new MultiMatchQuery
+            // Whole words tolerate typos; the last word may still be half typed ("watt" for "WattHarbor").
+            must.Add(new BoolQuery
             {
-                Query = request.Q,
-                Fields = SearchedText,
-                Fuzziness = new Fuzziness("AUTO")
+                Should =
+                [
+                    new MultiMatchQuery
+                    {
+                        Query = request.Q,
+                        Fields = SearchedText,
+                        Fuzziness = new Fuzziness("AUTO")
+                    },
+                    new MultiMatchQuery
+                    {
+                        Query = request.Q,
+                        Fields = SearchedText,
+                        Type = TextQueryType.BoolPrefix
+                    }
+                ],
+                MinimumShouldMatch = 1
             });
         }
 

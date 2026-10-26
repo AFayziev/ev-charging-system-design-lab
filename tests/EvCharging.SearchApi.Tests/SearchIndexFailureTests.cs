@@ -21,6 +21,18 @@ public sealed class SearchIndexFailureTests(SecuredSearchIndexFixture index)
     }
 
     [Fact]
+    public async Task Options_WhenTheIndexIsUnreachable_AnswersTheSameTypedError()
+    {
+        await using var host = await SearchApiHost.StartAsync("http://search_reader:secret@127.0.0.1:1");
+
+        var response = await host.Client.GetAsync("/search/stations/options");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("search-unavailable", problem.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task Search_WhenTheIndexDoesNotExistYet_AnswersTheSameTypedError()
     {
         await index.DeleteStationIndicesAsync();

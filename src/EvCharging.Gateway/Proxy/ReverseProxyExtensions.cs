@@ -47,7 +47,7 @@ internal static class ReverseProxyExtensions
                         methods: [HttpMethods.Get]),
                     CreateRoute(
                         "platform-station-search",
-                        "/search/stations",
+                        "/search/stations/{**remainder}",
                         AnonymousPolicy,
                         methods: [HttpMethods.Get],
                         clusterId: SearchClusterId),
