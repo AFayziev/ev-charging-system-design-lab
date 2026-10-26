@@ -115,14 +115,6 @@ async function fill() {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2029, 0, 2, 10, 0));
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
   get.mockReset();
   post.mockReset();
   get.mockImplementation(async (path: string) => respond(path));

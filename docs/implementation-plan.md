@@ -554,9 +554,11 @@ bounded fallback protects the backing stores.
     type, power supply, minimum power, and optional distance sorting, with an opaque
     cursor and a typed unavailable error. Browsing stays on SQL. Verify filters,
     paging, and the role's denials. Depends on M09.01.2.
-  - [ ] M09.01.4 Frontend discovery: search field and filters on the catalog with
-    URL state, a "Near me" option, no-matches and search-unavailable states with a
-    fallback to the SQL catalog. Verify denied geolocation.
+  - [x] M09.01.4 Frontend discovery: a minimal catalog search row, a debounced text
+    field with a minimum length, a "Near me" toggle (10 km radius), and exact
+    filters behind a filter icon (their choices served from the index), with URL
+    state, no-matches and search-unavailable states with a fallback to the SQL
+    catalog. Verify denied geolocation.
     Depends on M09.01.3.
   - [ ] M09.01.5 Edit visibility: verify through the browser that an operator edit
     appears in search. Depends on M09.01.3.

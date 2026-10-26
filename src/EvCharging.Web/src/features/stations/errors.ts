@@ -1,9 +1,25 @@
 import axios, { HttpStatusCode } from "axios";
 import {
   getHttpFailure,
+  getHttpProblemCode,
   getHttpStatus,
   type HttpFailure,
 } from "@/lib/http-errors";
+
+const searchUnavailableCode = "search-unavailable";
+
+/** The index is down (typed 503) or the search service is (gateway 502 or 504); browsing still works. */
+export function isSearchUnavailable(error: unknown): boolean {
+  switch (getHttpStatus(error)) {
+    case HttpStatusCode.ServiceUnavailable:
+      return getHttpProblemCode(error) === searchUnavailableCode;
+    case HttpStatusCode.BadGateway:
+    case HttpStatusCode.GatewayTimeout:
+      return true;
+    default:
+      return false;
+  }
+}
 
 export interface StationEditFailure extends HttpFailure {
   readonly recovery?: "reload";

@@ -6,6 +6,16 @@ afterEach(cleanup);
 
 Object.defineProperty(document, "fonts", { value: new EventTarget() });
 
+// Mantine measures popovers and selects with a ResizeObserver, which jsdom lacks.
+Object.defineProperty(globalThis, "ResizeObserver", {
+  writable: true,
+  value: class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+});
+
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({

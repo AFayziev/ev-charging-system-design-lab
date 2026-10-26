@@ -41,14 +41,6 @@ it("shows a safe failure and retries the query", async () => {
 });
 
 it("keeps connector selection synchronized with the URL and booking form", async () => {
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
-  );
   const station = {
     id: "station",
     name: "North Station",

@@ -7,14 +7,14 @@ export function PageHeading({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   children?: ReactNode;
 }) {
   return (
     <Stack gap={8}>
       <Title order={1}>{title}</Title>
       {children}
-      <Text c="dimmed">{description}</Text>
+      {description && <Text c="dimmed">{description}</Text>}
     </Stack>
   );
 }
