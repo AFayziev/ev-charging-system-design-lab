@@ -29,6 +29,9 @@ public sealed class StationIndexingTests(ElasticsearchFixture search, PlatformDa
                 new ConnectorSearchDocument("CCS2", "DC", 50m)
             },
             document.Connectors);
+        Assert.Equal(["Charger"], document.ChargerNames);
+        Assert.StartsWith("Provider ", Assert.Single(document.ProviderNames));
+        Assert.Equal("Type2 AC CCS2 DC", document.ConnectorText);
     }
 
     [Fact]

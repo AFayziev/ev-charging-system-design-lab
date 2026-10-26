@@ -10,4 +10,6 @@ internal sealed record StationSearchSource(
     decimal Latitude,
     decimal Longitude,
     int ChargerCount,
-    List<ConnectorSearchDocument> Connectors);
+    List<ConnectorSearchDocument> Connectors,
+    List<string> ChargerNames,
+    List<string?> ProviderNames);

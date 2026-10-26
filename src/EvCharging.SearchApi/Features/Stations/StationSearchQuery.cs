@@ -14,7 +14,18 @@ internal static class StationSearchQuery
     private static readonly Field NameKeyword = Infer.Field<StationSearchDocument, object>(
         NameExpression.AppendSuffix("keyword"));
     private static readonly Field Address = Infer.Field<StationSearchDocument>(document => document.Address);
+    private static readonly Field ChargerNames = Infer.Field<StationSearchDocument>(document => document.ChargerNames);
+    private static readonly Field ProviderNames = Infer.Field<StationSearchDocument>(
+        document => document.ProviderNames);
+    private static readonly Field ConnectorText = Infer.Field<StationSearchDocument>(
+        document => document.ConnectorText);
+    private static readonly Field[] SearchedText =
+        [Name, Address, ChargerNames, ProviderNames, ConnectorText];
     private static readonly Field Location = Infer.Field<StationSearchDocument>(document => document.Location);
+    private static readonly Fields NotReturned = new Field[]
+    {
+        Location, ChargerNames, ProviderNames, ConnectorText
+    };
     private static readonly Field PublicId = Infer.Field<StationSearchDocument>(document => document.PublicId);
     private static readonly Field Connectors = Infer.Field<StationSearchDocument>(document => document.Connectors);
     private static readonly Field ConnectorType = Infer.Field<StationSearchDocument>(
@@ -33,7 +44,7 @@ internal static class StationSearchQuery
             Sort = ToSort(request),
             SearchAfter = after.Length > 0 ? after : null,
             TrackTotalHits = new TrackHits(false),
-            Source = new SourceConfig(new SourceFilter { Excludes = Location })
+            Source = new SourceConfig(new SourceFilter { Excludes = NotReturned })
         };
 
     private static Query ToQuery(SearchStationsRequest request)
@@ -46,7 +57,7 @@ internal static class StationSearchQuery
             must.Add(new MultiMatchQuery
             {
                 Query = request.Q,
-                Fields = new[] { Name, Address },
+                Fields = SearchedText,
                 Fuzziness = new Fuzziness("AUTO")
             });
         }

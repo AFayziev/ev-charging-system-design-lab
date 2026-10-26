@@ -25,7 +25,10 @@ public static class StationSearchIndex
         { document => document.Location, new GeoPointProperty() },
         { document => document.ChargerCount, new IntegerNumberProperty() },
         { document => document.ConnectorCount, new IntegerNumberProperty() },
-        { document => document.Connectors, new NestedProperty { Properties = ConnectorProperties() } }
+        { document => document.Connectors, new NestedProperty { Properties = ConnectorProperties() } },
+        { document => document.ChargerNames, new TextProperty() },
+        { document => document.ProviderNames, new TextProperty() },
+        { document => document.ConnectorText, new TextProperty() }
     };
 
     private static Properties<ConnectorSearchDocument> ConnectorProperties() => new()

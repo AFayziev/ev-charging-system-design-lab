@@ -19,6 +19,20 @@ internal static class StationSeed
             AccessInstructions = "Test"
         };
         var charger = new Charger { Station = station, Name = "Charger" };
+        var provider = new ChargingProvider { Name = $"Provider {Guid.NewGuid():N}" };
+        var providerStation = new ProviderStation
+        {
+            ChargingProvider = provider,
+            Station = station,
+            ExternalId = Guid.NewGuid().ToString("N")
+        };
+        database.ProviderChargers.Add(
+            new ProviderCharger
+            {
+                ProviderStation = providerStation,
+                Charger = charger,
+                ExternalId = Guid.NewGuid().ToString("N")
+            });
         database.Connectors.AddRange(
             new Connector
             {

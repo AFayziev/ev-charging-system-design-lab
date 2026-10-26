@@ -4,6 +4,7 @@ internal static class StationSearchLimits
 {
     public const int DefaultPageSize = 20;
     public const int MaximumPageSize = 50;
+    public const int MinimumTextLength = 2;
     public const int MaximumTextLength = 100;
     public const int MaximumFilterValues = 10;
     public const int MaximumFilterValueLength = 50;

@@ -31,6 +31,11 @@ internal static class StationSearchProjection
                     .OrderBy(connector => connector.Id)
                     .Select(connector => new ConnectorSearchDocument(
                         connector.ConnectorType, connector.PowerSupply, connector.RatedPowerKW))
+                    .ToList(),
+                station.Chargers.OrderBy(charger => charger.Id).Select(charger => charger.Name).ToList(),
+                station.Chargers
+                    .OrderBy(charger => charger.Id)
+                    .Select(charger => (string?)charger.ProviderCharger!.ProviderStation!.ChargingProvider!.Name)
                     .ToList()));
 
     public static StationSearchDocument ToDocument(StationSearchSource station) => new(
@@ -44,5 +49,11 @@ internal static class StationSearchProjection
         }),
         station.ChargerCount,
         station.Connectors.Count,
-        station.Connectors);
+        station.Connectors,
+        station.ChargerNames,
+        station.ProviderNames.OfType<string>().Distinct().ToList(),
+        string.Join(
+            ' ',
+            station.Connectors.SelectMany(connector => new[] { connector.ConnectorType, connector.PowerSupply })
+                .Distinct()));
 }

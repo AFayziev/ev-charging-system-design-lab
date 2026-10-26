@@ -27,6 +27,12 @@ public sealed record SearchStationsRequest(
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        if (Q?.Trim() is { Length: > 0 and < StationSearchLimits.MinimumTextLength })
+        {
+            yield return new ValidationResult(
+                $"Text must be at least {StationSearchLimits.MinimumTextLength} characters.", [nameof(Q)]);
+        }
+
         if ((Lat is null) != (Lon is null))
         {
             yield return new ValidationResult(

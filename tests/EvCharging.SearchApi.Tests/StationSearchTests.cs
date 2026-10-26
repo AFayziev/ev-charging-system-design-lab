@@ -24,13 +24,21 @@ public sealed class StationSearchTests(SecuredSearchIndexFixture index) : IAsync
         "Canary Wharf Rapid", "5 Docklands Quay", 51.505, -0.02, Connector("CCS2", "DC", 150));
 
     private readonly StationSearchDocument _heathrow = Station(
-        "Heathrow Park", "Terminal Road", 51.47, -0.45, Connector("Type2", "AC", 7));
+        "Heathrow Park",
+        "Terminal Road",
+        51.47,
+        -0.45,
+        ["Gate One"],
+        ["Street Volta"],
+        Connector("Type2", "AC", 7));
 
     private readonly StationSearchDocument _oxfordStreet = Station(
         "Oxford Street Charge",
         "9 Shopping Mile",
         51.515,
         -0.14,
+        ["Bay Alpha"],
+        ["WattHarbor"],
         Connector("Type2", "AC", 7),
         Connector("CCS2", "DC", 150));
 
@@ -98,6 +106,44 @@ public sealed class StationSearchTests(SecuredSearchIndexFixture index) : IAsync
         var response = await SearchAsync($"q={text}");
 
         Assert.Equal(expectedName, response.Stations.First().Name);
+    }
+
+    [Theory]
+    [InlineData("bay alpha", "Oxford Street Charge")]
+    [InlineData("gate one", "Heathrow Park")]
+    [InlineData("wattharbor", "Oxford Street Charge")]
+    [InlineData("volta", "Heathrow Park")]
+    [InlineData("chademo", null)]
+    public async Task Search_Text_MatchesChargerAndProviderNamesOnly(string text, string? expectedName)
+    {
+        var response = await SearchAsync($"q={Uri.EscapeDataString(text)}");
+
+        Assert.Equal(
+            expectedName is null ? [] : [expectedName],
+            response.Stations.Select(station => station.Name));
+    }
+
+    [Theory]
+    [InlineData("ccs2", "Canary Wharf Rapid|Oxford Street Charge|Riverside Hub")]
+    [InlineData("ac", "Heathrow Park|Oxford Street Charge|Riverside Hub")]
+    [InlineData("dc", "Canary Wharf Rapid|Oxford Street Charge|Riverside Hub")]
+    public async Task Search_Text_MatchesConnectorTypeAndSupply(string text, string expectedNames)
+    {
+        var response = await SearchAsync($"q={text}");
+
+        Assert.Equal(
+            expectedNames.Split('|').Order(),
+            response.Stations.Select(station => station.Name).Order());
+    }
+
+    [Fact]
+    public async Task Search_Text_RanksNameAboveProviderName()
+    {
+        var response = await SearchAsync("q=street");
+
+        Assert.Equal(
+            [_oxfordStreet.PublicId, _heathrow.PublicId],
+            response.Stations.Select(station => station.Id));
     }
 
     [Theory]
@@ -179,6 +225,8 @@ public sealed class StationSearchTests(SecuredSearchIndexFixture index) : IAsync
     [InlineData("lat=51.5&lon=0&radiusKm=0.0001", "RadiusKm")]
     [InlineData("minPowerKw=-1", "MinPowerKw")]
     [InlineData("limit=0", "Limit")]
+    [InlineData("q=a", "Q")]
+    [InlineData("q=%20a%20", "Q")]
     [InlineData("cursor=not-a-cursor", "Cursor")]
     [InlineData("connectorType=%20", "ConnectorType")]
     public async Task Search_InvalidParameters_AreRejectedByName(string query, string property)
