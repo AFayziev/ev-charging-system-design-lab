@@ -163,7 +163,7 @@ operation.
 | Accepted normalized observation envelopes | Durable stream | Independent consumer groups |
 | Observation history, latest observations | Document database projections | Cache and diagnostic queries |
 | Hot query results | Cache | Reconstructable from owning stores |
-| Station text, location, capabilities, advisory availability | Search index | Rebuildable discovery index |
+| Station text, location, capabilities | Search index | Rebuildable discovery index |
 | Originals, media variants, summaries | Object storage | CDN or private signed transfers |
 
 The relational database owns platform decisions; the charging provider owns
@@ -235,6 +235,11 @@ immediate confirmation.
 Search is served by its own query service behind the gateway. Search failure, whether
 the index or the service, makes discovery visibly unavailable without affecting
 browsing, commands for known equipment, or the gateway's start. Cache bypass uses bounded fallback and gradual warm-up.
+
+The index holds no live availability. Discovery's advisory availability is read
+from primary-side booking state, separately from search results, and is never
+derived from provider observations, whose freshness serves the driver's own
+session and operators. Booking eligibility is always checked on the primary.
 
 ## 6. Relational topology and pooling
 

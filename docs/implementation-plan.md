@@ -48,7 +48,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M06 | Charging start/stop and operator investigation | M05.02; cancellation races require M05.03 | In progress |
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | In progress |
 | M08 | Live updates and cached views | M07.01 | Planned |
-| M09 | Search and station discovery | M04.01, M05.01; availability requires M07.01 | Planned |
+| M09 | Search and station discovery | M04.01, M05.01; availability requires M06.01 | Planned |
 | M10 | Station media and session summaries | M04.02, M05.01; summaries require M07.02 | Planned |
 | M11 | Hosted R2 and Cloudflare CDN | M10.01 | Planned |
 | M12 | Managed PostgreSQL pooling, replication, and failover | M04; charging failover requires M08 | Planned |
@@ -560,15 +560,19 @@ bounded fallback protects the backing stores.
     state, no-matches and search-unavailable states with a fallback to the SQL
     catalog. Verify denied geolocation.
     Depends on M09.01.3.
-  - [ ] M09.01.5 Edit visibility: verify through the browser that an operator edit
+  - [x] M09.01.5 Edit visibility: verify through the browser that an operator edit
     appears in search. Depends on M09.01.3.
-- [ ] M09.02 Enrich discovery with observation-driven advisory availability and
-  freshness labels. Verify search results cannot bypass primary-side booking
-  eligibility. Depends on M07.01 and M09.01.
+- [ ] M09.02 Show advisory connector availability in discovery, derived from
+  primary-side booking state (sessions and reservations) at request time and read
+  separately from search results, never from provider observations or the index.
+  Station level shows how many connectors are available. Verify search results
+  and availability hints cannot bypass primary-side booking eligibility, and that
+  a failure of either side leaves the other working.
+  Depends on M05.01, M06.01 and M09.01.
 
-Acceptance: drivers discover equipment through an independent index with visible
-freshness limits. Search failure is visible and preserves unrelated commands for
-known equipment.
+Acceptance: drivers discover equipment through an independent index. Availability
+hints are advisory and booking still enforces eligibility. Search failure is
+visible and preserves unrelated commands for known equipment.
 
 ### M10 — Station media and session summaries
 
