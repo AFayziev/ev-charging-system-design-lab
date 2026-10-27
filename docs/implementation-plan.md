@@ -48,7 +48,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M06 | Charging start/stop and operator investigation | M05.02; cancellation races require M05.03 | In progress |
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | In progress |
 | M08 | Live updates and cached views | M07.01 | Planned |
-| M09 | Search and station discovery | M04.01, M05.01; availability requires M06.01 | In progress |
+| M09 | Search and station discovery | M04.01, M05.01; availability requires M06.01 | Done |
 | M10 | Station media and session summaries | M04.02, M05.01; summaries require M07.02 | Planned |
 | M11 | Hosted R2 and Cloudflare CDN | M10.01 | Planned |
 | M12 | Managed PostgreSQL pooling, replication, and failover | M04; charging failover requires M08 | Planned |
@@ -529,7 +529,7 @@ bounded fallback protects the backing stores.
 
 ### M09 — Search and station discovery
 
-- [ ] M09.01 Deliver driver text, distance, and capability search/filtering.
+- [x] M09.01 Deliver driver text, distance, and capability search/filtering.
   Introduce Elasticsearch mappings, initial indexing, and version-aware catalog
   event consumers in the search index worker alongside API queries and frontend
   controls. Connect transactional catalog-change events and independent subscriptions
