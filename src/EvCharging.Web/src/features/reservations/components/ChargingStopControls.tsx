@@ -2,6 +2,7 @@ import { StatusAlert } from "@/components/StatusAlert";
 import { Button, Stack } from "@mantine/core";
 import { IconBolt, IconPlayerStop } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateStationAvailability } from "@/features/stations/api";
 import { useState } from "react";
 import { Link } from "react-router";
 import { getHttpFailure } from "@/lib/http-errors";
@@ -51,6 +52,7 @@ export function ChargingStopControls({
     onSuccess: (saved) => {
       submission.succeeded();
       setOpened(false);
+      void invalidateStationAvailability(client);
       updateOperation(saved);
       void onRefresh();
     },

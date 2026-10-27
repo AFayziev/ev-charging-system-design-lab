@@ -1,5 +1,6 @@
 import {
   Anchor,
+  Badge,
   Button,
   Card,
   Loader,
@@ -32,7 +33,7 @@ import { getSignInUrl } from "@/features/auth/api";
 import { useUserSession } from "@/features/auth/useUserSession";
 import { PlatformRole } from "@/features/auth/PlatformRole";
 import { BookingForm } from "@/features/reservations/components/BookingForm";
-import { stationDetailQuery } from "../api";
+import { stationAvailabilityQuery, stationDetailQuery } from "../api";
 import { StationPhoto } from "./StationPhoto";
 import {
   capabilityLabel,
@@ -44,6 +45,17 @@ import classes from "./Stations.module.css";
 export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
   const { stationId = "" } = useParams();
   const query = useQuery(stationDetailQuery(stationId));
+  // Advisory and read alongside the station: a failed read shows no availability, nothing more.
+  const availabilityQuery = useQuery(
+    stationAvailabilityQuery(stationId ? [stationId] : []),
+  );
+  const availability = availabilityQuery.data?.get(stationId);
+  const availableConnectors = new Map(
+    availability?.connectors.map((connector) => [
+      connector.id,
+      connector.available,
+    ]),
+  );
   const session = useUserSession();
   const location = useLocation();
   const [search, setSearch] = useSearchParams();
@@ -132,6 +144,11 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
                 <Title order={2} size="h3">
                   Charging equipment
                 </Title>
+                {availability && (
+                  <Text size="xs" c="dimmed">
+                    Availability is advisory; booking confirms it.
+                  </Text>
+                )}
                 {query.data.chargers.length === 0 && (
                   <Text c="dimmed">No charging equipment listed.</Text>
                 )}
@@ -163,27 +180,38 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
                       </Text>
                     )}
                     <div className={classes.connectors}>
-                      {charger.connectors.map((connector) => (
-                        <Radio.Card
-                          key={connector.id}
-                          className={classes.connector}
-                          value={connector.id}
-                          withBorder={false}
-                          aria-label={`${charger.name} · Connector ${connector.number} · ${capabilityLabel(connector)}`}
-                        >
-                          <ThemeIcon variant="light" size={36} radius="xl">
-                            <IconPlug size={21} aria-hidden="true" />
-                          </ThemeIcon>
-                          <Stack gap={2} className={classes.connectorBody}>
-                            <Text size="sm" fw={600}>
-                              Connector {connector.number}
-                            </Text>
-                            <Text size="sm" c="dimmed">
-                              {capabilityLabel(connector)}
-                            </Text>
-                          </Stack>
-                        </Radio.Card>
-                      ))}
+                      {charger.connectors.map((connector) => {
+                        const available = availableConnectors.get(connector.id);
+                        return (
+                          <Radio.Card
+                            key={connector.id}
+                            className={classes.connector}
+                            value={connector.id}
+                            withBorder={false}
+                            aria-label={`${charger.name} · Connector ${connector.number} · ${capabilityLabel(connector)}`}
+                          >
+                            <ThemeIcon variant="light" size={36} radius="xl">
+                              <IconPlug size={21} aria-hidden="true" />
+                            </ThemeIcon>
+                            <Stack gap={2} className={classes.connectorBody}>
+                              <Text size="sm" fw={600}>
+                                Connector {connector.number}
+                              </Text>
+                              <Text size="sm" c="dimmed">
+                                {capabilityLabel(connector)}
+                              </Text>
+                            </Stack>
+                            {available !== undefined && (
+                              <Badge
+                                variant="light"
+                                color={available ? "green" : "gray"}
+                              >
+                                {available ? "Available" : "Unavailable"}
+                              </Badge>
+                            )}
+                          </Radio.Card>
+                        );
+                      })}
                     </div>
                   </Card>
                 ))}

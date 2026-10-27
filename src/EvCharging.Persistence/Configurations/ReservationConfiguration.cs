@@ -42,6 +42,8 @@ internal sealed class ReservationConfiguration : IEntityTypeConfiguration<Reserv
             .HasForeignKey(reservation => reservation.DriverId)
             .OnDelete(DeleteBehavior.Restrict);
         entity.HasIndex(reservation => new { reservation.ConnectorId, reservation.StartsAt });
+        entity.HasIndex(reservation => new { reservation.ConnectorId, reservation.EndsAt })
+            .HasFilter("state IN ('active', 'consumed')");
         entity.HasIndex(reservation => new { reservation.DriverId, reservation.State, reservation.ArrivalDeadline });
         entity.HasIndex(reservation => new { reservation.ArrivalDeadline, reservation.Id })
             .HasFilter("state = 'active'");

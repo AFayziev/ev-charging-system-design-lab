@@ -41,6 +41,7 @@ public sealed class ReservationBookingTests(PlatformDatabaseFixture fixture) : I
     [InlineData(SessionLifecycle.Failed, false)]
     public async Task Start_ConnectorClaim_IsHeldOnlyWhileTheSessionIsOpen(SessionLifecycle lifecycle, bool held)
     {
+        Assert.Equal(held, ChargingSession.ConnectorHoldingLifecycles.Contains(lifecycle));
         await using var connection = fixture.CreateConnection("platform_writer");
         await using var database = Context(connection);
         var (connector, firstDriver) = await EquipmentAsync(database);

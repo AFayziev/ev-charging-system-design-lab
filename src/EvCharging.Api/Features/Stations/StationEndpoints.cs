@@ -12,6 +12,7 @@ internal static class StationEndpoints
     {
         var stations = app.MapGroup("/stations");
         stations.MapGet("/", List).AllowAnonymous();
+        stations.MapGet("/availability", Availability).AllowAnonymous();
         stations.MapGet("/{id:guid}", Detail).AllowAnonymous();
         stations.MapGet("/assigned", Assigned).RequireAuthorization(PlatformRole.Operator.ToClaimValue());
         stations.MapGet("/{id:guid}/edit", Editor).RequireAuthorization(PlatformRole.Operator.ToClaimValue());
@@ -74,6 +75,19 @@ internal static class StationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await bus.InvokeAsync<Result<StationListResponse>>(request, cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
+
+    private static async Task<Results<Ok<StationAvailabilityListResponse>, ValidationProblem>> Availability(
+        [AsParameters] GetStationAvailabilityRequest request,
+        IMessageBus bus,
+        CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<StationAvailabilityListResponse>>(request, cancellationToken);
         return result switch
         {
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),

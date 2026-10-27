@@ -1,5 +1,6 @@
 import { Button, Group, Loader, Modal, Stack, Text } from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateStationAvailability } from "@/features/stations/api";
 import { useUserSession } from "@/features/auth/useUserSession";
 import {
   cancelReservation,
@@ -39,6 +40,7 @@ export function ReservationCancellationDialog({
       void client.invalidateQueries({
         queryKey: reservationKeys.bookingPolicy,
       });
+      void invalidateStationAvailability(client);
       onCancelled(saved);
       onClose();
     },

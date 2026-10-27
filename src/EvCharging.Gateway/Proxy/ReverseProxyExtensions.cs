@@ -41,6 +41,11 @@ internal static class ReverseProxyExtensions
                         AnonymousPolicy,
                         methods: [HttpMethods.Get]),
                     CreateRoute(
+                        "platform-station-availability",
+                        "/stations/availability",
+                        AnonymousPolicy,
+                        methods: [HttpMethods.Get]),
+                    CreateRoute(
                         "platform-station-detail",
                         "/stations/{id:guid}",
                         AnonymousPolicy,

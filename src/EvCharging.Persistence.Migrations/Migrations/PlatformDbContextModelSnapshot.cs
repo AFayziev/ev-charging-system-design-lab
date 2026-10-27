@@ -567,6 +567,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasDatabaseName("ix_reservations_arrival_deadline_id")
                         .HasFilter("state = 'active'");
 
+                    b.HasIndex("ConnectorId", "EndsAt")
+                        .HasDatabaseName("ix_reservations_connector_id_ends_at")
+                        .HasFilter("state IN ('active', 'consumed')");
+
                     b.HasIndex("ConnectorId", "StartsAt")
                         .HasDatabaseName("ix_reservations_connector_id_starts_at");
 

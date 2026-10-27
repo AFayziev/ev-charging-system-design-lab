@@ -3,6 +3,7 @@ import { formatClock } from "@/lib/time-formatting";
 import { Button, Stack } from "@mantine/core";
 import { IconBolt } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateStationAvailability } from "@/features/stations/api";
 import { useState } from "react";
 import { useUserSession } from "@/features/auth/useUserSession";
 import { getHttpFailure, getHttpProblemCode } from "@/lib/http-errors";
@@ -83,6 +84,7 @@ export function ChargingStartControls({
     onSuccess: (operation) => {
       submission.succeeded();
       setOpened(false);
+      void invalidateStationAvailability(client);
       updateOperation(operation);
       void onRefresh();
     },

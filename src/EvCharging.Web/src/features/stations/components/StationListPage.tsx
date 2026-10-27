@@ -19,8 +19,10 @@ import { useSearchParams } from "react-router";
 import { PageHeading } from "@/components/PageHeading";
 import { useCurrentPosition } from "@/lib/geolocation";
 import {
+  stationAvailabilityQuery,
   stationListQuery,
   stationSearchQuery,
+  type StationAvailability,
   type StationList,
   type StationSearchResult,
 } from "../api";
@@ -106,6 +108,15 @@ export function StationListPage() {
   });
   const showingSearch = searching && !searchDown;
 
+  // Availability is read for the stations on screen, apart from the search or browse that listed them.
+  // It is advisory, so a failed read shows no counts rather than an error.
+  const listed = showingSearch
+    ? searchQuery.data?.stations
+    : browseQuery.data?.stations;
+  const availabilityQuery = useQuery(
+    stationAvailabilityQuery(listed?.map((station) => station.id) ?? []),
+  );
+
   return (
     <Stack gap="lg">
       <PageHeading title="Find a station" />
@@ -134,6 +145,7 @@ export function StationListPage() {
       )}
       {showingSearch ? (
         <SearchResults
+          availability={availabilityQuery.data}
           locating={locating}
           query={searchQuery}
           sort={
@@ -151,6 +163,7 @@ export function StationListPage() {
         />
       ) : (
         <BrowseResults
+          availability={availabilityQuery.data}
           query={browseQuery}
           afterId={afterId}
           onPage={(after) =>
@@ -169,6 +182,7 @@ export function StationListPage() {
 }
 
 function SearchResults({
+  availability,
   locating,
   query,
   sort,
@@ -178,6 +192,7 @@ function SearchResults({
   onNextPage,
   onClear,
 }: {
+  availability: ReadonlyMap<string, StationAvailability> | undefined;
   locating: boolean;
   query: UseQueryResult<StationSearchResult>;
   sort: "distance" | "relevance" | "name";
@@ -221,7 +236,11 @@ function SearchResults({
       />
       <StationGrid>
         {stations.map((station) => (
-          <StationCard key={station.id} station={station} />
+          <StationCard
+            key={station.id}
+            station={station}
+            availability={availability?.get(station.id)}
+          />
         ))}
       </StationGrid>
       <Pager
@@ -237,10 +256,12 @@ function SearchResults({
 }
 
 function BrowseResults({
+  availability,
   query,
   afterId,
   onPage,
 }: {
+  availability: ReadonlyMap<string, StationAvailability> | undefined;
   query: UseQueryResult<StationList>;
   afterId: string | null;
   onPage: (afterId: string | null) => void;
@@ -267,7 +288,11 @@ function BrowseResults({
       ) : (
         <StationGrid>
           {stations.map((station) => (
-            <StationCard key={station.id} station={station} />
+            <StationCard
+              key={station.id}
+              station={station}
+              availability={availability?.get(station.id)}
+            />
           ))}
         </StationGrid>
       )}

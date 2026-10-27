@@ -10,6 +10,12 @@ public sealed class ChargingSession : IAuditableEntity
     {
     }
 
+    /// <summary>
+    /// The lifecycles in which a session claims its connector.
+    /// </summary>
+    public static IReadOnlyList<SessionLifecycle> ConnectorHoldingLifecycles { get; } =
+        [SessionLifecycle.Starting, SessionLifecycle.Active, SessionLifecycle.Stopping];
+
     public Guid Id { get; private set; }
     public Guid PublicId { get; private set; }
     public Guid ReservationId { get; private set; }

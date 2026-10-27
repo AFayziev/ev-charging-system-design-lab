@@ -1,4 +1,8 @@
-import { keepPreviousData, queryOptions } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  queryOptions,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
 export interface ConnectorCapability {
@@ -71,6 +75,21 @@ export interface StationDetail {
   }[];
 }
 
+export interface ConnectorAvailability {
+  readonly id: string;
+  readonly available: boolean;
+}
+
+/** Advisory: what a connector looks like now, never a promise that a booking or start will be accepted. */
+export interface StationAvailability {
+  readonly id: string;
+  readonly connectors: readonly ConnectorAvailability[];
+}
+
+export interface StationAvailabilityList {
+  readonly stations: readonly StationAvailability[];
+}
+
 export const stationKeys = {
   lists: ["stations", "list"] as const,
   list: (afterId: string | null) => ["stations", "list", afterId] as const,
@@ -78,6 +97,9 @@ export const stationKeys = {
   search: (request: StationSearchRequest) =>
     ["stations", "list", "search", request] as const,
   detail: (id: string) => ["stations", "detail", id] as const,
+  availabilityLists: ["stations", "availability"] as const,
+  availability: (ids: readonly string[]) =>
+    ["stations", "availability", ids] as const,
   editor: (id: string) => ["stations", "editor", id] as const,
   assignedLists: ["stations", "assigned"] as const,
   assigned: (afterId: string | null) =>
@@ -196,6 +218,17 @@ export async function getStation(
   return response.data;
 }
 
+export async function getStationAvailability(
+  ids: readonly string[],
+  signal?: AbortSignal,
+): Promise<StationAvailabilityList> {
+  const response = await api.get<StationAvailabilityList>(
+    "/api/stations/availability",
+    { params: { ids }, signal },
+  );
+  return response.data;
+}
+
 export const stationListQuery = (afterId: string | null) =>
   queryOptions({
     queryKey: stationKeys.list(afterId),
@@ -227,3 +260,25 @@ export const stationDetailQuery = (id: string) =>
     queryFn: ({ signal }) => getStation(id, signal),
     retry: false,
   });
+
+const byStationId = (data: StationAvailabilityList) =>
+  new Map(data.stations.map((station) => [station.id, station]));
+
+export const stationAvailabilityQuery = (ids: readonly string[]) => {
+  // The order of the ids does not change the answer, so it does not change the cache entry.
+  const sorted = [...ids].sort();
+  return queryOptions({
+    queryKey: stationKeys.availability(sorted),
+    queryFn: ({ signal }) => getStationAvailability(sorted, signal),
+    select: byStationId,
+    // The counts stay on the cards, not blanked, while the next page's are read.
+    placeholderData: keepPreviousData,
+    enabled: sorted.length > 0,
+    staleTime: 30_000,
+    retry: false,
+  });
+};
+
+/** A booking or session change moves what the availability counts say. */
+export const invalidateStationAvailability = (client: QueryClient) =>
+  client.invalidateQueries({ queryKey: stationKeys.availabilityLists });

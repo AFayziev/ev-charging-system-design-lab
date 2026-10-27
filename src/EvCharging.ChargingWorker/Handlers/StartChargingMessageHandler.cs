@@ -120,10 +120,8 @@ public sealed class StartChargingMessageHandler(
 
         providers.ValidateIntegration(integrationKey);
 
-        bool ownsClaim = !await database.Sessions.AnyAsync(
-            value => value.ConnectorId == session.ConnectorId && value.Id != session.Id
-                && (value.Lifecycle == SessionLifecycle.Starting || value.Lifecycle == SessionLifecycle.Active
-                    || value.Lifecycle == SessionLifecycle.Stopping),
+        bool ownsClaim = !await database.Sessions.Nonterminal().AnyAsync(
+            value => value.ConnectorId == session.ConnectorId && value.Id != session.Id,
             cancellationToken);
         if (!ownsClaim)
         {

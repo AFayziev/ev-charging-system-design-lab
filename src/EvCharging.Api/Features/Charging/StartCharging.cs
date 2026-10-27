@@ -76,11 +76,7 @@ public sealed class StartChargingCommandHandler(
     }
 
     private Task<bool> HasConnectorClaimAsync(Guid connectorId, CancellationToken cancellationToken) =>
-        database.Sessions.AnyAsync(
-            value => value.ConnectorId == connectorId
-                && (value.Lifecycle == SessionLifecycle.Starting || value.Lifecycle == SessionLifecycle.Active
-                    || value.Lifecycle == SessionLifecycle.Stopping),
-            cancellationToken);
+        database.Sessions.Nonterminal().AnyAsync(value => value.ConnectorId == connectorId, cancellationToken);
 
     private async Task<Result<StartOperationResponse>> SaveIntentAsync(
         Operation operation, CancellationToken cancellationToken)

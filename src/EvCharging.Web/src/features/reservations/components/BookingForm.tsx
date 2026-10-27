@@ -19,7 +19,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { useUserSession } from "@/features/auth/useUserSession";
 import { PlatformRole } from "@/features/auth/PlatformRole";
-import type { StationDetail } from "@/features/stations/api";
+import {
+  invalidateStationAvailability,
+  type StationDetail,
+} from "@/features/stations/api";
 import { connectorTypeLabel } from "@/features/stations/components/StationPresentation";
 import { getFormValidationErrors, getHttpFailure } from "@/lib/http-errors";
 import {
@@ -187,6 +190,7 @@ function ConfiguredBookingForm({
     retry: false,
     onSuccess: (saved) => {
       void client.invalidateQueries({ queryKey: reservationKeys.lists });
+      void invalidateStationAvailability(client);
       void navigate("/reservations", {
         state: {
           createdReservation: saved,

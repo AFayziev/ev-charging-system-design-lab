@@ -5,18 +5,24 @@ import {
   IconPlug,
 } from "@tabler/icons-react";
 import { Link } from "react-router";
-import type { StationSummary } from "../api";
+import type { StationAvailability, StationSummary } from "../api";
 import { StationPhoto } from "./StationPhoto";
 import { capabilityLabel } from "./StationPresentation";
 import classes from "./Stations.module.css";
 
 export function StationCard({
   station,
+  availability,
 }: {
   /** The distance is present when the results were ordered by distance from the driver. */
   station: StationSummary & { readonly distanceKm?: number | null };
+  /** Advisory; absent while loading or when it could not be read. */
+  availability?: StationAvailability;
 }) {
   const distanceKm = station.distanceKm ?? null;
+  const availableCount = availability?.connectors.filter(
+    (connector) => connector.available,
+  ).length;
   const maximumPower =
     station.capabilities.length > 0
       ? Math.max(
@@ -63,6 +69,15 @@ export function StationCard({
               {station.connectorCount === 1 ? "connector" : "connectors"}
             </Text>
           </div>
+          {availability && availableCount !== undefined && (
+            <Badge
+              variant="light"
+              color={availableCount > 0 ? "green" : "gray"}
+              style={{ alignSelf: "flex-start" }}
+            >
+              {availableCount} of {availability.connectors.length} available
+            </Badge>
+          )}
         </Stack>
         <Button
           component={Link}

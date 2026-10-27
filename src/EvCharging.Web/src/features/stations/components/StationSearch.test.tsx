@@ -1,9 +1,11 @@
 import { TestProviders, createTestQueryClient } from "@/test/providers";
+import type { QueryClient } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AxiosError, HttpStatusCode } from "axios";
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { stationKeys } from "../api";
 import { StationListPage } from "./StationListPage";
 
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
@@ -46,12 +48,52 @@ function lastSearchParams() {
   return searchCalls().at(-1)?.[1]?.params;
 }
 
+const availabilityPath = "/api/stations/availability";
+
+// Each station asked about has one connector per flag, available or not.
+const okAvailability = (
+  ids: readonly string[],
+  connectorFlags: readonly boolean[] = [true],
+) => ({
+  data: {
+    stations: ids.map((id) => ({
+      id,
+      connectors: connectorFlags.map((available, index) => ({
+        id: `${id}-connector-${index}`,
+        available,
+      })),
+    })),
+  },
+});
+
+// Resolves once an availability read has failed, so what is asserted next is what stays after the failure.
+async function availabilityFailed(client: QueryClient) {
+  await waitFor(() =>
+    expect(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: stationKeys.availabilityLists })
+        .some((read) => read.state.status === "error"),
+    ).toBe(true),
+  );
+}
+
+function availabilityCalls() {
+  return get.mock.calls.filter(([path]) => path === availabilityPath);
+}
+
 function respond(handlers: Partial<Record<string, () => unknown>>) {
-  get.mockImplementation(async (path: string) => {
-    const handler = handlers[path];
-    if (!handler) throw new Error(`Unexpected request ${path}`);
-    return handler();
-  });
+  get.mockImplementation(
+    async (path: string, config?: { params?: { ids?: string[] } }) => {
+      const handler =
+        handlers[path] ??
+        (path === availabilityPath
+          ? () => okAvailability(config?.params?.ids ?? [])
+          : undefined);
+      if (!handler) throw new Error(`Unexpected request ${path}`);
+      return handler();
+    },
+  );
 }
 
 const okBrowse = () => ({
@@ -76,13 +118,15 @@ const okSearch =
   });
 
 function renderCatalog(path = "/stations") {
-  return render(
-    <TestProviders client={createTestQueryClient()} env="test">
+  const client = createTestQueryClient();
+  render(
+    <TestProviders client={client} env="test">
       <MemoryRouter initialEntries={[path]}>
         <StationListPage />
       </MemoryRouter>
     </TestProviders>,
   );
+  return client;
 }
 
 function stubGeolocation(
@@ -275,26 +319,30 @@ it("shows a notice instead of filters when the options are unavailable", async (
 });
 
 it("continues a search with its cursor alone", async () => {
-  get.mockImplementation(async (path: string, config?: { params?: object }) => {
-    if (path === "/api/stations") return okBrowse();
-    return config?.params && "cursor" in config.params
-      ? {
-          data: {
-            stations: [station("Second Page")],
-            nextCursor: null,
-            total: 2,
-            totalIsExact: true,
-          },
-        }
-      : {
-          data: {
-            stations: [station("First Page Station")],
-            nextCursor: "opaque-cursor",
-            total: 2,
-            totalIsExact: true,
-          },
-        };
-  });
+  get.mockImplementation(
+    async (path: string, config?: { params?: object & { ids?: string[] } }) => {
+      if (path === availabilityPath)
+        return okAvailability(config?.params?.ids ?? []);
+      if (path === "/api/stations") return okBrowse();
+      return config?.params && "cursor" in config.params
+        ? {
+            data: {
+              stations: [station("Second Page")],
+              nextCursor: null,
+              total: 2,
+              totalIsExact: true,
+            },
+          }
+        : {
+            data: {
+              stations: [station("First Page Station")],
+              nextCursor: "opaque-cursor",
+              total: 2,
+              totalIsExact: true,
+            },
+          };
+    },
+  );
   renderCatalog("/stations?q=north&type=Type2");
 
   await userEvent.click(
@@ -329,17 +377,20 @@ it("clears the search text with its button", async () => {
 it("shows a lower-bound total and plural counts", async () => {
   // Any count the API reports as a lower bound; the page does not know the API's cap.
   const lowerBound = 12345;
-  get.mockImplementation(async (path: string) =>
-    path === "/api/stations"
-      ? okBrowse()
-      : {
-          data: {
-            stations: [station("North Station")],
-            nextCursor: "next",
-            total: lowerBound,
-            totalIsExact: false,
-          },
-        },
+  get.mockImplementation(
+    async (path: string, config?: { params?: { ids?: string[] } }) =>
+      path === availabilityPath
+        ? okAvailability(config?.params?.ids ?? [])
+        : path === "/api/stations"
+          ? okBrowse()
+          : {
+              data: {
+                stations: [station("North Station")],
+                nextCursor: "next",
+                total: lowerBound,
+                totalIsExact: false,
+              },
+            },
   );
   renderCatalog("/stations?q=north");
 
@@ -351,13 +402,17 @@ it("shows a lower-bound total and plural counts", async () => {
 });
 
 it("keeps the search when paging the fallback catalog", async () => {
-  get.mockImplementation(async (path: string) => {
-    if (path === searchPath)
-      throw problem(HttpStatusCode.ServiceUnavailable, "search-unavailable");
-    return {
-      data: { stations: [browseStation], nextAfterId: "after-1" },
-    };
-  });
+  get.mockImplementation(
+    async (path: string, config?: { params?: { ids?: string[] } }) => {
+      if (path === availabilityPath)
+        return okAvailability(config?.params?.ids ?? []);
+      if (path === searchPath)
+        throw problem(HttpStatusCode.ServiceUnavailable, "search-unavailable");
+      return {
+        data: { stations: [browseStation], nextAfterId: "after-1" },
+      };
+    },
+  );
   renderCatalog("/stations?q=north&type=Type2");
 
   await userEvent.click(
@@ -402,3 +457,71 @@ it("shows the text of a URL that changed from outside", async () => {
     ).toHaveValue("xyz"),
   );
 });
+
+it("shows availability for browsed stations, asking for the listed ids", async () => {
+  respond({ "/api/stations": okBrowse });
+  renderCatalog();
+
+  expect(await screen.findByText("1 of 1 available")).toBeInTheDocument();
+  expect(availabilityCalls().at(-1)?.[1]).toMatchObject({
+    params: { ids: ["browse-station"] },
+  });
+});
+
+it("shows availability for search results", async () => {
+  respond({
+    "/api/stations": okBrowse,
+    [searchPath]: okSearch(station("North Station")),
+  });
+  renderCatalog("/stations?q=north");
+
+  expect(await screen.findByText("1 of 1 available")).toBeInTheDocument();
+  expect(availabilityCalls().at(-1)?.[1]).toMatchObject({
+    params: { ids: ["north-station"] },
+  });
+});
+
+it("still shows availability when search falls back to the catalog", async () => {
+  respond({
+    "/api/stations": okBrowse,
+    [searchPath]: () => {
+      throw problem(HttpStatusCode.ServiceUnavailable, "search-unavailable");
+    },
+  });
+  renderCatalog("/stations?q=north");
+
+  expect(await screen.findByText("1 of 1 available")).toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("Search unavailable");
+});
+
+it("lists the stations without counts when availability fails", async () => {
+  respond({
+    "/api/stations": okBrowse,
+    [availabilityPath]: () => {
+      throw problem(HttpStatusCode.InternalServerError);
+    },
+  });
+  const client = renderCatalog();
+
+  expect(await screen.findByText("Browse Station")).toBeInTheDocument();
+  await availabilityFailed(client);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.queryByText(/\d+ of \d+ available/)).not.toBeInTheDocument();
+});
+
+it.each([
+  [[true, false], "1 of 2 available"],
+  [[false], "0 of 1 available"],
+])(
+  "counts the available connectors of a station: %j",
+  async (connectorFlags, text) => {
+    respond({
+      "/api/stations": okBrowse,
+      [availabilityPath]: () =>
+        okAvailability([browseStation.id], connectorFlags),
+    });
+    renderCatalog();
+
+    expect(await screen.findByText(text)).toBeInTheDocument();
+  },
+);

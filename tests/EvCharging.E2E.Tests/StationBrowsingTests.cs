@@ -115,6 +115,16 @@ public sealed class StationBrowsingTests(AppHostFixture fixture)
         Assert.Equal(new[] { 1, 2 }, connectors.Select(connector => connector.GetProperty("number").GetInt32()));
         Assert.All(connectors, connector => Assert.NotEqual(Guid.Empty, connector.GetProperty("id").GetGuid()));
 
+        var availability = await client.GetFromJsonAsync<JsonElement>($"/api/stations/availability?ids={stationId}");
+        var stationAvailability = Assert.Single(availability.GetProperty("stations").EnumerateArray());
+        Assert.Equal(stationId, stationAvailability.GetProperty("id").GetGuid());
+        Assert.Equal(
+            connectors.Select(connector => connector.GetProperty("id").GetGuid()).Order(),
+            stationAvailability.GetProperty("connectors").EnumerateArray()
+                .Select(connector => connector.GetProperty("id").GetGuid())
+                .Order());
+        using var noIds = await client.GetAsync("/api/stations/availability");
+        Assert.Equal(HttpStatusCode.BadRequest, noIds.StatusCode);
     }
 
     [Fact]
