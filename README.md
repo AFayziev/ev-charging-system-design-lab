@@ -258,14 +258,18 @@ request bodies, stack-frame variables, and form values are never sent.
 
 Events reach Sentry through the gateway tunnel at `/diagnostics/sentry`.
 
-Source maps exist only in a built frontend. Set `Frontend:Mode` to `preview` to run the
+Source maps exist only in a built frontend. Start the launcher with `-Preview` to run the
 `frontend` resource from a production build: the `frontend-build` resource runs
 `npm run build` after the package install, and `frontend` serves `dist` with `vite preview`.
 Without it, `frontend` runs the dev server.
 
-```sh
-dotnet user-secrets set "Frontend:Mode" "preview" --project src/EvCharging.AppHost
+```powershell
+pwsh -File tools/dev.ps1 -Preview
 ```
+
+The mode applies only to a newly started platform; the launcher warns when a reused platform
+runs the other mode. Outside the launcher, set `Frontend:Mode` to `preview` in the AppHost
+configuration.
 
 Add these to upload source maps during that build (the token is a Sentry organization
 auth token); `FrontendDiagnostics:Release` becomes the Sentry release, so build and runtime

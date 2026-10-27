@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [switch]$Detach,
-    [switch]$Isolated
+    [switch]$Isolated,
+    [switch]$Preview
 )
 
 $ErrorActionPreference = 'Stop'
@@ -196,6 +197,13 @@ try {
             }
         }
         Write-Host 'Reusing the platform AppHost.'
+        # The frontend mode is fixed when the platform starts; a preview build adds the frontend-build resource.
+        $runningPreview = (Get-ResourceInstances $platform 'frontend-build').Count -gt 0
+        if ($runningPreview -ne [bool]$Preview) {
+            $requested = $Preview ? 'preview' : 'dev server'
+            $running = $runningPreview ? 'preview' : 'dev server'
+            Write-Warning "The running platform serves the frontend as $running, not $requested. Stop its AppHost and rerun tools/dev.ps1 to change it."
+        }
     }
     else {
         $providerAuthentication = Get-WattHarborAuthentication
@@ -209,6 +217,8 @@ try {
         foreach ($provider in $providerEndpoints.Keys) {
             $platformParameters["Parameters__$provider-provider-url"] = $providerEndpoints[$provider]
         }
+        # Set explicitly so a stale Frontend:Mode secret or inherited variable cannot change the default.
+        $platformParameters['Frontend__Mode'] = $Preview ? 'preview' : 'dev'
         foreach ($name in $platformParameters.Keys) {
             $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             [Environment]::SetEnvironmentVariable($name, $platformParameters[$name], 'Process')
