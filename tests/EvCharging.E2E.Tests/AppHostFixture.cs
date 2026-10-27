@@ -151,6 +151,8 @@ public sealed class AppHostFixture : IAsyncLifetime
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.EvCharging_AppHost>(
             ["--environment=Development", "--Parameters:api-instances=2",
                 "--Parameters:gateway-instances=2",
+                // User-secrets must not switch E2E runs to real email delivery.
+                "--NotificationDelivery:Provider=Mailpit",
                 "--ChargingProviders:WattHarborIntegrationKey=driver-wattharbor",
                 "--ChargingProviders:AmpTrailIntegrationKey=driver-amptrail",
                 $"--Parameters:wattharbor-provider-token-endpoint={tokenEndpoint}",

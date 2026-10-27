@@ -6,6 +6,7 @@
     <InternalsVisibleTo Include="EvCharging.NotificationWorker.Tests" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Handlebars.Net" />
+    <PackageReference Include="AWSSDK.SimpleEmailV2" />
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="WolverineFx.EntityFrameworkCore" />
     <ProjectReference Include="../EvCharging.Contracts/EvCharging.Contracts.csproj" />

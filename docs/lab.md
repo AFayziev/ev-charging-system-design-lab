@@ -316,8 +316,12 @@ registration email. Mailpit provides content inspection; persisted attempts
 provide failure evidence. Delivery semantics belong to
 [integrations](integrations.md#4-notification-providers).
 
-External-provider selection remains unresolved among Cloudflare Email Service,
-Azure Communication Services Email, and Amazon SES. Hosted setup depends on that selection.
+The external provider is Amazon SES through the SESv2 `SendEmail` API. The message ID returned by SES 
+records acceptance only: recipient delivery stays unknown and no bounce or complaint feedback is consumed.
+
+Account setup is manual. Verify the sender identity and the test recipient addresses in SES,
+create an IAM user allowed only `ses:SendEmail` on the sender identity, and generate its access
+key.
 
 ### 1.9 Frontend diagnostics
 
@@ -380,7 +384,7 @@ Testing treats the provider as a black box:
 | Optional `observability` | Adds the [selected observability backends](#11-technology-selections) for telemetry routing, backend queries, and custom dashboards; startup/health gates apply only when enabled |
 | Optional Sentry | Enables [frontend diagnostics](#19-frontend-diagnostics); requires a hosted project and build-upload credentials |
 | Cloudflare files/CDN | R2 and Cloudflare CDN deliver versioned frontend assets and published media through a custom domain; real presigned transfers, warm/cold cache behavior, and purge |
-| External notification delivery | Provider selection unresolved; test recipients and recorded provider/delivery outcomes |
+| External notification delivery | [Amazon SES](#18-notification-adapters); recorded provider and acceptance outcomes |
 | Azure database failover | Managed PostgreSQL HA plus readable replica/pooler routes; provider-supported failover exposes application interruption and recovery |
 
 The local baseline covers redelivery, outbox recovery, cache loss, and
@@ -390,7 +394,7 @@ replicas share a host failure boundary and do not demonstrate multi-zone availab
 MongoDB, Valkey, Elasticsearch, RabbitMQ, and Kafka need no cloud subscriptions.
 WattHarbor and AmpTrail are controlled lab providers.
 Notification email is captured locally in Mailpit without real delivery.
-Hosted notification delivery depends on [provider selection](#18-notification-adapters).
+External delivery uses [Amazon SES](#18-notification-adapters).
 Local S3 storage does not demonstrate hosted CDN or R2 signing behavior;
 the files/CDN profile uses the [R2 delivery constraints](#15-storage-and-delivery).
 
@@ -398,8 +402,8 @@ The local profile requires no paid product subscriptions. Cloudflare CDN uses th
 Free plan; R2 Standard storage has monthly free allowances with billed overages.
 Managed Azure PostgreSQL, its HA standby, and its readable replica incur cloud
 resource charges. Cloudflare and Azure profiles are active only for their exercises.
-The local notification sink requires no cloud subscription. Hosted email costs and
-recipient restrictions depend on the provider selected for the external exercise.
+The local notification sink requires no cloud subscription. The SES exercise needs an
+AWS account.
 [R2 pricing](https://developers.cloudflare.com/r2/pricing/),
 [Cloudflare Free plan](https://www.cloudflare.com/plans/free/),
 [Azure PostgreSQL pricing](https://azure.microsoft.com/en-us/pricing/details/postgresql/flexible-server/)

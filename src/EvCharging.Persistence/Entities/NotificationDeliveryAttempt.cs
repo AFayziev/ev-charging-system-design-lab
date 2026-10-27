@@ -10,20 +10,22 @@ public sealed class NotificationDeliveryAttempt
     public Guid NotificationId { get; private set; }
     public Notification? Notification { get; private set; }
     public int Number { get; private set; }
-    public string Provider { get; private set; } = "Mailpit";
+    public string Provider { get; private set; } = string.Empty;
     public NotificationDeliveryOutcome Outcome { get; private set; } = NotificationDeliveryOutcome.Uncertain;
     public DateTimeOffset StartedAt { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
     public string? ExternalMessageId { get; private set; }
     public string? FailureCode { get; private set; }
 
-    public static NotificationDeliveryAttempt Start(Notification notification, int number, DateTimeOffset now) => new()
-    {
-        NotificationId = notification.Id,
-        Notification = notification,
-        Number = number,
-        StartedAt = now
-    };
+    public static NotificationDeliveryAttempt Start(
+        Notification notification, int number, string provider, DateTimeOffset now) => new()
+        {
+            NotificationId = notification.Id,
+            Notification = notification,
+            Number = number,
+            Provider = provider,
+            StartedAt = now
+        };
 
     public void Complete(
         NotificationDeliveryOutcome outcome,

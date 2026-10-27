@@ -33,7 +33,8 @@ public static class SendNotificationMessageHandler
             return;
         }
 
-        var attempt = NotificationDeliveryAttempt.Start(notification, (previous?.Number ?? 0) + 1, clock.GetUtcNow());
+        var attempt = NotificationDeliveryAttempt.Start(
+            notification, (previous?.Number ?? 0) + 1, delivery.Provider, clock.GetUtcNow());
         database.NotificationDeliveryAttempts.Add(attempt);
         // Commit before HTTP. The unique notification/number pair excludes competing sends;
         // process loss leaves uncertainty that prevents redelivery from repeating the effect.

@@ -50,6 +50,7 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
             value.NotificationId == notification.Id);
         Assert.Equal(NotificationDeliveryOutcome.Captured, saved.Outcome);
         Assert.Equal("captured-id", saved.ExternalMessageId);
+        Assert.Equal(delivery.Provider, saved.Provider);
     }
 
     [Fact]
@@ -219,6 +220,7 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
     {
         private int _calls;
         public int Calls => _calls;
+        public string Provider => "Stub";
         public Task<NotificationDeliveryResult> SendAsync(
             Notification notification, Guid attemptId, CancellationToken cancellationToken)
         {
@@ -231,6 +233,7 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
     {
         private int _calls;
         public int Calls => _calls;
+        public string Provider => "Stub";
         public Task<NotificationDeliveryResult> SendAsync(
             Notification notification, Guid attemptId, CancellationToken cancellationToken) => Task.FromResult(
                 Interlocked.Increment(ref _calls) > 1 && recovers
@@ -242,6 +245,7 @@ public sealed class NotificationDeliveryTests(PlatformDatabaseFixture fixture) :
 
     private sealed class CancelledDelivery : INotificationDelivery
     {
+        public string Provider => "Stub";
         public Task<NotificationDeliveryResult> SendAsync(
             Notification notification, Guid attemptId, CancellationToken cancellationToken) =>
             throw new OperationCanceledException();

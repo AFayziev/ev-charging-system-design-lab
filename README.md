@@ -12,7 +12,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 - WattHarbor and AmpTrail lab providers expose different APIs and
   controllable faults.
 - Notification delivery captures local email in a dedicated Mailpit sink with
-  persisted attempts; external-provider integration is a separate exercise.
+  persisted attempts; Amazon SES is an optional external provider.
 - One frontend provides separate driver and operator areas.
 
 ## Architecture
@@ -283,6 +283,26 @@ dotnet user-secrets set "Parameters:sentry-auth-token" "<auth token>" --project 
 
 Outside Aspire, `vite build` uploads when `SENTRY_UPLOAD=true` with `SENTRY_AUTH_TOKEN`,
 `SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_RELEASE` set.
+
+### Optional Amazon SES notification delivery
+
+Notification email is captured in Mailpit by default. To send through
+[Amazon SES](docs/lab.md#18-notification-adapters) instead, supply the sender, region and access key. 
+The sender must be a verified SES identity. If the sandbox is used, every recipient address must be verified too:
+
+```sh
+dotnet user-secrets set "NotificationDelivery:Provider" "AmazonSes" --project src/EvCharging.AppHost
+dotnet user-secrets set "Parameters:ses-sender-email" "<verified sender>" --project src/EvCharging.AppHost
+dotnet user-secrets set "Parameters:ses-region" "<AWS region>" --project src/EvCharging.AppHost
+dotnet user-secrets set "Parameters:ses-access-key-id" "<access key id>" --project src/EvCharging.AppHost
+dotnet user-secrets set "Parameters:ses-secret-access-key" "<secret access key>" --project src/EvCharging.AppHost
+```
+
+Set `NotificationDelivery:SenderName` to change the sender display name (default "EV Charging"); it applies to both providers.
+
+`notification-mail` does not start while SES is selected. Remove the `NotificationDelivery:Provider`
+secret to return to Mailpit. Automated tests always use Mailpit. Set
+`Parameters:notification-worker-instances` to change the notification worker replica count.
 
 ### Charging-data reset
 

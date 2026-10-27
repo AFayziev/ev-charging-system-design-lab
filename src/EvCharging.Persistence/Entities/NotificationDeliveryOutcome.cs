@@ -10,7 +10,8 @@ public enum NotificationDeliveryOutcome
     Uncertain = 1,
 
     /// <summary>
-    /// The sink confirmed capture with a message ID. This does not establish delivery to a real recipient.
+    /// The sink or provider accepted the message and returned a message ID. This does not establish
+    /// delivery to a real recipient.
     /// </summary>
     Captured = 2,
 

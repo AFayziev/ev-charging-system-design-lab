@@ -216,7 +216,8 @@ var wattHarborApi = builder.AddExternalService(
     "wattharbor-provider-api", builder.AddParameter("wattharbor-provider-url"));
 var ampTrailApi = builder.AddExternalService(
     "amptrail-provider-api", builder.AddParameter("amptrail-provider-url"));
-var notificationMail = builder.AddMailPit("notification-mail").WithDataVolume("notification-mail-data");
+var notificationViaSes = string.Equals(
+    builder.Configuration["NotificationDelivery:Provider"], "AmazonSes", StringComparison.OrdinalIgnoreCase);
 var wattHarborTokenEndpoint = builder.AddParameter("wattharbor-provider-token-endpoint");
 var wattHarborClientSecret = builder.AddParameter("wattharbor-provider-client-secret", secret: true);
 string wattHarborIntegrationPrefix
@@ -267,15 +268,36 @@ var cache = builder.AddProject<Projects.EvCharging_CacheWorker>("cache-worker")
 var media = builder.AddProject<Projects.EvCharging_MediaWorker>("media-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
 
+var notificationCount = await InstanceCountAsync("notification-worker-instances");
 var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("notification-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithReplicas(notificationCount)
     .WithReference(databaseAccess.NotificationMessaging, "messaging")
     .WaitForCompletion(notificationMessageMigrations)
     .WaitForCompletion(platformMigrations)
     .WithReference(broker)
-    .WaitFor(broker)
-    .WithReference(notificationMail.GetEndpoint("http"))
-    .WaitFor(notificationMail);
+    .WaitFor(broker);
+
+var notificationSenderName = builder.Configuration["NotificationDelivery:SenderName"];
+if (!string.IsNullOrWhiteSpace(notificationSenderName))
+{
+    notification.WithEnvironment("NotificationDelivery__SenderName", notificationSenderName);
+}
+
+if (notificationViaSes)
+{
+    notification
+        .WithEnvironment("NotificationDelivery__Provider", "AmazonSes")
+        .WithEnvironment("NotificationDelivery__SenderEmail", builder.AddParameter("ses-sender-email"))
+        .WithEnvironment("AWS_REGION", builder.AddParameter("ses-region"))
+        .WithEnvironment("AWS_ACCESS_KEY_ID", builder.AddParameter("ses-access-key-id", secret: true))
+        .WithEnvironment("AWS_SECRET_ACCESS_KEY", builder.AddParameter("ses-secret-access-key", secret: true));
+}
+else
+{
+    var notificationMail = builder.AddMailPit("notification-mail").WithDataVolume("notification-mail-data");
+    notification.WithReference(notificationMail.GetEndpoint("http")).WaitFor(notificationMail);
+}
 
 foreach (var worker in new[] { charging, observation, cache, media })
 {

@@ -306,10 +306,10 @@ Notification failure leaves accepted reservations intact and remains separately 
 
 #### Independent follow-up tasks
 
-- [ ] M05.07 External email integration exercise, after M05.04: select a provider,
-  implement its adapter and safety contract, and verify real delivery, outcome
+- [x] M05.07 External email integration exercise, after M05.04: implement the
+  Amazon SES adapter and safety contract, and verify real delivery, outcome
   evidence, usage, and cleanup with test recipients.
-  Depends on [provider selection and hosted setup](lab.md#18-notification-adapters).
+  Follows the [SES selection and setup](lab.md#18-notification-adapters).
 
 ### M06 — Charging start/stop and operator investigation
 
@@ -723,6 +723,5 @@ their boundary becomes usable.
 |---|---|---|
 | Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
 | API rate limiting | Enforce limits at the gateway or through instance middleware backed by a central store (for example, Redis), consistently across replicas | M15.01 |
-| External email provider and test recipients | Provider selection, sender onboarding, scoped credentials, and real-delivery setup | M05.07 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.01 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |
