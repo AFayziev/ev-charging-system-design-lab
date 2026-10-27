@@ -27,7 +27,7 @@ export default defineConfig(({ command, isPreview }) => {
       : []),
   ];
   const config = { plugins, resolve: { tsconfigPaths: true } };
-  if (command !== "serve" || isPreview) {
+  if (command !== "serve") {
     return { ...config, build: { sourcemap: upload ? "hidden" : false } };
   }
 
@@ -42,12 +42,8 @@ export default defineConfig(({ command, isPreview }) => {
     target: gateway,
   };
 
-  return {
-    ...config,
-    server: {
-      proxy: {
-        "^/(api|auth|diagnostics)(/|$|\\?)": proxy,
-      },
-    },
-  };
+  const proxies = { "^/(api|auth|diagnostics)(/|$|\\?)": proxy };
+  return isPreview
+    ? { ...config, preview: { proxy: proxies } }
+    : { ...config, server: { proxy: proxies } };
 });

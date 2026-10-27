@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Aspire.Hosting.JavaScript;
 using EvCharging.AppHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -135,7 +136,8 @@ foreach (var setting in frontendDiagnosticsSettings)
     gateway.WithEnvironment(setting.Key.Replace(":", "__", StringComparison.Ordinal), setting.Value!);
 }
 
-var frontend = builder.AddViteApp("frontend", "../EvCharging.Web")
+var frontendPreview = builder.ExecutionContext.IsRunMode && builder.Configuration["Frontend:Mode"] == "preview";
+var frontend = builder.AddViteApp("frontend", "../EvCharging.Web", frontendPreview ? "preview" : "dev")
     .WithEndpoint(
         "http",
         endpoint => endpoint.Port = builder.ExecutionContext.IsRunMode
@@ -143,6 +145,30 @@ var frontend = builder.AddViteApp("frontend", "../EvCharging.Web")
     .WithExternalHttpEndpoints()
     .WithReference(gateway)
     .WaitFor(gateway);
+
+if (frontendPreview)
+{
+    var frontendBuild = builder.AddExecutable("frontend-build", "npm", "../EvCharging.Web", "run", "build");
+    if (frontend.Resource.TryGetLastAnnotation<JavaScriptPackageInstallerAnnotation>(out var installer))
+    {
+        frontendBuild.WaitForCompletion(builder.CreateResourceBuilder(installer.Resource));
+    }
+
+    var sentryOrg = builder.Configuration["Frontend:Sentry:Org"];
+    var sentryProject = builder.Configuration["Frontend:Sentry:Project"];
+    if (!string.IsNullOrWhiteSpace(sentryOrg) && !string.IsNullOrWhiteSpace(sentryProject)
+        && !string.IsNullOrWhiteSpace(builder.Configuration["Parameters:sentry-auth-token"]))
+    {
+        frontendBuild
+            .WithEnvironment("SENTRY_UPLOAD", "true")
+            .WithEnvironment("SENTRY_ORG", sentryOrg)
+            .WithEnvironment("SENTRY_PROJECT", sentryProject)
+            .WithEnvironment("SENTRY_AUTH_TOKEN", builder.AddParameter("sentry-auth-token", secret: true))
+            .WithEnvironment("SENTRY_RELEASE", builder.Configuration["FrontendDiagnostics:Release"] ?? string.Empty);
+    }
+
+    frontend.WaitForCompletion(frontendBuild);
+}
 
 var gatewayPublicOrigin = builder.AddBrowserOrigin(frontend.GetEndpoint("http"), "gateway-public-origin");
 var identityPublicOrigin = builder.AddBrowserOrigin(identity.GetEndpoint("http"), "identity-public-origin");

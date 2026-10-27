@@ -225,6 +225,61 @@ dotnet user-secrets set "Parameters:api-instances" "3" --project src/EvCharging.
 - Store secrets in user-secrets or environment configuration, never tracked settings.
 - Aspire persists generated dependency credentials in AppHost user-secrets.
 
+### Optional frontend diagnostics
+
+[Frontend diagnostics](docs/lab.md#19-frontend-diagnostics) are disabled by default and
+need no Sentry account. To report from a local run, create a Sentry React project and
+supply its DSN (`https://<key>@<host>.sentry.io/<project id>`), an environment, and a release:
+
+```sh
+dotnet user-secrets set "FrontendDiagnostics:Enabled" "true" --project src/EvCharging.AppHost
+dotnet user-secrets set "FrontendDiagnostics:Dsn" "<DSN>" --project src/EvCharging.AppHost
+dotnet user-secrets set "FrontendDiagnostics:Environment" "local" --project src/EvCharging.AppHost
+dotnet user-secrets set "FrontendDiagnostics:Release" "local" --project src/EvCharging.AppHost
+```
+
+Restart the gateway after changing a setting. Enabled settings without a hosted DSN,
+environment, and release fail gateway startup.
+
+Options (`FrontendDiagnostics:*`):
+
+| Setting | Default | Effect |
+|---|---|---|
+| `Enabled` | `false` | Disabled sends no Sentry telemetry |
+| `ErrorSampleRate` | `1` | Fraction of errors sent |
+| `TraceSampleRate` | `0` | Fraction of page loads, navigations, and requests traced; `0` sends no traces |
+| `LogLevels` | `Warn`, `Error`, `Fatal` | Structured log levels sent |
+| `ReplayEnabled` | `false` | Session replay with masked text and blocked media |
+
+Sent: uncaught exceptions, unhandled rejections, and React error-boundary failures, with
+environment, release, browser, route, and breadcrumbs (clicks, navigation, request
+outcomes). Query strings and fragments are removed from URLs. User data, cookies, headers,
+request bodies, stack-frame variables, and form values are never sent.
+
+Events reach Sentry through the gateway tunnel at `/diagnostics/sentry`.
+
+Source maps exist only in a built frontend. Set `Frontend:Mode` to `preview` to run the
+`frontend` resource from a production build: the `frontend-build` resource runs
+`npm run build` after the package install, and `frontend` serves `dist` with `vite preview`.
+Without it, `frontend` runs the dev server.
+
+```sh
+dotnet user-secrets set "Frontend:Mode" "preview" --project src/EvCharging.AppHost
+```
+
+Add these to upload source maps during that build (the token is a Sentry organization
+auth token); `FrontendDiagnostics:Release` becomes the Sentry release, so build and runtime
+match. Omit any of them to build without upload:
+
+```sh
+dotnet user-secrets set "Frontend:Sentry:Org" "<organization slug>" --project src/EvCharging.AppHost
+dotnet user-secrets set "Frontend:Sentry:Project" "<project slug>" --project src/EvCharging.AppHost
+dotnet user-secrets set "Parameters:sentry-auth-token" "<auth token>" --project src/EvCharging.AppHost
+```
+
+Outside Aspire, `vite build` uploads when `SENTRY_UPLOAD=true` with `SENTRY_AUTH_TOKEN`,
+`SENTRY_ORG`, `SENTRY_PROJECT`, and `SENTRY_RELEASE` set.
+
 ### Charging-data reset
 
 1. Stop API replicas and workers in Aspire Dashboard before resetting data.

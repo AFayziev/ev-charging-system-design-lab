@@ -147,7 +147,7 @@ criteria.
   implement [frontend diagnostics](lab.md#19-frontend-diagnostics), startup
   configuration, gateway tunnel, and build integration. Verify disabled behavior,
   capture metadata, bounded export failure, and local builds without hosted credentials.
-- [ ] M01.14 Optional hosted gate, after M01.13: verify that a built frontend
+- [x] M01.14 Optional hosted gate, after M01.13: verify that a built frontend
   reports readable stacks, release, and grouped issues to a configured Sentry project.
 
 ### M02 — Gateway authentication and shared frontend shell
