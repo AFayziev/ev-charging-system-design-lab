@@ -462,6 +462,22 @@ The initial booking-limit experiment configures admission limits as follows.
 | Maximum advance-booking horizon | 24 hours |
 | Arrival allowance | 15 minutes |
 
+### 2.2.2 Station media limits
+
+[Gallery rules](domain.md#9-files) define their semantics.
+
+| Setting | Initial experiment value |
+|---|---|
+| Photos per station | 5, including pending uploads |
+| Instructional videos per station | 1 |
+| Photo upload | JPEG, PNG, or WebP; at most 8 MB and 24 megapixels |
+| Photo variants | WebP thumbnail (480 px longest edge) and display image (1600 px longest edge) |
+| Instructional video upload | MP4; at most 50 MB and 60 seconds |
+| Upload URL lifetime | 30 minutes |
+| Unverified upload retention | 1 day |
+
+Verification of the stored object remains authoritative for the size and type limits.
+
 ### 2.3 Verification tools
 
 | Area | Tool |

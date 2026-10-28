@@ -43,7 +43,7 @@ var stream = builder.AddObservationStream();
 var streamProvisioning = builder.AddObservationStreamProvisioning(stream);
 var searchIndex = builder.AddSearchIndex();
 var (searchReader, searchIndexProvisioning) = builder.AddSearchIndexAccess(searchIndex);
-var (storage, storageAccessKey, storageSecretKey) = builder.AddObjectStorage();
+var storage = builder.AddObjectStorage();
 
 var apiCount = await InstanceCountAsync("api-instances");
 var gatewayCount = await InstanceCountAsync("gateway-instances");
@@ -60,8 +60,7 @@ var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: 
     .WithReplicas(apiCount)
     .WithHttpHealthCheck("/health");
 
-api.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
-    .WithReference(databaseAccess.Write)
+api.WithReference(databaseAccess.Write)
     .WithReference(databaseAccess.Read)
     .WithReference(databaseAccess.Write, "messaging")
     .WaitForCompletion(platformMigrations)
@@ -328,7 +327,9 @@ cache.WithReference(databaseAccess.Read);
 cache.WithReference(cacheStore).WaitFor(cacheStore);
 search.WithReference(searchIndex).WaitFor(searchIndex);
 
-media.WithObjectStorage(storage, storageAccessKey, storageSecretKey)
+var objectStorage = builder.AddObjectStorageAccess(storage, gatewayPublicOrigin);
+api.WithObjectStorage(objectStorage, objectStorage.ApiFiles);
+media.WithObjectStorage(objectStorage, objectStorage.MediaWorker)
     .WithReference(documents)
     .WaitFor(documents);
 

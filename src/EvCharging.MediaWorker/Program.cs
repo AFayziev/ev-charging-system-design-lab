@@ -1,5 +1,8 @@
+using EvCharging.ObjectStorage;
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
+builder.AddObjectStorage();
 
 using var host = builder.Build();
 

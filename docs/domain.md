@@ -370,6 +370,16 @@ source timestamps.
 Uploaded, processed, and published are distinct milestones. Object existence alone
 does not make media visible.
 
+Each station has an ordered media gallery of photos and at most one short
+instructional video, within [configured limits](lab.md#222-station-media-limits).
+Assigned operator users add, reorder, replace, and remove gallery items. Pending
+uploads count toward the limits. A replacement becomes visible only when published;
+until then the previous version stays visible, and a failed replacement leaves it
+in place. Removal hides the item from platform views immediately; delivery caches
+can serve it until purged. Gallery changes reject a stale editor version like
+other station content edits. Drivers and visitors see only published items, with
+a placeholder when a station has none or an item cannot be loaded.
+
 ## 10. Industry terminology
 
 | Term | Meaning and project relationship |

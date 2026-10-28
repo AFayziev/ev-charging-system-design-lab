@@ -9,6 +9,7 @@
     <Project Path="src/EvCharging.Api/EvCharging.Api.csproj" />
     <Project Path="src/EvCharging.AppHost/EvCharging.AppHost.csproj" />
     <Project Path="src/EvCharging.Messaging/EvCharging.Messaging.csproj" />
+    <Project Path="src/EvCharging.ObjectStorage/EvCharging.ObjectStorage.csproj" />
     <Project Path="src/EvCharging.ObservationStream/EvCharging.ObservationStream.csproj" />
     <Project Path="src/EvCharging.MediaWorker/EvCharging.MediaWorker.csproj" />
     <Project Path="src/EvCharging.ChargingWorker/EvCharging.ChargingWorker.csproj" />
@@ -36,6 +37,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EvCharging.ChargingWorker.Tests/EvCharging.ChargingWorker.Tests.csproj" />
+    <Project Path="tests/EvCharging.ObjectStorage.Tests/EvCharging.ObjectStorage.Tests.csproj" />
     <Project Path="tests/EvCharging.ObservationWorker.Tests/EvCharging.ObservationWorker.Tests.csproj" />
     <Project Path="tests/EvCharging.Api.Tests/EvCharging.Api.Tests.csproj" />
     <Project Path="tests/EvCharging.Domain.Tests/EvCharging.Domain.Tests.csproj" />

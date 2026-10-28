@@ -44,9 +44,9 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M02 | Gateway authentication and shared frontend shell | M01; frontend gate M01.13 | Done |
 | M03 | Domain and seeded persistence baseline | M02 | Done |
 | M04 | Station browsing and operator edits | M03 | Done |
-| M05 | Reservations, expiry, and notifications | M04.01 | In progress |
+| M05 | Reservations, expiry, and notifications | M04.01 | Done |
 | M06 | Charging start/stop and operator investigation | M05.02; cancellation races require M05.03 | In progress |
-| M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | In progress |
+| M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | Done |
 | M08 | Live updates and cached views | M07.01 | Planned |
 | M09 | Search and station discovery | M04.01, M05.01; availability requires M06.01 | Done |
 | M10 | Station media and session summaries | M04.02, M05.01; summaries require M07.02 | Planned |
@@ -576,25 +576,69 @@ visible and preserves unrelated commands for known equipment.
 
 ### M10 — Station media and session summaries
 
-- [ ] M10.01 Deliver assigned-operator upload/publication and driver station
-  media. Introduce the S3 adapter, private/public buckets, CORS, direct presigned
-  browser transfers, ownership/state records, HEAD verification, transfer limits,
-  media-worker processing, SkiaSharp variants, immutable publication keys, and
-  transactional publication events. Verify the storage contract through upload,
-  download, copy, and deletion, plus placeholders and retained old publications
-  during failures. Depends on M04.02 and M05.01.
+- [ ] M10.01 Deliver the station photo gallery: assigned-operator uploads and
+  gallery management, and published photos for visitors and drivers, following
+  the [gallery rules](domain.md#9-files), [storage design](architecture.md#10-object-storage-and-cdn),
+  and [media limits](lab.md#222-station-media-limits).
+  Depends on M04.02 and M05.01. Sub-items are sequenced as follows:
+  - [x] M10.01.1 Storage adapter and buckets: an S3 adapter for signed upload and
+    download URLs, object verification, copy, and deletion; one-shot provisioning
+    of private and public buckets, public read on the public bucket, and browser
+    CORS for the application origin; per-host storage credentials limited to
+    their operations. Verify the storage contract through upload, download, copy,
+    and deletion against the local container.
+  - [ ] M10.01.2 Gallery records and upload allocation: gallery items with public
+    identifiers, kind, position, and current published version, and per-version
+    file records. An assigned operator allocates an upload within the limits and
+    receives a short-lived signed URL for a private original. The completion
+    notice verifies the object's size and type, records it as uploaded, and commits
+    the audit record and processing message together; repeated notices have no
+    further effect. Expose the limits to the editor through typed contracts.
+    Verify limits under concurrent allocation, unassigned-operator and driver
+    denial, and rejected type and size.
+  - [ ] M10.01.3 Photo processing and publication: Wolverine messaging and a scoped
+    database role in the media worker; bounded SkiaSharp decoding into variants
+    written under immutable per-version keys in the public bucket; a publication
+    transaction that switches the item's current version and publishes the
+    station-changed event. Verify undecodable and oversized images, redelivery
+    and retries converging on one publication, a reused upload URL leaving
+    published bytes unchanged, and the previous version remaining published
+    while a replacement fails. Depends on M10.01.2.
+  - [ ] M10.01.4 Gallery management: reorder, replace, and remove with stale-version
+    rejection, audit records, and station-changed events. Removed and replaced
+    objects are left to cleanup. Verify concurrent edits and that removal hides
+    the item immediately. Depends on M10.01.3.
+  - [ ] M10.01.5 Driver and operator UI: station list, detail, and search contracts
+    carry published variant URLs from the configured public base URL; the search
+    document carries the first photo. Catalog cards and search results show the
+    first photo, and station detail shows the gallery, with placeholders for
+    stations without photos and items that fail to load. The operator editor
+    uploads with progress and shows processing and failed states, reordering,
+    replacement, and removal. Verify on desktop and phone viewports, and that
+    browsing, booking, and charging keep working while storage is unavailable.
+    Depends on M10.01.4.
 - [ ] M10.02 Deliver authorized driver session-summary downloads. Generate
-  private PDFsharp documents from frozen completion facts in the media worker,
+  private documents from frozen completion facts in the media worker,
   with deterministic regeneration and visible pending/failure states.
-  Depends on M07.02 and M10.01.
-- [ ] M10.04 Add missing-upload-notice reconciliation and abandoned-upload/orphan
-  cleanup. Verify that a lost upload notice and a worker crash after writing
-  variants converge while the previous publication stays usable.
-  Depends on M10.01.
+  Summary content, generation trigger, and delivery are scoped before the task
+  starts. Depends on M07.02 and M10.01.1.
+- [ ] M10.03 Add one short instructional video per station to the gallery: upload
+  within the video limits, verification of container and duration, publication
+  with a poster image, and playback on station detail. Depends on M10.01 and
+  the video processing selection.
+- [ ] M10.04 Reconcile and clean up station media. Depends on M10.01.
+  - [ ] M10.04.1 A recurring sweep resumes uploads whose object exists without a
+    completion notice and removes allocations that expired without an upload.
+    Verify that a lost notice converges to publication.
+  - [ ] M10.04.2 A recurring sweep deletes orphaned variants, removed items, and
+    replaced versions after a grace period. Verify that a worker crash after
+    writing variants converges while the previous publication stays usable.
 
-Acceptance: station media appears only after publication and published bytes
-cannot be overwritten through original upload URLs. Summaries reproduce frozen
-usage. File failure leaves charging completion intact.
+Acceptance: an assigned operator maintains a station gallery within its limits,
+and visitors see only published media. Published bytes cannot be overwritten
+through upload URLs, and failed uploads or processing leave the previous
+publication in place. Summaries reproduce frozen usage. File failure leaves
+charging completion intact.
 
 ### M11 — Hosted R2 and Cloudflare CDN
 
@@ -722,6 +766,7 @@ their boundary becomes usable.
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
 | Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
+| Instructional video processing | Verify container and duration and produce a poster image; options include FFmpeg in the media worker or a constrained pass-through with an operator-supplied poster | M10.03 |
 | API rate limiting | Enforce limits at the gateway or through instance middleware backed by a central store (for example, Redis), consistently across replicas | M15.01 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.01 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

@@ -9,6 +9,7 @@ using EvCharging.Api.Persistence;
 using EvCharging.Contracts.Observations;
 using EvCharging.DocumentStore;
 using EvCharging.Messaging;
+using EvCharging.ObjectStorage;
 using EvCharging.ObservationStream;
 using EvCharging.Persistence.Extensions;
 using Wolverine.EntityFrameworkCore;
@@ -22,6 +23,7 @@ builder.AddPlatformPersistence();
 builder.AddObservationStreamProducer();
 builder.AddObservationIngestion();
 builder.AddDocumentStore();
+builder.AddObjectStorage();
 builder.Services.AddOptions<ObservationClockSkewOptions>()
     .BindConfiguration(ObservationClockSkewOptions.SectionName)
     .ValidateDataAnnotations()
