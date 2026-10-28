@@ -2,15 +2,15 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Microsoft.Extensions.Options;
 
-namespace EvCharging.ObjectStorage;
+namespace EvCharging.S3ObjectStore;
 
 /// <summary>
 /// S3 clients for one set of credentials. Requests go to the endpoint the host reaches; signed URLs carry the
 /// browser-facing endpoint, and signing makes no network call.
 /// </summary>
-public sealed class ObjectStorageClients : IDisposable
+public sealed class ObjectStoreClients : IDisposable
 {
-    public ObjectStorageClients(IOptions<ObjectStorageOptions> options)
+    public ObjectStoreClients(IOptions<ObjectStoreOptions> options)
     {
         var settings = options.Value;
         Requests = Create(settings, settings.ServiceUrl);
@@ -40,7 +40,7 @@ public sealed class ObjectStorageClients : IDisposable
     // The clients keep the SDK's own HTTP handling rather than an IHttpClientFactory client, so the shared
     // standard resilience handler does not stack on the SDK retries, which re-sign each attempt and classify
     // S3 throttling and transient errors.
-    private static AmazonS3Client Create(ObjectStorageOptions options, string serviceUrl) =>
+    private static AmazonS3Client Create(ObjectStoreOptions options, string serviceUrl) =>
         new(
             new BasicAWSCredentials(options.AccessKey, options.SecretKey),
             new AmazonS3Config

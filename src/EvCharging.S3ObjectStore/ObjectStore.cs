@@ -5,15 +5,11 @@ using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace EvCharging.ObjectStorage;
+namespace EvCharging.S3ObjectStore;
 
-/// <summary>
-/// The platform's object storage boundary: signed browser transfers to the private bucket, upload
-/// verification, and immutable publication to the public bucket. Signed URLs are credentials and are not logged.
-/// </summary>
 public sealed partial class ObjectStore(
-    ObjectStorageClients clients,
-    IOptions<ObjectStorageOptions> options,
+    ObjectStoreClients clients,
+    IOptions<ObjectStoreOptions> options,
     TimeProvider time,
     ILogger<ObjectStore> logger)
 {
@@ -24,13 +20,15 @@ public sealed partial class ObjectStore(
     private const string PublishedCacheControl = "public, max-age=31536000, immutable";
 
     private readonly AmazonS3Client _client = clients.Requests;
-    private readonly ObjectStorageOptions _options = options.Value;
+    private readonly ObjectStoreOptions _options = options.Value;
 
     /// <summary>
     /// Signs a single PUT of exactly <paramref name="contentLength"/> bytes of <paramref name="contentType"/>
-    /// to <paramref name="key"/> in the private bucket. Storage rejects any other type or size.
+    /// to <paramref name="key"/> in the private bucket until <paramref name="expiresAt"/>, the deadline the caller
+    /// recorded for the upload. Storage rejects any other type or size.
     /// </summary>
-    public async Task<SignedTransfer> CreateUploadUrlAsync(string key, string contentType, long contentLength)
+    public async Task<SignedTransfer> CreateUploadUrlAsync(
+        string key, string contentType, long contentLength, DateTimeOffset expiresAt)
     {
         if (!key.StartsWith(UploadPrefix, StringComparison.Ordinal))
         {
@@ -40,7 +38,7 @@ public sealed partial class ObjectStore(
         // An empty type would leave Content-Type out of the signature, letting the upload carry any type.
         ArgumentException.ThrowIfNullOrWhiteSpace(contentType);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(contentLength);
-        var expiresAt = time.GetUtcNow() + _options.UploadUrlLifetime;
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(expiresAt, time.GetUtcNow());
         var request = new GetPreSignedUrlRequest
         {
             BucketName = _options.PrivateBucket,
@@ -157,6 +155,36 @@ public sealed partial class ObjectStore(
         }
     }
 
+    /// <summary>
+    /// Copies a private object to a new private key, only while the source still has the verified
+    /// <paramref name="sourceETag"/> and only if the destination does not exist yet. Returns false when either
+    /// condition fails; the destination then shows which one did.
+    /// </summary>
+    public async Task<bool> CopyPrivateAsync(
+        string sourceKey, string destinationKey, string sourceETag, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _client.CopyObjectAsync(
+                new CopyObjectRequest
+                {
+                    SourceBucket = _options.PrivateBucket,
+                    SourceKey = sourceKey,
+                    DestinationBucket = _options.PrivateBucket,
+                    DestinationKey = destinationKey,
+                    ETagToMatch = $"\"{sourceETag}\"",
+                    IfNoneMatch = "*"
+                },
+                cancellationToken);
+            return true;
+        }
+        catch (AmazonS3Exception exception) when (exception.StatusCode == HttpStatusCode.PreconditionFailed)
+        {
+            LogPrivateCopySkipped(exception, sourceKey, destinationKey, exception.ErrorCode, exception.RequestId);
+            return false;
+        }
+    }
+
     public Uri PublicUrl(string key) => new($"{_options.PublicBaseUrl.TrimEnd('/')}/{key}");
 
     // Signed URLs are credentials, so only the key and limits are logged.
@@ -181,4 +209,11 @@ public sealed partial class ObjectStore(
         + "(AWS error {ErrorCode}, request {RequestId})")]
     private partial void LogPublicationExists(
         Exception exception, string objectKey, string? errorCode, string? requestId);
+
+    [LoggerMessage(
+        LogLevel.Information,
+        "Private copy of {SourceKey} to {DestinationKey} was skipped: the source changed or the destination exists "
+        + "(AWS error {ErrorCode}, request {RequestId})")]
+    private partial void LogPrivateCopySkipped(
+        Exception exception, string sourceKey, string destinationKey, string? errorCode, string? requestId);
 }

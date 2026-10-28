@@ -1,6 +1,7 @@
 using EvCharging.Domain.Charging;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
+using EvCharging.Domain.Media;
 using EvCharging.Domain.Observations;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence.Entities;
@@ -37,7 +38,8 @@ public class PlatformDbContext : DbContext
     public DbSet<SessionEvidence> SessionEvidence => Set<SessionEvidence>();
     public DbSet<Operation> Operations => Set<Operation>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
-    public DbSet<FileMetadata> Files => Set<FileMetadata>();
+    public DbSet<StationMediaItem> StationMediaItems => Set<StationMediaItem>();
+    public DbSet<StationMediaVersion> StationMediaVersions => Set<StationMediaVersion>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
     public DbSet<ReservationNotification> ReservationNotifications => Set<ReservationNotification>();

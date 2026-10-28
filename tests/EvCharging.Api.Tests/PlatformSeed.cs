@@ -2,7 +2,9 @@ using EvCharging.Api.Authentication;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Identity;
 using EvCharging.Domain.Reservations;
+using EvCharging.Persistence.Entities;
 using EvCharging.Testing;
+using Microsoft.EntityFrameworkCore;
 
 namespace EvCharging.Api.Tests;
 
@@ -34,6 +36,26 @@ internal static class PlatformSeed
         database.Connectors.AddRange(connectors);
         await database.SaveChangesAsync();
         return connectors;
+    }
+
+    public static async Task<(Station Station, UserIdentity Identity)> SeedAssignedStationAsync(
+        this PlatformDatabaseFixture fixture)
+    {
+        var connector = (await fixture.SeedConnectorsAsync(1))[0];
+        var identity = new UserIdentity(Issuer, Guid.NewGuid().ToString());
+        await using var database = fixture.CreateContext("platform_migrator");
+        var operatorUser = new OperatorUser { IdentityIssuer = identity.Issuer, IdentitySubject = identity.Subject };
+        database.OperatorUsers.Add(operatorUser);
+        await database.SaveChangesAsync();
+        var station = await database.Stations.AsNoTracking()
+            .SingleAsync(value => value.Chargers.Any(charger => charger.Id == connector.ChargerId));
+        database.OperatorAssignments.Add(new OperatorAssignment
+        {
+            OperatorUserId = operatorUser.Id,
+            StationId = station.Id
+        });
+        await database.SaveChangesAsync();
+        return (station, identity);
     }
 
     public static async Task<(Driver Driver, UserIdentity Identity)> SeedDriverAsync(

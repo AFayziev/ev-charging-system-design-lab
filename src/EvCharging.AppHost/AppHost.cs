@@ -43,7 +43,7 @@ var stream = builder.AddObservationStream();
 var streamProvisioning = builder.AddObservationStreamProvisioning(stream);
 var searchIndex = builder.AddSearchIndex();
 var (searchReader, searchIndexProvisioning) = builder.AddSearchIndexAccess(searchIndex);
-var storage = builder.AddObjectStorage();
+var objectStore = builder.AddObjectStore();
 
 var apiCount = await InstanceCountAsync("api-instances");
 var gatewayCount = await InstanceCountAsync("gateway-instances");
@@ -327,7 +327,7 @@ cache.WithReference(databaseAccess.Read);
 cache.WithReference(cacheStore).WaitFor(cacheStore);
 search.WithReference(searchIndex).WaitFor(searchIndex);
 
-var objectStorage = builder.AddObjectStorageAccess(storage, gatewayPublicOrigin);
+var objectStorage = builder.AddObjectStoreAccess(objectStore, gatewayPublicOrigin);
 api.WithObjectStorage(objectStorage, objectStorage.ApiFiles);
 media.WithObjectStorage(objectStorage, objectStorage.MediaWorker)
     .WithReference(documents)

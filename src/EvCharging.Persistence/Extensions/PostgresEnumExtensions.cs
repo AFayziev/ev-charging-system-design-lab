@@ -1,4 +1,5 @@
 using EvCharging.Domain.Charging;
+using EvCharging.Domain.Media;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence.Entities;
 using Npgsql;
@@ -16,8 +17,8 @@ public static class PostgresEnumExtensions
         typeof(SessionLifecycle),
         typeof(CommandOutcome),
         typeof(ChargingCommandKind),
-        typeof(FileKind),
-        typeof(FileState),
+        typeof(StationMediaKind),
+        typeof(StationMediaVersionState),
         typeof(ReservationNotificationKind),
         typeof(NotificationDeliveryOutcome)
     ];

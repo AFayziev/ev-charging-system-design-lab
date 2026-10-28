@@ -1,8 +1,8 @@
-using EvCharging.ObjectStorage;
+using EvCharging.S3ObjectStore;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddServiceDefaults();
-builder.AddObjectStorage();
+builder.AddObjectStore();
 
 using var host = builder.Build();
 

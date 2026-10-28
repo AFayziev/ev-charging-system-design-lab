@@ -22,11 +22,11 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 - Authentication, resource authorization, API gateway, load balancing, and replicas.
 - PostgreSQL read/write routing and Npgsql connection pools, with managed
   replication, PgBouncer, and database failover in the Azure exercise.
-- MongoDB document storage, Valkey caching, Elasticsearch, and derived read models.
+- MongoDB document store, Valkey caching, Elasticsearch, and derived read models.
 - RabbitMQ work queues and publish/subscribe, Kafka observation streams, and
   Wolverine inbox/outbox and durable scheduling.
 - External provider integrations, telemetry processing, and reconciliation.
-- Cloudflare R2 object storage, media processing, generated documents, and
+- Cloudflare R2 object store, media processing, generated documents, and
   Cloudflare CDN delivery.
 - Observability, fault injection, bounded load testing, and failure recovery.
 
@@ -171,7 +171,7 @@ isolated startup in Git worktrees. Detached sessions are stopped with the
 | Valkey Admin | Valkey |
 | Elasticvue | Elasticsearch |
 | RabbitMQ Management | RabbitMQ |
-| RustFS Console | Object storage |
+| RustFS Console | Object store |
 
 - Valkey Admin **Add Connection**: `valkey:6379`, user `default`,
   `valkey-password`, TLS disabled.

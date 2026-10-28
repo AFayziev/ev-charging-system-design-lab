@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <InternalsVisibleTo Include="EvCharging.ObjectStorage.Tests" />
+    <InternalsVisibleTo Include="EvCharging.Testing" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" />

@@ -587,27 +587,31 @@ visible and preserves unrelated commands for known equipment.
     CORS for the application origin; per-host storage credentials limited to
     their operations. Verify the storage contract through upload, download, copy,
     and deletion against the local container.
-  - [ ] M10.01.2 Gallery records and upload allocation: gallery items with public
-    identifiers, kind, position, and current published version, and per-version
-    file records. An assigned operator allocates an upload within the limits and
-    receives a short-lived signed URL for a private original. The completion
-    notice verifies the object's size and type, records it as uploaded, and commits
-    the audit record and processing message together; repeated notices have no
-    further effect. Expose the limits to the editor through typed contracts.
-    Verify limits under concurrent allocation, unassigned-operator and driver
+  - [x] M10.01.2 Gallery records and upload start: gallery items with public
+    identifiers, kind, and position, and per-version file records. An assigned
+    operator starts an upload within the limits and receives a short-lived
+    signed URL for a private original. The completion notice verifies the
+    object's size and type, records it as uploaded, and commits the audit record
+    and processing message together; repeated notices have no further effect.
+    An upload that expires without arriving or arrives different fails and frees
+    its place in the gallery.
+    Expose the limits to the editor through typed contracts. Verify limits
+    under concurrently started uploads, unassigned-operator and driver
     denial, and rejected type and size.
   - [ ] M10.01.3 Photo processing and publication: Wolverine messaging and a scoped
     database role in the media worker; bounded SkiaSharp decoding into variants
     written under immutable per-version keys in the public bucket; a publication
-    transaction that switches the item's current version and publishes the
-    station-changed event. Verify undecodable and oversized images, redelivery
+    transaction that records the item's current published version and publishes
+    the station-changed event. Verify undecodable and oversized images, redelivery
     and retries converging on one publication, a reused upload URL leaving
     published bytes unchanged, and the previous version remaining published
     while a replacement fails. Depends on M10.01.2.
   - [ ] M10.01.4 Gallery management: reorder, replace, and remove with stale-version
-    rejection, audit records, and station-changed events. Removed and replaced
-    objects are left to cleanup. Verify concurrent edits and that removal hides
-    the item immediately. Depends on M10.01.3.
+    rejection, audit records, and station-changed events. Removal covers items
+    whose uploads are pending or failed. A pending version's
+    upload URL can be issued again until the upload expires. Removed and
+    replaced objects are left to cleanup. Verify concurrent edits and that
+    removal hides the item immediately. Depends on M10.01.3.
   - [ ] M10.01.5 Driver and operator UI: station list, detail, and search contracts
     carry published variant URLs from the configured public base URL; the search
     document carries the first photo. Catalog cards and search results show the
@@ -628,7 +632,7 @@ visible and preserves unrelated commands for known equipment.
   the video processing selection.
 - [ ] M10.04 Reconcile and clean up station media. Depends on M10.01.
   - [ ] M10.04.1 A recurring sweep resumes uploads whose object exists without a
-    completion notice and removes allocations that expired without an upload.
+    completion notice and removes started uploads that expired unfinished.
     Verify that a lost notice converges to publication.
   - [ ] M10.04.2 A recurring sweep deletes orphaned variants, removed items, and
     replaced versions after a grace period. Verify that a worker crash after

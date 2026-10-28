@@ -14,5 +14,8 @@ public sealed class Station : IAuditableEntity
     public required string TimeZoneId { get; set; }
     public required string AccessInstructions { get; set; }
 
+    // Gallery changes check and advance this version, separately from edits to the station's details.
+    public int GalleryVersion { get; set; }
+
     public ICollection<Charger> Chargers { get; } = [];
 }

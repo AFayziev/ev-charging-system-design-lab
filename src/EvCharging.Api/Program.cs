@@ -4,14 +4,15 @@ using EvCharging.Api.Features.Charging;
 using EvCharging.Api.Features.Drivers;
 using EvCharging.Api.Features.Observations;
 using EvCharging.Api.Features.Reservations;
+using EvCharging.Api.Features.StationMedia;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Api.Persistence;
 using EvCharging.Contracts.Observations;
 using EvCharging.DocumentStore;
 using EvCharging.Messaging;
-using EvCharging.ObjectStorage;
 using EvCharging.ObservationStream;
 using EvCharging.Persistence.Extensions;
+using EvCharging.S3ObjectStore;
 using Wolverine.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,7 +24,7 @@ builder.AddPlatformPersistence();
 builder.AddObservationStreamProducer();
 builder.AddObservationIngestion();
 builder.AddDocumentStore();
-builder.AddObjectStorage();
+builder.AddObjectStore();
 builder.Services.AddOptions<ObservationClockSkewOptions>()
     .BindConfiguration(ObservationClockSkewOptions.SectionName)
     .ValidateDataAnnotations()
@@ -37,6 +38,7 @@ builder.AddMessaging(
         options.AddApplicationHandlers();
         options.AddReservationEventRouting();
         options.AddStationEventRouting();
+        options.AddStationMediaRouting();
         options.AddChargingCommandRouting();
     });
 builder.Services.AddApplicationServices();
@@ -51,6 +53,7 @@ app.UseAuthorization();
 
 app.MapHttpApiDiagnostics("api");
 app.MapStations();
+app.MapStationMedia();
 app.MapDrivers();
 app.MapReservations();
 app.MapCharging();

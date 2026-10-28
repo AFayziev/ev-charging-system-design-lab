@@ -2,19 +2,19 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
-namespace EvCharging.ObjectStorage;
+namespace EvCharging.S3ObjectStore;
 
-public static class ObjectStorageExtensions
+public static class ObjectStoreExtensions
 {
-    public static IHostApplicationBuilder AddObjectStorage(this IHostApplicationBuilder builder)
+    public static IHostApplicationBuilder AddObjectStore(this IHostApplicationBuilder builder)
     {
-        builder.Services.AddOptions<ObjectStorageOptions>()
-            .BindConfiguration(ObjectStorageOptions.SectionName)
+        builder.Services.AddOptions<ObjectStoreOptions>()
+            .BindConfiguration(ObjectStoreOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
         builder.Services.TryAddSingleton(TimeProvider.System);
-        builder.Services.AddSingleton<ObjectStorageClients>();
+        builder.Services.AddSingleton<ObjectStoreClients>();
         builder.Services.AddSingleton<ObjectStore>();
         return builder;
     }

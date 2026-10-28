@@ -2,6 +2,7 @@
 using System;
 using System.Text.Json;
 using EvCharging.Domain.Charging;
+using EvCharging.Domain.Media;
 using EvCharging.Domain.Reservations;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Entities;
@@ -27,12 +28,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "charging_command_kind", new[] { "start", "stop" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "command_outcome", new[] { "confirmed", "pending", "rejected", "uncertain" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "file_kind", new[] { "diagnostic_bundle", "session_summary", "station_original", "station_variant" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "file_state", new[] { "awaiting_upload", "processed", "published", "uploaded" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "notification_delivery_outcome", new[] { "captured", "failed", "not_captured", "uncertain" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_notification_kind", new[] { "cancelled", "charging_completed", "created", "expired" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_state", new[] { "active", "cancelled", "consumed", "expired" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "session_lifecycle", new[] { "active", "completed", "failed", "starting", "stopping" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_kind", new[] { "photo" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_version_state", new[] { "awaiting_upload", "failed", "uploaded" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("EvCharging.Domain.Charging.ChargingSession", b =>
@@ -393,6 +394,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("address")
                         .HasAnnotation("Audit:Included", true);
 
+                    b.Property<int>("GalleryVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("gallery_version");
+
                     b.Property<decimal>("Latitude")
                         .HasColumnType("numeric")
                         .HasColumnName("latitude");
@@ -431,7 +437,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_stations_public_id");
 
-                    b.ToTable("stations", "charging");
+                    b.ToTable("stations", "charging", t =>
+                        {
+                            t.HasCheckConstraint("ck_stations_gallery_version", "gallery_version >= 0");
+                        });
 
                     b.HasAnnotation("Audit:ResourceType", "Station");
                 });
@@ -467,6 +476,134 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasDatabaseName("ix_drivers_identity_issuer_identity_subject");
 
                     b.ToTable("drivers", "charging");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<StationMediaKind>("Kind")
+                        .HasColumnType("charging.station_media_kind")
+                        .HasColumnName("kind")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.HasKey("Id")
+                        .HasName("pk_station_media_items");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_station_media_items_public_id");
+
+                    b.HasIndex("StationId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("ix_station_media_items_station_id_position");
+
+                    b.ToTable("station_media_items", "charging", t =>
+                        {
+                            t.HasCheckConstraint("ck_station_media_items_position", "position >= 0");
+                        });
+
+                    b.HasAnnotation("Audit:ResourceType", "StationMediaItem");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("ByteLength")
+                        .HasColumnType("bigint")
+                        .HasColumnName("byte_length")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<Guid>("PublicId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("public_id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<StationMediaVersionState>("State")
+                        .HasColumnType("charging.station_media_version_state")
+                        .HasColumnName("state")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset>("UploadExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("upload_expires_at")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<DateTimeOffset?>("UploadedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.HasKey("Id")
+                        .HasName("pk_station_media_versions");
+
+                    b.HasIndex("ItemId")
+                        .HasDatabaseName("ix_station_media_versions_item_id");
+
+                    b.HasIndex("PublicId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_station_media_versions_public_id");
+
+                    b.ToTable("station_media_versions", "charging", t =>
+                        {
+                            t.HasCheckConstraint("ck_station_media_versions_byte_length", "byte_length > 0");
+
+                            t.HasCheckConstraint("ck_station_media_versions_upload_expires_at", "isfinite(upload_expires_at)");
+
+                            t.HasCheckConstraint("ck_station_media_versions_uploaded_at", "(state = 'uploaded') = (uploaded_at IS NOT NULL) AND (uploaded_at IS NULL OR isfinite(uploaded_at))");
+                        });
+
+                    b.HasAnnotation("Audit:ResourceType", "StationMediaVersion");
                 });
 
             modelBuilder.Entity("EvCharging.Domain.Observations.SessionEvidence", b =>
@@ -742,75 +879,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasDatabaseName("ix_audit_entries_resource_type_resource_id_occurred_at_id");
 
                     b.ToTable("audit_entries", "charging");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Bucket")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("bucket");
-
-                    b.Property<long?>("ByteLength")
-                        .HasColumnType("bigint")
-                        .HasColumnName("byte_length");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("content_type");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<FileKind>("Kind")
-                        .HasColumnType("charging.file_kind")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("ObjectKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("object_key");
-
-                    b.Property<Guid?>("SessionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("session_id");
-
-                    b.Property<Guid?>("SourceFileId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("source_file_id");
-
-                    b.Property<FileState>("State")
-                        .HasColumnType("charging.file_state")
-                        .HasColumnName("state");
-
-                    b.Property<Guid?>("StationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("station_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_file_metadata");
-
-                    b.HasIndex("SessionId")
-                        .HasDatabaseName("ix_file_metadata_session_id");
-
-                    b.HasIndex("SourceFileId")
-                        .HasDatabaseName("ix_file_metadata_source_file_id");
-
-                    b.HasIndex("StationId")
-                        .HasDatabaseName("ix_file_metadata_station_id");
-
-                    b.HasIndex("Bucket", "ObjectKey")
-                        .IsUnique()
-                        .HasDatabaseName("ix_file_metadata_bucket_object_key");
-
-                    b.ToTable("file_metadata", "charging");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.Notification", b =>
@@ -1161,6 +1229,30 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.Navigation("Station");
                 });
 
+            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaItem", b =>
+                {
+                    b.HasOne("EvCharging.Domain.Equipment.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_station_media_items_stations_station_id");
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaVersion", b =>
+                {
+                    b.HasOne("EvCharging.Domain.Media.StationMediaItem", "Item")
+                        .WithMany("Versions")
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_station_media_versions_station_media_items_item_id");
+
+                    b.Navigation("Item");
+                });
+
             modelBuilder.Entity("EvCharging.Domain.Observations.SessionEvidence", b =>
                 {
                     b.HasOne("EvCharging.Domain.Charging.ChargingSession", null)
@@ -1202,27 +1294,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasConstraintName("fk_attempts_operations_operation_id");
 
                     b.Navigation("Operation");
-                });
-
-            modelBuilder.Entity("EvCharging.Persistence.Entities.FileMetadata", b =>
-                {
-                    b.HasOne("EvCharging.Domain.Charging.ChargingSession", null)
-                        .WithMany()
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_file_metadata_sessions_session_id");
-
-                    b.HasOne("EvCharging.Persistence.Entities.FileMetadata", null)
-                        .WithMany()
-                        .HasForeignKey("SourceFileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_file_metadata_file_metadata_source_file_id");
-
-                    b.HasOne("EvCharging.Domain.Equipment.Station", null)
-                        .WithMany()
-                        .HasForeignKey("StationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_file_metadata_stations_station_id");
                 });
 
             modelBuilder.Entity("EvCharging.Persistence.Entities.NotificationDeliveryAttempt", b =>
@@ -1302,6 +1373,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
             modelBuilder.Entity("EvCharging.Domain.Equipment.Station", b =>
                 {
                     b.Navigation("Chargers");
+                });
+
+            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaItem", b =>
+                {
+                    b.Navigation("Versions");
                 });
 #pragma warning restore 612, 618
         }

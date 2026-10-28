@@ -1,4 +1,4 @@
-namespace EvCharging.ObjectStorage;
+namespace EvCharging.S3ObjectStore;
 
 /// <summary>
 /// Object facts reported by storage, used to verify an upload before trusting it. The content type is null when

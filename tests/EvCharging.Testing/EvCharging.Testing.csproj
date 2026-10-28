@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit" />
+    <ProjectReference Include="../../src/EvCharging.S3ObjectStore/EvCharging.S3ObjectStore.csproj" />
     <ProjectReference Include="../../src/EvCharging.Persistence.Migrations/EvCharging.Persistence.Migrations.csproj" />
     <ProjectReference Include="../../src/EvCharging.Gateway.Migrations/EvCharging.Gateway.Migrations.csproj" />
     <Content Include="../../infra/postgres/platform/*.sql" TargetPath="provisioning/%(Filename)%(Extension)"

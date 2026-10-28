@@ -11,6 +11,13 @@ internal static class ErrorResponseMappings
         title: "Resource changed",
         detail: error.Message);
 
+    // Conflicts the status alone cannot distinguish carry a machine-readable code for the frontend.
+    public static ProblemHttpResult CodedConflict(string title, string detail, string code) => TypedResults.Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: title,
+        detail: detail,
+        extensions: new Dictionary<string, object?> { ["code"] = code });
+
     public static ValidationProblem ToResponse(this IEnumerable<ValidationError> errors)
     {
         var fieldErrors = errors

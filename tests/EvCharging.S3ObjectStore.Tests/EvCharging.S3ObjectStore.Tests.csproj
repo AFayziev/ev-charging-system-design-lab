@@ -5,9 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="Testcontainers" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
-    <ProjectReference Include="../../src/EvCharging.ObjectStorage/EvCharging.ObjectStorage.csproj" />
+    <ProjectReference Include="../../src/EvCharging.S3ObjectStore/EvCharging.S3ObjectStore.csproj" />
+    <ProjectReference Include="../EvCharging.Testing/EvCharging.Testing.csproj" />
   </ItemGroup>
 </Project>

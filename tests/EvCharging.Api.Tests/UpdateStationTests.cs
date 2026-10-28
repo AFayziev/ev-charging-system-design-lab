@@ -1,13 +1,9 @@
 using System.Collections.Concurrent;
-using EvCharging.Api.Authentication;
 using EvCharging.Api.Features.Stations;
 using EvCharging.Contracts.Events.Stations;
-using EvCharging.Domain.Equipment;
-using EvCharging.Persistence.Entities;
 using EvCharging.Testing;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 using Wolverine;
@@ -48,7 +44,7 @@ public sealed class UpdateStationTests(PlatformDatabaseFixture fixture) :
     [Fact]
     public async Task Update_AssignedOperator_PublishesStationChangedInTheEditTransactionGroup()
     {
-        var (station, identity) = await SeedAssignedStationAsync();
+        var (station, identity) = await fixture.SeedAssignedStationAsync();
         var request = new UpdateStationRequest(station.Version, "Renamed", station.Address, station.AccessInstructions);
 
         var result = await _api!.InvokeAsync<Result<StationEditorResponse>>(
@@ -63,7 +59,7 @@ public sealed class UpdateStationTests(PlatformDatabaseFixture fixture) :
     [Fact]
     public async Task Update_StaleVersion_PublishesNothing()
     {
-        var (station, identity) = await SeedAssignedStationAsync();
+        var (station, identity) = await fixture.SeedAssignedStationAsync();
         var request = new UpdateStationRequest(station.Version, "First", station.Address, station.AccessInstructions);
         Assert.True((await _api!.InvokeAsync<Result<StationEditorResponse>>(
             identity, new UpdateStationCommand(station.PublicId, request))).IsSuccess);
@@ -82,25 +78,6 @@ public sealed class UpdateStationTests(PlatformDatabaseFixture fixture) :
         () => Task.FromResult(Published.Any(value => value.StationId == stationId)),
         TimeSpan.FromSeconds(10),
         TimeSpan.FromMilliseconds(20));
-
-    private async Task<(Station Station, UserIdentity Identity)> SeedAssignedStationAsync()
-    {
-        var connector = (await fixture.SeedConnectorsAsync(1))[0];
-        var identity = new UserIdentity("https://test.invalid", Guid.NewGuid().ToString());
-        await using var database = fixture.CreateContext("platform_migrator");
-        var operatorUser = new OperatorUser { IdentityIssuer = identity.Issuer, IdentitySubject = identity.Subject };
-        database.OperatorUsers.Add(operatorUser);
-        await database.SaveChangesAsync();
-        var station = await database.Stations.AsNoTracking()
-            .SingleAsync(value => value.Chargers.Any(charger => charger.Id == connector.ChargerId));
-        database.OperatorAssignments.Add(new OperatorAssignment
-        {
-            OperatorUserId = operatorUser.Id,
-            StationId = station.Id
-        });
-        await database.SaveChangesAsync();
-        return (station, identity);
-    }
 
     public static class StationChangedCapture
     {

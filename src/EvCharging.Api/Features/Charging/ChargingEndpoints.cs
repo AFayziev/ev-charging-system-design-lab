@@ -37,16 +37,13 @@ internal static class ChargingEndpoints
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
             _ when result.HasError<ChargingStartError>(out var errors) =>
-                Conflict("Charging start conflict", errors.First().Message, errors.First().Code),
+                ErrorResponseMappings.CodedConflict(
+                    "Charging start conflict",
+                    errors.First().Message,
+                    errors.First().Code),
             _ => TypedResults.Accepted($"/api/reservations/{id}", result.Value)
         };
     }
-
-    private static ProblemHttpResult Conflict(string title, string detail, string code) => TypedResults.Problem(
-        statusCode: StatusCodes.Status409Conflict,
-        title: title,
-        detail: detail,
-        extensions: new Dictionary<string, object?> { ["code"] = code });
 
     private static async Task<Results<
         Accepted<StopOperationResponse>,
@@ -66,7 +63,10 @@ internal static class ChargingEndpoints
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
             _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
             _ when result.HasError<ChargingStopError>(out var errors) =>
-                Conflict("Charging stop conflict", errors.First().Message, errors.First().Code),
+                ErrorResponseMappings.CodedConflict(
+                    "Charging stop conflict",
+                    errors.First().Message,
+                    errors.First().Code),
             _ => TypedResults.Accepted($"/api/reservations/{id}", result.Value)
         };
     }

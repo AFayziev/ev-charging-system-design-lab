@@ -449,7 +449,8 @@ Public assets use a dedicated delivery origin.
 Originals, pending uploads, and summaries remain in private storage
 and bypass the CDN.
 
-Media publication proceeds through private upload allocation, direct browser
+Media publication proceeds through a started private upload, direct browser
+
 transfer, verification, bounded image processing, then a relational publication transaction
 and outbox event. Published bytes use a distinct immutable key, so a reusable
 upload URL cannot overwrite them. The previous version remains published until

@@ -16,5 +16,7 @@ internal sealed class StationConfiguration : IEntityTypeConfiguration<Station>
 
         entity.HasPublicId(station => station.PublicId);
         entity.Property(station => station.Version).IsRowVersion();
+        entity.Property(station => station.GalleryVersion).IsConcurrencyToken();
+        entity.ToTable(table => table.HasCheckConstraint("ck_stations_gallery_version", "gallery_version >= 0"));
     }
 }

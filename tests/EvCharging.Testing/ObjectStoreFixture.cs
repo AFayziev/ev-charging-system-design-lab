@@ -1,21 +1,19 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using Amazon.S3;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Images;
 using DotNet.Testcontainers.Networks;
+using EvCharging.S3ObjectStore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
-namespace EvCharging.ObjectStorage.Tests;
+namespace EvCharging.Testing;
 
-/// <summary>
-/// RustFS provisioned by the real <c>infra/rustfs/platform</c> image, so the tests run through the same buckets,
-/// access rules, and per-host users the platform uses.
-/// </summary>
-public sealed class ProvisionedStorageFixture : IAsyncLifetime
+public sealed class ObjectStoreFixture : IAsyncLifetime
 {
     public const string PrivateBucket = "private-files";
     public const string PublicBucket = "public-media";
@@ -38,7 +36,7 @@ public sealed class ProvisionedStorageFixture : IAsyncLifetime
     private readonly IContainer _storage;
     private readonly List<IHost> _hosts = [];
 
-    public ProvisionedStorageFixture() =>
+    public ObjectStoreFixture() =>
         _storage = new ContainerBuilder("rustfs/rustfs:1.0.1")
             .WithNetwork(_network)
             .WithNetworkAliases(NetworkAlias)
@@ -67,6 +65,14 @@ public sealed class ProvisionedStorageFixture : IAsyncLifetime
 
     /// <summary>An anonymous HTTP client standing in for the browser.</summary>
     public HttpClient Browser { get; } = new();
+
+    /// <summary>Sends a body to a signed upload URL as a browser would.</summary>
+    public Task<HttpResponseMessage> PutAsync(Uri url, byte[] body, string contentType)
+    {
+        var content = new ByteArrayContent(body);
+        content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        return Browser.PutAsync(url, content);
+    }
 
     public async Task InitializeAsync()
     {
@@ -98,8 +104,8 @@ public sealed class ProvisionedStorageFixture : IAsyncLifetime
         var root = await StartStorageAsync(RootAccessKey, RootSecretKey, timeout.Token);
         ApiStore = api.GetRequiredService<ObjectStore>();
         MediaWorkerStore = mediaWorker.GetRequiredService<ObjectStore>();
-        ApiClient = api.GetRequiredService<ObjectStorageClients>().Requests;
-        RootClient = root.GetRequiredService<ObjectStorageClients>().Requests;
+        ApiClient = api.GetRequiredService<ObjectStoreClients>().Requests;
+        RootClient = root.GetRequiredService<ObjectStoreClients>().Requests;
     }
 
     public async Task DisposeAsync()
@@ -130,7 +136,7 @@ public sealed class ProvisionedStorageFixture : IAsyncLifetime
             ["ObjectStorage:PublicBucket"] = PublicBucket,
             ["ObjectStorage:PublicBaseUrl"] = new Uri(ServiceUrl, PublicBucket).ToString()
         });
-        builder.AddObjectStorage();
+        builder.AddObjectStore();
         var host = builder.Build();
         _hosts.Add(host);
         await host.StartAsync(cancellationToken);

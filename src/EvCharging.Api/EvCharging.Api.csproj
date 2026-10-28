@@ -8,7 +8,7 @@
     <ProjectReference Include="../EvCharging.DocumentStore/EvCharging.DocumentStore.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <ProjectReference Include="../EvCharging.Messaging/EvCharging.Messaging.csproj" />
-    <ProjectReference Include="../EvCharging.ObjectStorage/EvCharging.ObjectStorage.csproj" />
+    <ProjectReference Include="../EvCharging.S3ObjectStore/EvCharging.S3ObjectStore.csproj" />
     <ProjectReference Include="../EvCharging.ObservationStream/EvCharging.ObservationStream.csproj" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>

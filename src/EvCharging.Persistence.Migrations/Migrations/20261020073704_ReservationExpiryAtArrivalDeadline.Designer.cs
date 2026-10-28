@@ -724,7 +724,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<FileKind>("Kind")
+                    b.Property<string>("Kind")
                         .HasColumnType("charging.file_kind")
                         .HasColumnName("kind");
 
@@ -741,7 +741,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("source_file_id");
 
-                    b.Property<FileState>("State")
+                    b.Property<string>("State")
                         .HasColumnType("charging.file_state")
                         .HasColumnName("state");
 

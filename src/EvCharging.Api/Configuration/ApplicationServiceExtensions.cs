@@ -32,6 +32,10 @@ internal static class ApplicationServiceExtensions
                 options => options.ArrivalAllowance > TimeSpan.Zero,
                 "ReservationPolicy:ArrivalAllowance must be positive.")
             .ValidateOnStart();
+        services.AddOptions<StationMediaOptions>()
+            .BindConfiguration(StationMediaOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddScoped<IAuthorizationHandler, StationAssignmentAuthorizationHandler>();
 
@@ -51,6 +55,7 @@ internal static class ApplicationServiceExtensions
         options.CodeGeneration.AlwaysUseServiceLocationFor<IAuthorizationService>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptionsSnapshot<ReservationPolicyOptions>>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<ChargingStatusCheckOptions>>();
+        options.CodeGeneration.AlwaysUseServiceLocationFor<IOptionsSnapshot<StationMediaOptions>>();
 
         // Concurrent writers can deadlock on exclusion constraints. The aborted transaction is rerun inline,
         // where it sees the winner's committed row and reports the conflict.

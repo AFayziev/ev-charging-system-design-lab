@@ -282,7 +282,7 @@ internal static class ResourceExtensions
     public static (
         IResourceBuilder<ContainerResource> Resource,
         IResourceBuilder<ParameterResource> AccessKey,
-        IResourceBuilder<ParameterResource> SecretKey) AddObjectStorage(this IDistributedApplicationBuilder builder)
+        IResourceBuilder<ParameterResource> SecretKey) AddObjectStore(this IDistributedApplicationBuilder builder)
     {
         const string DataPath = "/data";
         const int ServicePort = 9000;
@@ -290,9 +290,9 @@ internal static class ResourceExtensions
 
         var accessKey = builder.AddPersistentSecret("rustfs-access-key");
         var secretKey = builder.AddPersistentSecret("rustfs-secret-key");
-        var storage = builder.AddContainer("rustfs", "rustfs/rustfs", "1.0.1")
+        var objectStore = builder.AddContainer("rustfs", "rustfs/rustfs", "1.0.1")
             .WithImageRegistry("docker.io");
-        storage.WithVolume(VolumeNameGenerator.Generate(storage, "data"), DataPath)
+        objectStore.WithVolume(VolumeNameGenerator.Generate(objectStore, "data"), DataPath)
             .WithEnvironment("RUSTFS_ACCESS_KEY", accessKey)
             .WithEnvironment("RUSTFS_SECRET_KEY", secretKey)
             .WithEnvironment("RUSTFS_VOLUMES", DataPath)
@@ -303,21 +303,21 @@ internal static class ResourceExtensions
             .WithHttpEndpoint(targetPort: ConsolePort, name: "console")
             .WithEndpoint("console", e => e.ExcludeReferenceEndpoint = true)
             .WithHttpHealthCheck("/health");
-        return (storage, accessKey, secretKey);
+        return (objectStore, accessKey, secretKey);
     }
 
     // Buckets, access rules, and user policies live in infra/rustfs/platform.
-    public static ObjectStorageAccess AddObjectStorageAccess(
+    public static ObjectStoreAccess AddObjectStoreAccess(
         this IDistributedApplicationBuilder builder,
         (
             IResourceBuilder<ContainerResource> Resource,
             IResourceBuilder<ParameterResource> AccessKey,
-            IResourceBuilder<ParameterResource> SecretKey) storage,
+            IResourceBuilder<ParameterResource> SecretKey) objectStore,
         ReferenceExpression webOrigin)
     {
-        var endpoint = storage.Resource.GetEndpoint("http");
-        var apiFiles = new ObjectStorageUser("api-files", builder.AddPersistentSecret("storage-api-files-secret-key"));
-        var mediaWorker = new ObjectStorageUser(
+        var endpoint = objectStore.Resource.GetEndpoint("http");
+        var apiFiles = new ObjectStoreUser("api-files", builder.AddPersistentSecret("storage-api-files-secret-key"));
+        var mediaWorker = new ObjectStoreUser(
             "media-worker", builder.AddPersistentSecret("storage-media-worker-secret-key"));
         var provisioning = builder.AddDockerfile("object-storage-provisioning", "../../infra/rustfs/platform")
             .WithBuildArg("RUSTFS_CLI_IMAGE", $"docker.io/rustfs/rc:{RustFsCliImageTag}")
@@ -325,15 +325,15 @@ internal static class ResourceExtensions
                 "STORAGE_URL",
                 ReferenceExpression.Create(
                     $"http://{endpoint.Property(EndpointProperty.Host)}:{endpoint.Property(EndpointProperty.Port)}"))
-            .WithEnvironment("ROOT_ACCESS_KEY", storage.AccessKey)
-            .WithEnvironment("ROOT_SECRET_KEY", storage.SecretKey)
-            .WithEnvironment("PRIVATE_BUCKET", ObjectStorageAccess.PrivateBucket)
-            .WithEnvironment("PUBLIC_BUCKET", ObjectStorageAccess.PublicBucket)
+            .WithEnvironment("ROOT_ACCESS_KEY", objectStore.AccessKey)
+            .WithEnvironment("ROOT_SECRET_KEY", objectStore.SecretKey)
+            .WithEnvironment("PRIVATE_BUCKET", ObjectStoreAccess.PrivateBucket)
+            .WithEnvironment("PUBLIC_BUCKET", ObjectStoreAccess.PublicBucket)
             .WithEnvironment("WEB_ORIGIN", webOrigin)
             .WithEnvironment("UPLOAD_EXPIRY_DAYS", "1")
             .WithEnvironment("API_FILES_SECRET_KEY", apiFiles.SecretKey)
             .WithEnvironment("MEDIA_WORKER_SECRET_KEY", mediaWorker.SecretKey)
-            .WaitFor(storage.Resource);
+            .WaitFor(objectStore.Resource);
 
         if (builder.ExecutionContext.IsRunMode)
         {
@@ -342,23 +342,23 @@ internal static class ResourceExtensions
 
         // Signed URLs and published media links carry this browser-facing address.
         var publicServiceUrl = builder.AddBrowserOrigin(endpoint, "object-storage-public-origin");
-        return new ObjectStorageAccess(provisioning, endpoint, publicServiceUrl, apiFiles, mediaWorker);
+        return new ObjectStoreAccess(provisioning, endpoint, publicServiceUrl, apiFiles, mediaWorker);
     }
 
     public static IResourceBuilder<T> WithObjectStorage<T>(
         this IResourceBuilder<T> host,
-        ObjectStorageAccess storage,
-        ObjectStorageUser user) where T : IResourceWithEnvironment, IResourceWithWaitSupport =>
-        host.WithEnvironment("ObjectStorage__ServiceUrl", storage.Endpoint)
-            .WithEnvironment("ObjectStorage__PublicServiceUrl", storage.PublicServiceUrl)
+        ObjectStoreAccess storageAccess,
+        ObjectStoreUser user) where T : IResourceWithEnvironment, IResourceWithWaitSupport =>
+        host.WithEnvironment("ObjectStorage__ServiceUrl", storageAccess.Endpoint)
+            .WithEnvironment("ObjectStorage__PublicServiceUrl", storageAccess.PublicServiceUrl)
             .WithEnvironment("ObjectStorage__AccessKey", user.AccessKey)
             .WithEnvironment("ObjectStorage__SecretKey", user.SecretKey)
-            .WithEnvironment("ObjectStorage__PrivateBucket", ObjectStorageAccess.PrivateBucket)
-            .WithEnvironment("ObjectStorage__PublicBucket", ObjectStorageAccess.PublicBucket)
+            .WithEnvironment("ObjectStorage__PrivateBucket", ObjectStoreAccess.PrivateBucket)
+            .WithEnvironment("ObjectStorage__PublicBucket", ObjectStoreAccess.PublicBucket)
             .WithEnvironment(
                 "ObjectStorage__PublicBaseUrl",
-                ReferenceExpression.Create($"{storage.PublicServiceUrl}/{ObjectStorageAccess.PublicBucket}"))
-            .WaitForCompletion(storage.Provisioning);
+                ReferenceExpression.Create($"{storageAccess.PublicServiceUrl}/{ObjectStoreAccess.PublicBucket}"))
+            .WaitForCompletion(storageAccess.Provisioning);
 
     internal static IResourceBuilder<ParameterResource> AddPersistentSecret(
         this IDistributedApplicationBuilder builder, string name) =>
