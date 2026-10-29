@@ -360,10 +360,10 @@ source timestamps.
 | Term | Meaning |
 |---|---|
 | Station media / asset | Identified photo or illustrated instruction with ownership and processing state |
-| Upload original | Private source bytes awaiting verification |
+| Upload | Private source bytes awaiting processing |
 | Media variant | Processed representation such as a thumbnail |
 | Object / object key | Stored bytes / storage address, distinct from domain identity |
-| Published media | Validated version referenced by publication metadata |
+| Published media | Processed item whose variants are stored for delivery |
 | Signed URL | Time-limited transfer permission, not stable file identity |
 | Session summary | Private usage document from completed facts; not an invoice or fiscal receipt |
 
@@ -373,12 +373,16 @@ does not make media visible.
 Each station has an ordered media gallery of photos and at most one short
 instructional video, within [configured limits](lab.md#222-station-media-limits).
 Assigned operator users add, reorder, replace, and remove gallery items. Pending
-uploads count toward the limits; failed uploads do not. A replacement becomes visible only when published;
-until then the previous version stays visible, and a failed replacement leaves it
-in place. Removal hides the item from platform views immediately; delivery caches
-can serve it until purged. Gallery changes reject a stale editor version like
-other station content edits. Drivers and visitors see only published items, with
-a placeholder when a station has none or an item cannot be loaded.
+uploads count toward the limits; failed uploads do not. An upload that is
+rejected fails with a reason the operator sees. A replacement is an item of its
+own and counts toward the limits only through the item it replaces; it takes over
+that item's place when it is published, and until then the previous item stays
+visible, so a failed replacement leaves it in place. An item has one replacement at a time.
+Removal deletes the item and any replacement waiting for it, and hides it from
+platform views immediately; delivery caches can serve it until purged. Starting an
+upload and reordering reject a stale editor version like other station content
+edits. Drivers and visitors see only published items, with a placeholder when a
+station has none or an item cannot be loaded.
 
 ## 10. Industry terminology
 

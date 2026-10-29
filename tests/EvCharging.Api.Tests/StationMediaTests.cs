@@ -5,6 +5,7 @@ using EvCharging.Api.Configuration;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Features.StationMedia;
 using EvCharging.Api.Features.Stations;
+using EvCharging.Contracts.Events.Stations;
 using EvCharging.Contracts.Media;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Media;
@@ -31,6 +32,8 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     private const int MaximumPhotos = 2;
     private static readonly byte[] Photo = "synthetic photo bytes"u8.ToArray();
     private static readonly ConcurrentQueue<Guid> ProcessingRequests = [];
+    private static readonly ConcurrentQueue<Guid> DeletionRequests = [];
+    private static readonly ConcurrentQueue<Guid> StationChanges = [];
     private readonly FakeTimeProvider _clock = new(DateTimeOffset.UtcNow);
     private ApiHandlerHost? _api;
 
@@ -54,10 +57,16 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
             },
             options =>
             {
+                options.Policies.UseDurableLocalQueues();
                 options.Discovery.IncludeType<CompleteStationMediaUploadCommandHandler>();
                 options.Discovery.IncludeType<GetStationGalleryEditorQueryHandler>();
-                options.Discovery.IncludeType(typeof(ProcessingCapture));
+                options.Discovery.IncludeType<ReorderStationGalleryCommandHandler>();
+                options.Discovery.IncludeType<RemoveStationMediaCommandHandler>();
+                options.Discovery.IncludeType(typeof(MessageCapture));
                 options.PublishMessage<ProcessStationMediaMessage>().ToLocalQueue("station-media-processing-test");
+                options.PublishMessage<CheckStationMediaUploadMessage>().ToLocalQueue("station-media-check-test");
+                options.PublishMessage<DeleteStationMediaObjectsMessage>().ToLocalQueue("station-media-delete-test");
+                options.PublishMessage<StationChangedEvent>().ToLocalQueue("station-changed-test");
             });
 
     public async Task DisposeAsync()
@@ -80,14 +89,10 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         Assert.Equal(station.GalleryVersion + 1, upload.GalleryVersion);
         Assert.Equal(HttpStatusCode.OK, (await objectStore.PutAsync(upload.UploadUrl, Photo, Jpeg)).StatusCode);
         await using var context = database.CreateContext();
-        var version = await context.StationMediaVersions
-            .SingleAsync(version => version.PublicId == upload.VersionId);
-        Assert.Equal(StationMediaVersionState.AwaitingUpload, version.State);
-        var item = await context.StationMediaItems.SingleAsync(
-            item => item.Id == version.ItemId && item.Station!.PublicId == station.PublicId);
-        Assert.Equal(upload.ItemId, item.PublicId);
+        var item = await context.StationMediaItems.SingleAsync(item => item.PublicId == upload.ItemId);
+        Assert.Equal((station.Id, 0, StationMediaState.Uploading), (item.StationId, item.Position, item.State));
         Assert.True(await context.AuditEntries.AnyAsync(audit =>
-            audit.ResourceType == AuditResourceType.StationMediaVersion && audit.ResourceId == version.Id
+            audit.ResourceType == AuditResourceType.StationMediaItem && audit.ResourceId == item.Id
             && audit.Action == AuditAction.Added));
     }
 
@@ -137,13 +142,9 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     public async Task StartPhotoUpload_GalleryFull_ReportsTheLimit()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var version = station.GalleryVersion;
-        for (int photo = 0; photo < MaximumPhotos; photo++)
-        {
-            version = (await StartPhotoUploadAsync(identity, station.PublicId, version)).Value.GalleryVersion;
-        }
+        await FillGalleryAsync(identity, station);
 
-        var result = await StartPhotoUploadAsync(identity, station.PublicId, version);
+        var result = await StartPhotoUploadAsync(identity, station.PublicId, await GalleryVersionAsync(station));
 
         Assert.True(result.HasError<StationMediaLimitError>());
     }
@@ -158,22 +159,6 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
 
         Assert.True(stale.HasError<ConcurrencyConflictError>());
         Assert.Equal(1, await CountItemsAsync(station));
-    }
-
-    [Fact]
-    public async Task StartPhotoUpload_AfterStationDetailsChanged_KeepsTheGalleryVersion()
-    {
-        var (station, identity) = await database.SeedAssignedStationAsync();
-        await using (var context = database.CreateContext())
-        {
-            await context.Stations
-                .Where(value => value.Id == station.Id)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(value => value.Name, "Renamed"));
-        }
-
-        var result = await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion);
-
-        Assert.True(result.IsSuccess);
     }
 
     // Editors that reload after each conflict keep starting uploads until the limit stops them all.
@@ -209,106 +194,357 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     }
 
     [Fact]
-    public async Task CompleteUpload_StoredMatchingObject_KeepsTheOriginalAndRequestsProcessingOnce()
+    public async Task CompleteUpload_UploadingPhoto_RequestsProcessingOnce()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
         var upload = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
-        (await objectStore.PutAsync(upload.UploadUrl, Photo, Jpeg)).EnsureSuccessStatusCode();
-        var completion = new CompleteStationMediaUploadCommand(
-            station.PublicId, upload.ItemId, upload.VersionId);
+        var completion = new CompleteStationMediaUploadCommand(station.PublicId, upload.ItemId);
 
-        Result<StationMediaVersionResponse>? first = null;
-        Result<StationMediaVersionResponse>? repeated = null;
+        Result<StationMediaUploadStateResponse>? first = null;
+        Result<StationMediaUploadStateResponse>? repeated = null;
         await _api!.Messaging.TrackActivity().Timeout(TimeSpan.FromSeconds(30))
             .ExecuteAndWaitAsync(async Task (IMessageContext _) =>
             {
-                first = await _api.InvokeAsync<Result<StationMediaVersionResponse>>(identity, completion);
-                repeated = await _api.InvokeAsync<Result<StationMediaVersionResponse>>(identity, completion);
+                first = await _api.InvokeAsync<Result<StationMediaUploadStateResponse>>(identity, completion);
+                repeated = await _api.InvokeAsync<Result<StationMediaUploadStateResponse>>(identity, completion);
             });
 
-        Assert.Equal(StationMediaVersionState.Uploaded, first!.Value.State);
-        Assert.Equal(StationMediaVersionState.Uploaded, repeated!.Value.State);
-        var original = await objectStore.ApiStore.GetPrivateObjectAsync(
-            StationMediaObjectKeys.Original(station.PublicId, upload.ItemId, upload.VersionId),
-            CancellationToken.None);
-        Assert.Equal(Photo.Length, original?.Length);
+        Assert.Equal(StationMediaState.Processing, first!.Value.State);
+        Assert.Equal(StationMediaState.Processing, repeated!.Value.State);
         await using var context = database.CreateContext();
-        var version = await context.StationMediaVersions
-            .SingleAsync(version => version.PublicId == upload.VersionId);
-        Assert.Equal(StationMediaVersionState.Uploaded, version.State);
+        var item = await context.StationMediaItems.SingleAsync(item => item.PublicId == upload.ItemId);
+        Assert.Equal(StationMediaState.Processing, item.State);
         Assert.True(await context.AuditEntries.AnyAsync(audit =>
-            audit.ResourceType == AuditResourceType.StationMediaVersion && audit.ResourceId == version.Id
+            audit.ResourceType == AuditResourceType.StationMediaItem && audit.ResourceId == item.Id
             && audit.Action == AuditAction.Updated));
-        Assert.Single(ProcessingRequests, id => id == version.Id);
-    }
-
-    // An earlier notice kept the original but failed to save, and the upload has expired since.
-    [Fact]
-    public async Task CompleteUpload_OriginalKeptAndUploadExpired_RecordsTheOriginal()
-    {
-        var (station, identity) = await database.SeedAssignedStationAsync();
-        var upload = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
-        (await objectStore.PutAsync(upload.UploadUrl, Photo, Jpeg)).EnsureSuccessStatusCode();
-        var uploadKey = StationMediaObjectKeys.Upload(station.PublicId, upload.ItemId, upload.VersionId);
-        var stored = await objectStore.ApiStore.GetPrivateObjectAsync(uploadKey, CancellationToken.None);
-        await objectStore.ApiStore.CopyPrivateAsync(
-            uploadKey,
-            StationMediaObjectKeys.Original(station.PublicId, upload.ItemId, upload.VersionId),
-            stored!.ETag,
-            CancellationToken.None);
-        await objectStore.ApiClient.DeleteObjectAsync(ObjectStoreFixture.PrivateBucket, uploadKey);
-
-        var result = await _api!.InvokeAsync<Result<StationMediaVersionResponse>>(
-            identity, new CompleteStationMediaUploadCommand(station.PublicId, upload.ItemId, upload.VersionId));
-
-        Assert.Equal(StationMediaVersionState.Uploaded, result.Value.State);
+        Assert.Single(ProcessingRequests, id => id == item.Id);
     }
 
     [Fact]
-    public async Task CompleteUpload_ExpiredWithoutUpload_FailsAndFreesTheGalleryPlace()
+    public async Task CompleteUpload_FailedPhoto_ReportsTheFailureAndFreesTheGalleryPlace()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var version = station.GalleryVersion;
-        StationPhotoUploadResponse? upload = null;
-        for (var count = 0; count < MaximumPhotos; count++)
-        {
-            upload = (await StartPhotoUploadAsync(identity, station.PublicId, version)).Value;
-            version = upload.GalleryVersion;
-        }
+        var uploads = await FillGalleryAsync(identity, station);
+        await SettleAsync(uploads[^1].ItemId, item => item.ResolveExpiredUpload(fileExists: false));
 
-        _clock.Advance(TimeSpan.FromMinutes(30));
-        var completion = new CompleteStationMediaUploadCommand(station.PublicId, upload!.ItemId, upload.VersionId);
-        var result = await _api!.InvokeAsync<Result<StationMediaVersionResponse>>(identity, completion);
-        var repeated = await _api.InvokeAsync<Result<StationMediaVersionResponse>>(identity, completion);
+        var completion = new CompleteStationMediaUploadCommand(station.PublicId, uploads[^1].ItemId);
+        var result = await _api!.InvokeAsync<Result<StationMediaUploadStateResponse>>(identity, completion);
+        var repeated = await _api.InvokeAsync<Result<StationMediaUploadStateResponse>>(identity, completion);
 
         Assert.True(result.HasError<StationMediaUploadFailedError>());
         Assert.True(repeated.HasError<StationMediaUploadFailedError>());
-        Assert.True((await StartPhotoUploadAsync(identity, station.PublicId, version)).IsSuccess);
+        Assert.True((await StartPhotoUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station))).IsSuccess);
     }
 
     [Fact]
-    public async Task CompleteUpload_NothingUploaded_ReportsTheMissingUpload()
+    public async Task CompleteUpload_OperatorOfAnotherStation_IsForbidden()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
+        var (_, otherOperator) = await database.SeedAssignedStationAsync();
         var upload = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
 
-        var result = await _api!.InvokeAsync<Result<StationMediaVersionResponse>>(
-            identity, new CompleteStationMediaUploadCommand(station.PublicId, upload.ItemId, upload.VersionId));
+        var result = await _api!.InvokeAsync<Result<StationMediaUploadStateResponse>>(
+            otherOperator, new CompleteStationMediaUploadCommand(station.PublicId, upload.ItemId));
 
-        Assert.True(result.HasError<StationMediaUploadMissingError>());
+        Assert.True(result.HasError<ForbiddenError>());
+    }
+
+    [Fact]
+    public async Task StartPhotoUpload_ReplacingAPublishedPhoto_WaitsWithoutCountingTowardTheLimit()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var uploads = await FillGalleryAsync(identity, station);
+        await PublishAsync(uploads[0].ItemId);
+
+        var result = await StartPhotoUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: uploads[0].ItemId);
+
+        Assert.True(result.IsSuccess);
         await using var context = database.CreateContext();
+        var replacement = await context.StationMediaItems.SingleAsync(item => item.PublicId == result.Value.ItemId);
+        var replaced = await context.StationMediaItems.SingleAsync(item => item.PublicId == uploads[0].ItemId);
+        Assert.Equal(replaced.Id, replacement.ReplacesItemId);
+        Assert.Null(replacement.Position);
+        Assert.Equal(StationMediaState.Uploading, replacement.State);
+        Assert.Equal(StationMediaState.Published, replaced.State);
+        Assert.Equal(MaximumPhotos + 1, await CountItemsAsync(station));
+    }
+
+    [Fact]
+    public async Task StartPhotoUpload_ReplacingAgain_DropsTheUnfinishedReplacementAndItsFiles()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var published = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        await PublishAsync(published.ItemId);
+        var first = (await StartPhotoUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId)).Value;
+
+        var second = (await StartPhotoUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId)).Value;
+
+        await using var context = database.CreateContext();
+        Assert.False(await context.StationMediaItems.AnyAsync(item => item.PublicId == first.ItemId));
+        Assert.True(await context.StationMediaItems.AnyAsync(item => item.PublicId == second.ItemId));
+        await WaitForAsync(DeletionRequests, first.ItemId);
+    }
+
+    [Fact]
+    public async Task StartPhotoUpload_ReplacingAPhotoThatIsNotPublished_ConflictsWithoutStarting()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var pending = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+
+        var result = await StartPhotoUploadAsync(
+            identity, station.PublicId, pending.GalleryVersion, replacesItemId: pending.ItemId);
+
+        Assert.True(result.HasError<StationMediaStateError>());
+        Assert.Equal(1, await CountItemsAsync(station));
+    }
+
+    [Fact]
+    public async Task StartPhotoUpload_ReplacingAnUnknownPhoto_IsNotFound()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+
+        var result = await StartPhotoUploadAsync(
+            identity, station.PublicId, station.GalleryVersion, replacesItemId: Guid.NewGuid());
+
+        Assert.True(result.HasError<NotFoundError<Guid>>());
+    }
+
+    [Fact]
+    public async Task Reorder_EveryPhoto_RewritesTheOrderAndAnnouncesTheChange()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var uploads = await FillGalleryAsync(identity, station);
+        var version = await GalleryVersionAsync(station);
+
+        var result = await _api!.InvokeAsync<Result<StationGalleryVersionResponse>>(
+            identity,
+            new ReorderStationGalleryCommand(
+                station.PublicId,
+                new ReorderStationGalleryRequest(version, [uploads[1].ItemId, uploads[0].ItemId])));
+
+        Assert.Equal(version + 1, result.Value.GalleryVersion);
+        var editor = await EditorAsync(identity, station);
+        Assert.Equal([uploads[1].ItemId, uploads[0].ItemId], editor.Items.Select(item => item.Id));
+        Assert.Equal([0, 1], editor.Items.Select(item => item.Position));
+        await WaitForAsync(StationChanges, station.Id);
+    }
+
+    [Fact]
+    public async Task Reorder_StaleVersionOrWrongPhotos_ChangesNothing()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var uploads = await FillGalleryAsync(identity, station);
+        var version = await GalleryVersionAsync(station);
+
+        var stale = await ReorderAsync(identity, station, version - 1, [uploads[1].ItemId, uploads[0].ItemId]);
+        var missing = await ReorderAsync(identity, station, version, [uploads[1].ItemId]);
+        var foreign = await ReorderAsync(identity, station, version, [uploads[1].ItemId, Guid.NewGuid()]);
+
+        Assert.True(stale.HasError<ConcurrencyConflictError>());
+        Assert.True(missing.HasError<ValidationError>());
+        Assert.True(foreign.HasError<ValidationError>());
+        var editor = await EditorAsync(identity, station);
+        Assert.Equal(version, editor.GalleryVersion);
+        Assert.Equal([uploads[0].ItemId, uploads[1].ItemId], editor.Items.Select(item => item.Id));
+    }
+
+    [Fact]
+    public async Task Reorder_OperatorOfAnotherStation_IsForbidden()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var (_, otherOperator) = await database.SeedAssignedStationAsync();
+        var uploads = await FillGalleryAsync(identity, station);
+
+        var result = await ReorderAsync(
+            otherOperator,
+            station,
+            await GalleryVersionAsync(station),
+            [uploads[1].ItemId, uploads[0].ItemId]);
+
+        Assert.True(result.HasError<ForbiddenError>());
+    }
+
+    [Fact]
+    public async Task Remove_PublishedPhoto_HidesItAtOnceAndCleansUpItsFiles()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var uploads = await FillGalleryAsync(identity, station);
+        await PublishAsync(uploads[0].ItemId);
+        var version = await GalleryVersionAsync(station);
+        Guid removedId;
+        await using (var context = database.CreateContext())
+        {
+            removedId = await context.StationMediaItems.Where(item => item.PublicId == uploads[0].ItemId)
+                .Select(item => item.Id)
+                .SingleAsync();
+        }
+
+        var result = await RemoveAsync(identity, station, uploads[0].ItemId);
+
+        Assert.Equal(version + 1, result.Value.GalleryVersion);
+        var editor = await EditorAsync(identity, station);
+        Assert.Equal([uploads[1].ItemId], editor.Items.Select(item => item.Id));
+        await WaitForAsync(DeletionRequests, uploads[0].ItemId);
+        await WaitForAsync(StationChanges, station.Id);
+        await using var audits = database.CreateContext();
+        Assert.True(await audits.AuditEntries.AnyAsync(audit =>
+            audit.ResourceType == AuditResourceType.StationMediaItem && audit.ResourceId == removedId
+            && audit.Action == AuditAction.Deleted));
+    }
+
+    [Fact]
+    public async Task Remove_PublishedPhotoWithAReplacement_RemovesBoth()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var published = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        await PublishAsync(published.ItemId);
+        var replacement = (await StartPhotoUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId)).Value;
+
+        Assert.True((await RemoveAsync(identity, station, published.ItemId)).IsSuccess);
+
+        Assert.Equal(0, await CountItemsAsync(station));
+        await WaitForAsync(DeletionRequests, replacement.ItemId);
+    }
+
+    [Fact]
+    public async Task Remove_FailedPhoto_FreesItsPositionAndRepeatsAreHarmless()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var uploads = await FillGalleryAsync(identity, station);
+        await SettleAsync(uploads[0].ItemId, item => item.ResolveExpiredUpload(fileExists: false));
+
+        Assert.True((await RemoveAsync(identity, station, uploads[0].ItemId)).IsSuccess);
+        Assert.True((await RemoveAsync(identity, station, uploads[0].ItemId)).IsSuccess);
+
+        Assert.Equal(1, await CountItemsAsync(station));
+    }
+
+    [Fact]
+    public async Task Remove_ConcurrentRequests_LeaveTheGalleryConsistent()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var uploads = await FillGalleryAsync(identity, station);
+
+        var results = await Task.WhenAll(uploads.Select(upload => RemoveAsync(identity, station, upload.ItemId)));
+
+        Assert.All(results, result => Assert.True(result.IsSuccess || result.HasError<ConcurrencyConflictError>()));
+        var remaining = (await EditorAsync(identity, station)).Items.Count;
+        Assert.Equal(results.Count(result => result.IsFailed), remaining);
+    }
+
+    [Fact]
+    public async Task Remove_OperatorOfAnotherStation_IsForbidden()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var (_, otherOperator) = await database.SeedAssignedStationAsync();
+        var upload = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+
+        var result = await RemoveAsync(otherOperator, station, upload.ItemId);
+
+        Assert.True(result.HasError<ForbiddenError>());
+        Assert.Equal(1, await CountItemsAsync(station));
+    }
+
+    [Fact]
+    public async Task Editor_PublishedPhotoWithAReplacement_ShowsThumbnailAndReplacementState()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var published = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        await PublishAsync(published.ItemId);
+        var pending = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion + 1)).Value;
+        var replacement = (await StartPhotoUploadAsync(
+            identity, station.PublicId, pending.GalleryVersion, replacesItemId: published.ItemId)).Value;
+
+        var editor = await EditorAsync(identity, station);
+
+        var photo = editor.Items[0];
+        Assert.Equal((published.ItemId, StationMediaState.Published), (photo.Id, photo.State));
         Assert.Equal(
-            StationMediaVersionState.AwaitingUpload,
-            (await context.StationMediaVersions.SingleAsync(version => version.PublicId == upload.VersionId))
-            .State);
+            objectStore.ApiStore.PublicUrl(StationMediaObjectKeys.Variant(
+                station.PublicId, published.ItemId, StationMediaObjectKeys.ThumbnailVariant)),
+            photo.ThumbnailUrl);
+        Assert.Equal(
+            (replacement.ItemId, StationMediaState.Uploading), (photo.Replacement!.Id, photo.Replacement.State));
+        var waiting = editor.Items[1];
+        Assert.Equal((pending.ItemId, StationMediaState.Uploading), (waiting.Id, waiting.State));
+        Assert.Null(waiting.ThumbnailUrl);
+        Assert.Equal(2, editor.Items.Count);
     }
 
     private Task<Result<StationPhotoUploadResponse>> StartPhotoUploadAsync(
-        UserIdentity identity, Guid stationId, int version, string contentType = Jpeg, long? byteLength = null) =>
+        UserIdentity identity,
+        Guid stationId,
+        int version,
+        string contentType = Jpeg,
+        long? byteLength = null,
+        Guid? replacesItemId = null) =>
         _api!.InvokeAsync<Result<StationPhotoUploadResponse>>(
             identity,
             new StartStationPhotoUploadCommand(
-                stationId, new StartStationPhotoUploadRequest(version, contentType, byteLength ?? Photo.Length)));
+                stationId,
+                new StartStationPhotoUploadRequest(version, contentType, byteLength ?? Photo.Length, replacesItemId)));
+
+    private Task<Result<StationGalleryVersionResponse>> ReorderAsync(
+        UserIdentity identity, Station station, int version, IReadOnlyList<Guid> itemIds) =>
+        _api!.InvokeAsync<Result<StationGalleryVersionResponse>>(
+            identity,
+            new ReorderStationGalleryCommand(station.PublicId, new ReorderStationGalleryRequest(version, itemIds)));
+
+    private Task<Result<StationGalleryVersionResponse>> RemoveAsync(
+        UserIdentity identity, Station station, Guid itemId) =>
+        _api!.InvokeAsync<Result<StationGalleryVersionResponse>>(
+            identity, new RemoveStationMediaCommand(station.PublicId, itemId));
+
+    private async Task<StationGalleryEditorResponse> EditorAsync(UserIdentity identity, Station station) =>
+        (await _api!.InvokeAsync<Result<StationGalleryEditorResponse>>(
+            identity, new GetStationGalleryEditorRequest(station.PublicId))).Value;
+
+    private async Task<List<StationPhotoUploadResponse>> FillGalleryAsync(UserIdentity identity, Station station)
+    {
+        var uploads = new List<StationPhotoUploadResponse>();
+        var version = station.GalleryVersion;
+        for (int photo = 0; photo < MaximumPhotos; photo++)
+        {
+            var upload = (await StartPhotoUploadAsync(identity, station.PublicId, version)).Value;
+            uploads.Add(upload);
+            version = upload.GalleryVersion;
+        }
+
+        return uploads;
+    }
+
+    private async Task<int> GalleryVersionAsync(Station station)
+    {
+        await using var context = database.CreateContext();
+        return await context.Stations.Where(value => value.Id == station.Id)
+            .Select(value => value.GalleryVersion)
+            .SingleAsync();
+    }
+
+    // Stands in for the media worker, which publishes a photo once it has processed the upload.
+    private Task PublishAsync(Guid itemId) => SettleAsync(
+        itemId,
+        item =>
+        {
+            item.CompleteUpload();
+            item.Publish(null, _clock.GetUtcNow());
+        });
+
+    private async Task SettleAsync(Guid itemId, Action<StationMediaItem> change)
+    {
+        await using var context = database.CreateContext();
+        var item = await context.StationMediaItems.SingleAsync(item => item.PublicId == itemId);
+        change(item);
+        await context.SaveChangesAsync();
+    }
+
+    private static Task WaitForAsync(ConcurrentQueue<Guid> messages, Guid expected) =>
+        Polling.WaitUntilAsync(() => Task.FromResult(messages.Contains(expected)), TimeSpan.FromSeconds(30));
 
     private async Task<int> CountItemsAsync(Station station)
     {
@@ -316,8 +552,17 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         return await context.StationMediaItems.CountAsync(item => item.StationId == station.Id);
     }
 
-    public static class ProcessingCapture
+    public static class MessageCapture
     {
-        public static void Handle(ProcessStationMediaMessage message) => ProcessingRequests.Enqueue(message.VersionId);
+        public static void Handle(ProcessStationMediaMessage message) => ProcessingRequests.Enqueue(message.ItemId);
+
+        public static void Handle(CheckStationMediaUploadMessage message)
+        {
+        }
+
+        public static void Handle(DeleteStationMediaObjectsMessage message) =>
+            DeletionRequests.Enqueue(message.ItemPublicId);
+
+        public static void Handle(StationChangedEvent message) => StationChanges.Enqueue(message.StationId);
     }
 }

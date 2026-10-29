@@ -23,7 +23,7 @@ public sealed class ObjectStoreOptions
     [Required]
     public string Region { get; set; } = "us-east-1";
 
-    /// <summary>Uploads, originals, and summaries; reachable only through signed URLs.</summary>
+    /// <summary>Uploads; reachable only through signed URLs.</summary>
     [Required]
     public string PrivateBucket { get; set; } = "";
 

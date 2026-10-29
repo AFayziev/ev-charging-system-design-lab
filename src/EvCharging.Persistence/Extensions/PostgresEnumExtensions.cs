@@ -18,7 +18,7 @@ public static class PostgresEnumExtensions
         typeof(CommandOutcome),
         typeof(ChargingCommandKind),
         typeof(StationMediaKind),
-        typeof(StationMediaVersionState),
+        typeof(StationMediaState),
         typeof(ReservationNotificationKind),
         typeof(NotificationDeliveryOutcome)
     ];

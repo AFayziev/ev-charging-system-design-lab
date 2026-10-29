@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using EvCharging.Testing;
@@ -21,7 +22,7 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         var response = await objectStore.PutAsync(upload.Url, Bytes, ImageType);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var stored = await objectStore.ApiStore.GetPrivateObjectAsync(key, CancellationToken.None);
+        var stored = await objectStore.MediaWorkerStore.GetPrivateObjectAsync(key, CancellationToken.None);
         Assert.NotNull(stored);
         Assert.Equal(Bytes.Length, stored.Length);
         Assert.Equal(ImageType, stored.ContentType);
@@ -37,7 +38,7 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         var response = await objectStore.PutAsync(upload.Url, Bytes, "image/png");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Null(await objectStore.ApiStore.GetPrivateObjectAsync(key, CancellationToken.None));
+        Assert.Null(await objectStore.MediaWorkerStore.GetPrivateObjectAsync(key, CancellationToken.None));
     }
 
     [Theory]
@@ -51,12 +52,8 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         var response = await objectStore.PutAsync(upload.Url, new byte[Bytes.Length + lengthDifference], ImageType);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-        Assert.Null(await objectStore.ApiStore.GetPrivateObjectAsync(key, CancellationToken.None));
+        Assert.Null(await objectStore.MediaWorkerStore.GetPrivateObjectAsync(key, CancellationToken.None));
     }
-
-    [Fact]
-    public async Task GetPrivateObject_MissingKey_ReturnsNull() =>
-        Assert.Null(await objectStore.ApiStore.GetPrivateObjectAsync(UploadKey(), CancellationToken.None));
 
     [Fact]
     public async Task CreateDownloadUrl_StoredObject_DownloadsAsNamedAttachment()
@@ -74,39 +71,6 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
     }
 
     [Fact]
-    public async Task CopyPrivateToPublic_StoredObject_IsReadableAnonymouslyAndCacheable()
-    {
-        var publicKey = PublicKey();
-        await objectStore.MediaWorkerStore.CopyPrivateToPublicAsync(
-            await UploadAsync(), publicKey, ImageType, CancellationToken.None);
-
-        var response = await objectStore.Browser.GetAsync(objectStore.MediaWorkerStore.PublicUrl(publicKey));
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(Bytes, await response.Content.ReadAsByteArrayAsync());
-        Assert.Equal(ImageType, response.Content.Headers.ContentType?.MediaType);
-        Assert.Contains("immutable", response.Headers.CacheControl?.Extensions.Select(header => header.Name) ?? []);
-    }
-
-    [Fact]
-    public async Task CopyPrivateToPublic_ExistingKey_KeepsPublishedBytes()
-    {
-        var key = PublicKey();
-        using var published = new MemoryStream(Bytes);
-        await objectStore.MediaWorkerStore.PutPublicAsync(key, published, ImageType, CancellationToken.None);
-        var replacement = UploadKey();
-        var upload = await objectStore.ApiStore.CreateUploadUrlAsync(replacement, ImageType, 11, UploadDeadline);
-        (await objectStore.PutAsync(upload.Url, Encoding.UTF8.GetBytes("replacement"), ImageType))
-            .EnsureSuccessStatusCode();
-
-        var copied = await objectStore.MediaWorkerStore.CopyPrivateToPublicAsync(
-            replacement, key, ImageType, CancellationToken.None);
-
-        Assert.False(copied);
-        Assert.Equal(Bytes, await objectStore.Browser.GetByteArrayAsync(objectStore.MediaWorkerStore.PublicUrl(key)));
-    }
-
-    [Fact]
     public async Task PutPublic_ExistingKey_KeepsPublishedBytes()
     {
         var key = PublicKey();
@@ -120,58 +84,110 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
     }
 
     [Fact]
-    public async Task CopyPrivate_VerifiedSource_StoresItUnderTheNewKey()
+    public async Task PutPublic_Content_IsReadableAnonymouslyAndCacheable()
     {
-        var source = await UploadAsync();
-        var verified = await objectStore.ApiStore.GetPrivateObjectAsync(source, CancellationToken.None);
-        var destination = OriginalKey();
+        var key = PublicKey();
+        using var content = new MemoryStream(Bytes);
+        await objectStore.MediaWorkerStore.PutPublicAsync(key, content, ImageType, CancellationToken.None);
 
-        var copied = await objectStore.ApiStore.CopyPrivateAsync(
-            source, destination, verified!.ETag, CancellationToken.None);
+        var response = await objectStore.Browser.GetAsync(objectStore.MediaWorkerStore.PublicUrl(key));
 
-        Assert.True(copied);
-        var stored = await objectStore.ApiStore.GetPrivateObjectAsync(destination, CancellationToken.None);
-        Assert.Equal((Bytes.Length, ImageType), (stored?.Length, stored?.ContentType));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(Bytes, await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal(ImageType, response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("immutable", response.Headers.CacheControl?.Extensions.Select(header => header.Name) ?? []);
     }
 
     [Fact]
-    public async Task CopyPrivate_ExistingDestination_KeepsItsBytes()
+    public async Task ReadPrivate_StoredObject_ReturnsItsBytes()
     {
-        var first = await UploadAsync();
-        var firstETag = (await objectStore.ApiStore.GetPrivateObjectAsync(first, CancellationToken.None))!.ETag;
-        var destination = OriginalKey();
-        await objectStore.ApiStore.CopyPrivateAsync(first, destination, firstETag, CancellationToken.None);
-        var second = UploadKey();
-        var upload = await objectStore.ApiStore.CreateUploadUrlAsync(second, ImageType, 11, UploadDeadline);
-        (await objectStore.PutAsync(upload.Url, Encoding.UTF8.GetBytes("replacement"), ImageType))
-            .EnsureSuccessStatusCode();
-        var secondETag = (await objectStore.ApiStore.GetPrivateObjectAsync(second, CancellationToken.None))!.ETag;
+        var key = await UploadAsync();
 
-        var copied = await objectStore.ApiStore.CopyPrivateAsync(
-            second, destination, secondETag, CancellationToken.None);
+        var content = await objectStore.MediaWorkerStore.ReadPrivateAsync(key, Bytes.Length, CancellationToken.None);
 
-        Assert.False(copied);
-        var kept = await objectStore.ApiStore.GetPrivateObjectAsync(destination, CancellationToken.None);
-        Assert.Equal(firstETag, kept?.ETag);
+        Assert.Equal(Bytes, content);
     }
 
     [Fact]
-    public async Task CopyPrivate_SourceReplacedThroughTheSameUploadUrl_CopiesNothing()
+    public async Task ReadPrivate_MissingKey_ReturnsNull() =>
+        Assert.Null(await objectStore.MediaWorkerStore.ReadPrivateAsync(
+            UploadKey(), Bytes.Length, CancellationToken.None));
+
+    [Fact]
+    public async Task ReadPrivate_ObjectLargerThanExpected_IsNotRead()
     {
-        var source = UploadKey();
-        var upload = await objectStore.ApiStore.CreateUploadUrlAsync(source, ImageType, Bytes.Length, UploadDeadline);
-        (await objectStore.PutAsync(upload.Url, Bytes, ImageType)).EnsureSuccessStatusCode();
-        var verified = await objectStore.ApiStore.GetPrivateObjectAsync(source, CancellationToken.None);
-        var replacement = Encoding.UTF8.GetBytes("REPLACED image bytes!");
-        (await objectStore.PutAsync(upload.Url, replacement, ImageType)).EnsureSuccessStatusCode();
-        var destination = OriginalKey();
+        var key = await UploadAsync();
 
-        var copied = await objectStore.ApiStore.CopyPrivateAsync(
-            source, destination, verified!.ETag, CancellationToken.None);
-
-        Assert.False(copied);
-        Assert.Null(await objectStore.ApiStore.GetPrivateObjectAsync(destination, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidDataException>(() => objectStore.MediaWorkerStore.ReadPrivateAsync(
+            key, Bytes.Length - 1, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task DeletePublicPrefix_Prefix_RemovesOnlyThatPhotosObjects()
+    {
+        var removed = Guid.NewGuid();
+        var kept = Guid.NewGuid();
+        var station = Guid.NewGuid();
+        var removedKeys = StationMediaObjectKeys.Variants
+            .Select(variant => StationMediaObjectKeys.Variant(station, removed, variant))
+            .ToArray();
+        var keptKey = StationMediaObjectKeys.Variant(station, kept, StationMediaObjectKeys.ThumbnailVariant);
+        foreach (var key in removedKeys.Append(keptKey))
+        {
+            using var content = new MemoryStream(Bytes);
+            await objectStore.MediaWorkerStore.PutPublicAsync(key, content, ImageType, CancellationToken.None);
+        }
+
+        await objectStore.MediaWorkerStore.DeletePublicPrefixAsync(
+            StationMediaObjectKeys.VariantPrefix(station, removed), CancellationToken.None);
+
+        foreach (var key in removedKeys)
+        {
+            Assert.Equal(
+                HttpStatusCode.NotFound,
+                (await objectStore.Browser.GetAsync(objectStore.MediaWorkerStore.PublicUrl(key))).StatusCode);
+        }
+
+        Assert.Equal(
+            Bytes,
+            await objectStore.Browser.GetByteArrayAsync(
+                objectStore.MediaWorkerStore.PublicUrl(keptKey)));
+    }
+
+    [Fact]
+    public async Task DeletePrivate_StoredAndMissingObjects_LeavesNothing()
+    {
+        var key = await UploadAsync();
+
+        await objectStore.MediaWorkerStore.DeletePrivateAsync(key, CancellationToken.None);
+        await objectStore.MediaWorkerStore.DeletePrivateAsync(key, CancellationToken.None);
+
+        Assert.Null(await objectStore.MediaWorkerStore.GetPrivateObjectAsync(key, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, "InternalError", true)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "ServiceUnavailable", true)]
+    [InlineData(HttpStatusCode.OK, "SlowDown", true)]
+    [InlineData(HttpStatusCode.Forbidden, "AccessDenied", false)]
+    [InlineData(HttpStatusCode.NotFound, "NoSuchKey", false)]
+    public void IsTransientStorageFailure_StorageResponse_IsTransientOnlyWhenRepeatingCanHelp(
+        HttpStatusCode status, string code, bool transient) =>
+        Assert.Equal(
+            transient,
+            new AmazonS3Exception("failed", ErrorType.Unknown, code, "request", status).IsTransientStorageFailure());
+
+    [Fact]
+    public void IsTransientStorageFailure_BatchDeleteThatSkippedKeys_IsTransient() =>
+        Assert.True(new DeleteObjectsException(new DeleteObjectsResponse()).IsTransientStorageFailure());
+
+    [Fact]
+    public void IsTransientStorageFailure_ConnectionEndedMidRead_IsTransient() =>
+        Assert.True(new EndOfStreamException().IsTransientStorageFailure());
+
+    [Fact]
+    public void IsTransientStorageFailure_NetworkFailure_IsTransient() =>
+        Assert.True(new AmazonServiceException(new HttpRequestException("refused")).IsTransientStorageFailure());
 
     [Fact]
     public async Task AnonymousAccess_PrivateObjectAndPublicListing_AreDenied()
@@ -204,21 +220,6 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         Assert.Equal(HttpStatusCode.Forbidden, listing.StatusCode);
     }
 
-    // Listing under uploads/ lets stores that follow AWS report a missing upload as 404 rather than 403.
-    [Fact]
-    public async Task ApiFilesUser_ListingUploads_IsAllowed()
-    {
-        var key = await UploadAsync();
-
-        var listing = await objectStore.ApiClient.ListObjectsV2Async(new ListObjectsV2Request
-        {
-            BucketName = ObjectStoreFixture.PrivateBucket,
-            Prefix = key
-        });
-
-        Assert.Equal(key, Assert.Single(listing.S3Objects ?? []).Key);
-    }
-
     [Theory]
     [InlineData(ObjectStoreFixture.WebOrigin, true)]
     [InlineData("http://elsewhere.example", false)]
@@ -239,30 +240,9 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         Assert.Equal(allowed ? origin : null, allowedOrigin);
     }
 
-    [Fact]
-    public async Task PrivateBucketLifecycle_ExpiresOnlyUnverifiedUploads()
-    {
-        var lifecycle = await objectStore.RootClient.GetLifecycleConfigurationAsync(
-            ObjectStoreFixture.PrivateBucket);
-
-        var rule = Assert.Single(lifecycle.Configuration.Rules);
-        Assert.Equal(LifecycleRuleStatus.Enabled, rule.Status);
-        Assert.Equal(
-            ObjectStore.UploadPrefix,
-            rule.Filter.LifecycleFilterPredicate switch
-            {
-                LifecyclePrefixPredicate prefix => prefix.Prefix,
-                _ => rule.Filter.Prefix
-            });
-        Assert.Equal(ObjectStoreFixture.UploadExpiryDays, rule.Expiration.Days);
-    }
-
     private static DateTimeOffset UploadDeadline => DateTimeOffset.UtcNow.AddMinutes(30);
 
     private static string UploadKey() => $"{ObjectStore.UploadPrefix}{Guid.NewGuid():N}";
-
-    private static string OriginalKey() =>
-        StationMediaObjectKeys.Original(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
 
     private static string PublicKey() => $"stations/{Guid.NewGuid():N}/display.webp";
 

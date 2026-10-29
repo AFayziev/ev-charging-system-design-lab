@@ -388,6 +388,15 @@ Requires Docker for delivery-state integration tests.
 dotnet test tests/EvCharging.NotificationWorker.Tests
 ```
 
+### Media worker tests
+
+Requires Docker for the PostgreSQL and object storage integration tests, which
+run the real storage provisioning.
+
+```sh
+dotnet test tests/EvCharging.MediaWorker.Tests
+```
+
 ### Search index worker tests
 
 Requires Docker for the Elasticsearch and PostgreSQL integration tests.

@@ -33,7 +33,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_state", new[] { "active", "cancelled", "consumed", "expired" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "session_lifecycle", new[] { "active", "completed", "failed", "starting", "stopping" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_kind", new[] { "photo" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_version_state", new[] { "awaiting_upload", "failed", "uploaded" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_state", new[] { "failed", "processing", "published", "uploading" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("EvCharging.Domain.Charging.ChargingSession", b =>
@@ -485,57 +485,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<StationMediaKind>("Kind")
-                        .HasColumnType("charging.station_media_kind")
-                        .HasColumnName("kind")
-                        .HasAnnotation("Audit:Included", true);
-
-                    b.Property<int>("Position")
-                        .HasColumnType("integer")
-                        .HasColumnName("position")
-                        .HasAnnotation("Audit:Included", true);
-
-                    b.Property<Guid>("PublicId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("public_id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("StationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("station_id")
-                        .HasAnnotation("Audit:Included", true);
-
-                    b.HasKey("Id")
-                        .HasName("pk_station_media_items");
-
-                    b.HasIndex("PublicId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_station_media_items_public_id");
-
-                    b.HasIndex("StationId", "Position")
-                        .IsUnique()
-                        .HasDatabaseName("ix_station_media_items_station_id_position");
-
-                    b.ToTable("station_media_items", "charging", t =>
-                        {
-                            t.HasCheckConstraint("ck_station_media_items_position", "position >= 0");
-                        });
-
-                    b.HasAnnotation("Audit:ResourceType", "StationMediaItem");
-                });
-
-            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaVersion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
                     b.Property<long>("ByteLength")
                         .HasColumnType("bigint")
                         .HasColumnName("byte_length")
@@ -552,9 +501,20 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<Guid>("ItemId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("item_id")
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("failure_code")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<StationMediaKind>("Kind")
+                        .HasColumnType("charging.station_media_kind")
+                        .HasColumnName("kind")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<int?>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position")
                         .HasAnnotation("Audit:Included", true);
 
                     b.Property<Guid>("PublicId")
@@ -563,15 +523,30 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("public_id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<Guid?>("ReplacesItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("replaces_item_id")
+                        .HasAnnotation("Audit:Included", true);
+
                     b.Property<uint>("RowVersion")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
-                    b.Property<StationMediaVersionState>("State")
-                        .HasColumnType("charging.station_media_version_state")
+                    b.Property<StationMediaState>("State")
+                        .HasColumnType("charging.station_media_state")
                         .HasColumnName("state")
+                        .HasAnnotation("Audit:Included", true);
+
+                    b.Property<Guid>("StationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("station_id")
                         .HasAnnotation("Audit:Included", true);
 
                     b.Property<DateTimeOffset>("UploadExpiresAt")
@@ -579,31 +554,36 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("upload_expires_at")
                         .HasAnnotation("Audit:Included", true);
 
-                    b.Property<DateTimeOffset?>("UploadedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("uploaded_at")
-                        .HasAnnotation("Audit:Included", true);
-
                     b.HasKey("Id")
-                        .HasName("pk_station_media_versions");
-
-                    b.HasIndex("ItemId")
-                        .HasDatabaseName("ix_station_media_versions_item_id");
+                        .HasName("pk_station_media_items");
 
                     b.HasIndex("PublicId")
                         .IsUnique()
-                        .HasDatabaseName("ix_station_media_versions_public_id");
+                        .HasDatabaseName("ix_station_media_items_public_id");
 
-                    b.ToTable("station_media_versions", "charging", t =>
+                    b.HasIndex("ReplacesItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_station_media_items_replaces_item_id");
+
+                    b.HasIndex("StationId")
+                        .HasDatabaseName("ix_station_media_items_station_id");
+
+                    b.ToTable("station_media_items", "charging", t =>
                         {
-                            t.HasCheckConstraint("ck_station_media_versions_byte_length", "byte_length > 0");
+                            t.HasCheckConstraint("ck_station_media_items_byte_length", "byte_length > 0");
 
-                            t.HasCheckConstraint("ck_station_media_versions_upload_expires_at", "isfinite(upload_expires_at)");
+                            t.HasCheckConstraint("ck_station_media_items_failure_code", "(state = 'failed') = (failure_code IS NOT NULL) AND (failure_code IS NULL OR failure_code IN ('upload_missing', 'upload_expired', 'undecodable', 'too_many_pixels', 'unsupported_format'))");
 
-                            t.HasCheckConstraint("ck_station_media_versions_uploaded_at", "(state = 'uploaded') = (uploaded_at IS NOT NULL) AND (uploaded_at IS NULL OR isfinite(uploaded_at))");
+                            t.HasCheckConstraint("ck_station_media_items_position", "position >= 0");
+
+                            t.HasCheckConstraint("ck_station_media_items_published_at", "(state = 'published') = (published_at IS NOT NULL) AND (published_at IS NULL OR isfinite(published_at))");
+
+                            t.HasCheckConstraint("ck_station_media_items_replacement_position", "(position IS NULL) = (replaces_item_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_station_media_items_upload_expires_at", "isfinite(upload_expires_at)");
                         });
 
-                    b.HasAnnotation("Audit:ResourceType", "StationMediaVersion");
+                    b.HasAnnotation("Audit:ResourceType", "StationMediaItem");
                 });
 
             modelBuilder.Entity("EvCharging.Domain.Observations.SessionEvidence", b =>
@@ -1231,6 +1211,12 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
             modelBuilder.Entity("EvCharging.Domain.Media.StationMediaItem", b =>
                 {
+                    b.HasOne("EvCharging.Domain.Media.StationMediaItem", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacesItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_station_media_items_station_media_items_replaces_item_id");
+
                     b.HasOne("EvCharging.Domain.Equipment.Station", "Station")
                         .WithMany()
                         .HasForeignKey("StationId")
@@ -1239,18 +1225,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasConstraintName("fk_station_media_items_stations_station_id");
 
                     b.Navigation("Station");
-                });
-
-            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaVersion", b =>
-                {
-                    b.HasOne("EvCharging.Domain.Media.StationMediaItem", "Item")
-                        .WithMany("Versions")
-                        .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_station_media_versions_station_media_items_item_id");
-
-                    b.Navigation("Item");
                 });
 
             modelBuilder.Entity("EvCharging.Domain.Observations.SessionEvidence", b =>
@@ -1373,11 +1347,6 @@ namespace EvCharging.Persistence.Migrations.Migrations
             modelBuilder.Entity("EvCharging.Domain.Equipment.Station", b =>
                 {
                     b.Navigation("Chargers");
-                });
-
-            modelBuilder.Entity("EvCharging.Domain.Media.StationMediaItem", b =>
-                {
-                    b.Navigation("Versions");
                 });
 #pragma warning restore 612, 618
         }

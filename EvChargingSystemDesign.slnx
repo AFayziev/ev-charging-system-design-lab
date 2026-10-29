@@ -38,6 +38,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/EvCharging.ChargingWorker.Tests/EvCharging.ChargingWorker.Tests.csproj" />
     <Project Path="tests/EvCharging.S3ObjectStore.Tests/EvCharging.S3ObjectStore.Tests.csproj" />
+    <Project Path="tests/EvCharging.MediaWorker.Tests/EvCharging.MediaWorker.Tests.csproj" />
     <Project Path="tests/EvCharging.ObservationWorker.Tests/EvCharging.ObservationWorker.Tests.csproj" />
     <Project Path="tests/EvCharging.Api.Tests/EvCharging.Api.Tests.csproj" />
     <Project Path="tests/EvCharging.Domain.Tests/EvCharging.Domain.Tests.csproj" />

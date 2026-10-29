@@ -5,7 +5,6 @@ using EvCharging.Api.Features.Stations;
 using EvCharging.Contracts.Media;
 using EvCharging.Domain.Media;
 using EvCharging.Persistence;
-using EvCharging.S3ObjectStore;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -13,126 +12,72 @@ using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.StationMedia;
 
-public sealed record CompleteStationMediaUploadCommand(Guid StationId, Guid ItemId, Guid VersionId)
-    : IAuthenticatedRequest<StationMediaVersionResponse>;
+public sealed record CompleteStationMediaUploadCommand(Guid StationId, Guid ItemId)
+    : IAuthenticatedRequest<StationMediaUploadStateResponse>;
 
-public sealed record StationMediaVersionResponse(Guid ItemId, Guid VersionId, StationMediaVersionState State);
-
-internal sealed class StationMediaUploadChangedError()
-    : Error("The upload was replaced while it was being checked. Send the completion again.")
-{
-    public const string Code = "upload_changed";
-}
+public sealed record StationMediaUploadStateResponse(Guid ItemId, StationMediaState State);
 
 public sealed class CompleteStationMediaUploadCommandHandler(
     PlatformDbContext database,
     IDbContextOutbox outbox,
-    IAuthorizationService authorization,
-    ObjectStore objectStore,
-    TimeProvider clock)
+    IAuthorizationService authorization)
 {
-    public async Task<Result<StationMediaVersionResponse>> HandleAsync(
+    public async Task<Result<StationMediaUploadStateResponse>> HandleAsync(
         CompleteStationMediaUploadCommand command, ClaimsPrincipal user, CancellationToken cancellationToken)
     {
-        // Treats the browser's completion notice as a hint: the upload is checked against how it started, the verified
-        // bytes move out of the expiring upload area, and the version records the kept original with its processing request.
-        // An upload that expired without arriving, or arrived different, fails so that it no longer holds a gallery place.
-
-        var mediaItemVersion = await database.StationMediaVersions
-            .Include(version => version.Item)
-            .ThenInclude(item => item!.Station)
+        // The browser's completion notice is a hint: it queues the photo for processing, and the media worker
+        // checks the file itself. Repeated notices queue nothing more.
+        var mediaItem = await database.StationMediaItems
+            .Include(item => item.Station)
             .SingleOrDefaultAsync(
-                version => version.PublicId == command.VersionId
-                    && version.Item!.PublicId == command.ItemId
-                    && version.Item.Station!.PublicId == command.StationId,
+                item => item.PublicId == command.ItemId && item.Station!.PublicId == command.StationId,
                 cancellationToken);
-        if (mediaItemVersion is null)
+        if (mediaItem is null)
         {
-            return Result.Fail<StationMediaVersionResponse>(
-                new NotFoundError<Guid>("media item version", command.VersionId));
+            return Result.Fail<StationMediaUploadStateResponse>(new NotFoundError<Guid>("media item", command.ItemId));
         }
 
-        var mediaItem = mediaItemVersion.Item!;
-        var station = mediaItem.Station!;
-        var permission = await authorization.AuthorizeAsync(user, station, [StationAssignmentRequirement.Instance]);
+        var permission = await authorization.AuthorizeAsync(
+            user, mediaItem.Station!, [StationAssignmentRequirement.Instance]);
         if (!permission.Succeeded)
         {
-            return Result.Fail<StationMediaVersionResponse>(new ForbiddenError());
+            return Result.Fail<StationMediaUploadStateResponse>(new ForbiddenError());
         }
 
-        if (mediaItemVersion.State == StationMediaVersionState.AwaitingUpload)
+        var completion = mediaItem.CompleteUpload();
+        if (completion.IsFailed)
         {
-            var storedObjectResult = await KeepOriginalAsync(
-                mediaItemVersion, station.PublicId, mediaItem.PublicId, cancellationToken);
-            if (storedObjectResult.IsFailed)
-            {
-                return Result.Fail<StationMediaVersionResponse>(storedObjectResult.Errors);
-            }
+            return Result.Fail<StationMediaUploadStateResponse>(completion.Errors);
+        }
 
-            var now = clock.GetUtcNow();
-            var changeResult = storedObjectResult.Value is { } file
-                ? mediaItemVersion.CompleteUpload(file.Length, file.ContentType, now)
-                : mediaItemVersion.RecordMissingUpload(now);
-            if (mediaItemVersion.State == StationMediaVersionState.AwaitingUpload)
-            {
-                return Result.Fail<StationMediaVersionResponse>(changeResult.Errors);
-            }
-
+        if (completion.Value)
+        {
             outbox.Enroll(database);
-            if (mediaItemVersion.State == StationMediaVersionState.Uploaded)
-            {
-                await outbox.PublishAsync(new ProcessStationMediaMessage(mediaItemVersion.Id));
-            }
-
+            await outbox.PublishAsync(new ProcessStationMediaMessage(mediaItem.Id));
             try
             {
                 await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
             }
             catch (DbUpdateConcurrencyException)
             {
-                // Another writer changed the version first, so its stored state is the answer.
-                await database.Entry(mediaItemVersion).ReloadAsync(cancellationToken);
+                // The upload deadline or a removal settled the photo first, so its stored state is the answer.
+                await database.Entry(mediaItem).ReloadAsync(cancellationToken);
+                if (database.Entry(mediaItem).State == EntityState.Detached)
+                {
+                    return Result.Fail<StationMediaUploadStateResponse>(
+                        new NotFoundError<Guid>("media item", command.ItemId));
+                }
+
+                if (mediaItem.State == StationMediaState.Uploading)
+                {
+                    // Another change, such as a reorder, got in between and nothing was queued: the browser repeats it.
+                    return Result.Fail<StationMediaUploadStateResponse>(new ConcurrencyConflictError());
+                }
             }
         }
 
-        return mediaItemVersion.State == StationMediaVersionState.Failed
-            ? Result.Fail<StationMediaVersionResponse>(new StationMediaUploadFailedError())
-            : Result.Ok(mediaItemVersion.ToResponse());
+        return mediaItem.State == StationMediaState.Failed
+            ? Result.Fail<StationMediaUploadStateResponse>(new StationMediaUploadFailedError())
+            : Result.Ok(new StationMediaUploadStateResponse(mediaItem.PublicId, mediaItem.State));
     }
-
-
-    private async Task<Result<StoredObject?>> KeepOriginalAsync(
-        StationMediaVersion mediaItemVersion, Guid stationId, Guid itemId, CancellationToken cancellationToken)
-    {
-        // Returns the stored file the version records, or null when nothing has been stored yet:
-        // - A matching upload is copied to the original, only if it hasn't changed since it was checked, because the
-        //   upload URL accepts new files until it expires.
-        // - An upload that doesn't match is returned without copying, so the version fails on it.
-        // - Otherwise an original kept by an earlier attempt is returned, even if the upload has expired since.
-        // - An upload that couldn't be copied and left no original was replaced during the check.
-
-        var uploadKey = StationMediaObjectKeys.Upload(stationId, itemId, mediaItemVersion.PublicId);
-        var originalKey = StationMediaObjectKeys.Original(stationId, itemId, mediaItemVersion.PublicId);
-        var uploadedObject = await objectStore.GetPrivateObjectAsync(uploadKey, cancellationToken);
-        if (uploadedObject is not null
-            && (!mediaItemVersion.MatchesStoredMetadata(uploadedObject.Length, uploadedObject.ContentType)
-                || await objectStore.CopyPrivateAsync(uploadKey, originalKey, uploadedObject.ETag, cancellationToken)))
-        {
-            return Result.Ok<StoredObject?>(uploadedObject);
-        }
-
-        var originalObject = await objectStore.GetPrivateObjectAsync(originalKey, cancellationToken);
-        if (originalObject is not null || uploadedObject is null)
-        {
-            return Result.Ok(originalObject);
-        }
-
-        return Result.Fail<StoredObject?>(new StationMediaUploadChangedError());
-    }
-}
-
-internal static class StationMediaVersionMappings
-{
-    public static StationMediaVersionResponse ToResponse(this StationMediaVersion version) =>
-        new(version.Item!.PublicId, version.PublicId, version.State);
 }

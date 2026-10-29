@@ -474,9 +474,9 @@ The initial booking-limit experiment configures admission limits as follows.
 | Photo variants | WebP thumbnail (480 px longest edge) and display image (1600 px longest edge) |
 | Instructional video upload | MP4; at most 50 MB and 60 seconds |
 | Upload URL lifetime | 30 minutes |
-| Unverified upload retention | 1 day |
+| Pending upload retention | 1 day |
 
-Verification of the stored object remains authoritative for the size and type limits.
+Processing of the stored file remains authoritative for the size and type limits.
 
 ### 2.3 Verification tools
 
@@ -528,8 +528,9 @@ public API and the resulting platform state.
 | Valkey backplane unavailable and restored | Cross-instance live fan-out interruption is visible; bounded polling/reconnect obtains current snapshots, then fan-out resumes |
 | Search unavailable | Discovery is visibly unavailable; booking and commands for known equipment continue |
 | Provider rate-limited/down | Its work isolated; retries bounded and durable intent retained |
-| Upload succeeds but completion notice is lost | Sweep verifies object and safely resumes processing |
-| Media worker fails after writing variants | Retry converges, old publication remains usable, orphan cleanup is visible |
+| Upload succeeds but completion notice is lost | The check at the upload deadline finds the object and resumes processing |
+| Completion notice arrives before the file | Processing retries by a delayed message until the file lands or the upload URL expires, then the item fails as `upload_missing` |
+| Media worker fails after writing variants | Retry converges on the same variants, and the old publication remains usable |
 | Signed upload URL reused | Immutable published bytes cannot be overwritten |
 | Object storage lost | Files can fail while charging continues; processing retries retain references |
 | Warm and uncached synthetic objects deleted at the R2 origin | Warm edge hits can serve until expiry/eviction; cache misses fail and unavailable media shows placeholders; purge removes stale cached publication |

@@ -13,10 +13,10 @@ public sealed partial class ObjectStore(
     TimeProvider time,
     ILogger<ObjectStore> logger)
 {
-    /// <summary>Unverified browser uploads. Storage lifecycle rules expire this prefix.</summary>
+    /// <summary>Pending browser uploads. Storage lifecycle rules expire this prefix.</summary>
     public const string UploadPrefix = "uploads/";
 
-    // Published keys are unique per version and never rewritten, so caches may keep them indefinitely.
+    // Published keys are fixed per photo and variant and never rewritten, so caches may keep them indefinitely.
     private const string PublishedCacheControl = "public, max-age=31536000, immutable";
 
     private readonly AmazonS3Client _client = clients.Requests;
@@ -125,65 +125,60 @@ public sealed partial class ObjectStore(
     }
 
     /// <summary>
-    /// Publishes a private object unchanged under a new public key unless that key already exists. Returns false
-    /// when it does, like <see cref="PutPublicAsync"/>.
+    /// Reads a private object that the caller expects to be at most <paramref name="maximumLength"/> bytes, or
+    /// returns null when nothing is stored there. Storage already enforces the signed upload's size, so a longer
+    /// object means the key was written some other way and is not read.
     /// </summary>
-    public async Task<bool> CopyPrivateToPublicAsync(
-        string sourceKey, string publicKey, string contentType, CancellationToken cancellationToken)
+    public async Task<byte[]?> ReadPrivateAsync(string key, long maximumLength, CancellationToken cancellationToken)
     {
         try
         {
-            await _client.CopyObjectAsync(
-                new CopyObjectRequest
-                {
-                    SourceBucket = _options.PrivateBucket,
-                    SourceKey = sourceKey,
-                    DestinationBucket = _options.PublicBucket,
-                    DestinationKey = publicKey,
-                    MetadataDirective = S3MetadataDirective.REPLACE,
-                    ContentType = contentType,
-                    Headers = { CacheControl = PublishedCacheControl },
-                    IfNoneMatch = "*"
-                },
-                cancellationToken);
-            return true;
+            using var response = await _client.GetObjectAsync(_options.PrivateBucket, key, cancellationToken);
+            if (response.ContentLength < 0 || response.ContentLength > maximumLength)
+            {
+                throw new InvalidDataException(
+                    $"The object {key} is {response.ContentLength} bytes, not the at most {maximumLength} expected.");
+            }
+
+            var content = new byte[response.ContentLength];
+            await response.ResponseStream.ReadExactlyAsync(content, cancellationToken);
+            return content;
         }
-        catch (AmazonS3Exception exception) when (exception.StatusCode == HttpStatusCode.PreconditionFailed)
+        catch (AmazonS3Exception exception) when (exception.StatusCode == HttpStatusCode.NotFound)
         {
-            LogPublicationExists(exception, publicKey, exception.ErrorCode, exception.RequestId);
-            return false;
+            LogObjectMissing(exception, key, exception.ErrorCode, exception.RequestId);
+            return null;
         }
     }
 
-    /// <summary>
-    /// Copies a private object to a new private key, only while the source still has the verified
-    /// <paramref name="sourceETag"/> and only if the destination does not exist yet. Returns false when either
-    /// condition fails; the destination then shows which one did.
-    /// </summary>
-    public async Task<bool> CopyPrivateAsync(
-        string sourceKey, string destinationKey, string sourceETag, CancellationToken cancellationToken)
+    /// <summary>Deletes every published object under <paramref name="prefix"/>; absent objects are not an error.</summary>
+    public async Task DeletePublicPrefixAsync(string prefix, CancellationToken cancellationToken)
     {
-        try
+        var listing = new ListObjectsV2Request { BucketName = _options.PublicBucket, Prefix = prefix };
+        ListObjectsV2Response page;
+        do
         {
-            await _client.CopyObjectAsync(
-                new CopyObjectRequest
-                {
-                    SourceBucket = _options.PrivateBucket,
-                    SourceKey = sourceKey,
-                    DestinationBucket = _options.PrivateBucket,
-                    DestinationKey = destinationKey,
-                    ETagToMatch = $"\"{sourceETag}\"",
-                    IfNoneMatch = "*"
-                },
-                cancellationToken);
-            return true;
+            page = await _client.ListObjectsV2Async(listing, cancellationToken);
+            if (page.S3Objects is { Count: > 0 })
+            {
+                await _client.DeleteObjectsAsync(
+                    new DeleteObjectsRequest
+                    {
+                        BucketName = _options.PublicBucket,
+                        Objects = page.S3Objects.Select(s3Object => new KeyVersion { Key = s3Object.Key }).ToList(),
+                        Quiet = true
+                    },
+                    cancellationToken);
+            }
+
+            listing.ContinuationToken = page.NextContinuationToken;
         }
-        catch (AmazonS3Exception exception) when (exception.StatusCode == HttpStatusCode.PreconditionFailed)
-        {
-            LogPrivateCopySkipped(exception, sourceKey, destinationKey, exception.ErrorCode, exception.RequestId);
-            return false;
-        }
+        while (page.IsTruncated == true);
     }
+
+    /// <summary>Deletes a private object; an absent object is not an error.</summary>
+    public Task DeletePrivateAsync(string key, CancellationToken cancellationToken) =>
+        _client.DeleteObjectAsync(_options.PrivateBucket, key, cancellationToken);
 
     public Uri PublicUrl(string key) => new($"{_options.PublicBaseUrl.TrimEnd('/')}/{key}");
 
@@ -209,11 +204,4 @@ public sealed partial class ObjectStore(
         + "(AWS error {ErrorCode}, request {RequestId})")]
     private partial void LogPublicationExists(
         Exception exception, string objectKey, string? errorCode, string? requestId);
-
-    [LoggerMessage(
-        LogLevel.Information,
-        "Private copy of {SourceKey} to {DestinationKey} was skipped: the source changed or the destination exists "
-        + "(AWS error {ErrorCode}, request {RequestId})")]
-    private partial void LogPrivateCopySkipped(
-        Exception exception, string sourceKey, string destinationKey, string? errorCode, string? requestId);
 }

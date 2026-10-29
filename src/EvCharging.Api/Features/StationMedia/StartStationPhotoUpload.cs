@@ -4,34 +4,37 @@ using EvCharging.Api.Authentication;
 using EvCharging.Api.Configuration;
 using EvCharging.Api.Errors;
 using EvCharging.Api.Features.Stations;
+using EvCharging.Contracts.Media;
 using EvCharging.Domain.Media;
 using EvCharging.Persistence;
-using EvCharging.Persistence.Extensions;
 using EvCharging.S3ObjectStore;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Wolverine;
+using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.StationMedia;
 
 public sealed record StartStationPhotoUploadRequest(
     [property: Range(0, int.MaxValue)] int GalleryVersion,
     [property: Required, MaxLength(100)] string ContentType,
-    long ByteLength);
+    long ByteLength,
+    Guid? ReplacesItemId = null);
 
 public sealed record StartStationPhotoUploadCommand(Guid StationId, StartStationPhotoUploadRequest Request)
     : IAuthenticatedRequest<StationPhotoUploadResponse>;
 
 public sealed record StationPhotoUploadResponse(
     Guid ItemId,
-    Guid VersionId,
     Uri UploadUrl,
     DateTimeOffset UploadExpiresAt,
     int GalleryVersion);
 
 public sealed class StartStationPhotoUploadCommandHandler(
     PlatformDbContext database,
+    IDbContextOutbox outbox,
     IAuthorizationService authorization,
     ObjectStore objectStore,
     TimeProvider clock,
@@ -53,24 +56,11 @@ public sealed class StartStationPhotoUploadCommandHandler(
             return Result.Fail<StationPhotoUploadResponse>(new ForbiddenError());
         }
 
-        // Items whose uploads failed keep their positions but no longer count toward the limit.
-        var failedState = StationMediaVersionState.Failed;
-        var galleryOccupancy = await database.StationMediaItems
-            .Where(item => item.StationId == station.Id)
-            .GroupBy(item => item.StationId)
-            .Select(items => new GalleryOccupancy(
-                items.Count(item => item.Versions.Any(version => version.State != failedState)),
-                items.Max(item => item.Position) + 1))
-            .SingleOrDefaultAsync(cancellationToken);
+        outbox.Enroll(database);
         var request = command.Request;
-        var upload = StationMediaItem.StartPhotoUpload(
-            station,
-            galleryOccupancy?.Count ?? 0,
-            galleryOccupancy?.NextPosition ?? 0,
-            request.ContentType,
-            request.ByteLength,
-            mediaOptions.Value.ToDomain(),
-            clock.GetUtcNow());
+        var upload = request.ReplacesItemId is { } replacesItemId
+            ? await StartReplacementAsync(station, replacesItemId, request, cancellationToken)
+            : await StartPhotoAsync(station, request, cancellationToken);
         if (upload.IsFailed)
         {
             return Result.Fail<StationPhotoUploadResponse>(upload.Errors.Select(error => error switch
@@ -82,38 +72,92 @@ public sealed class StartStationPhotoUploadCommandHandler(
 
         var mediaItem = upload.Value;
         database.StationMediaItems.Add(mediaItem);
+
         // Every gallery change advances the gallery version, so the browser's version rejects stale editors and
         // makes concurrent uploads conflict instead of passing the limit together.
         database.Entry(station).Property(station => station.GalleryVersion).OriginalValue = request.GalleryVersion;
+
+        // Signing is local and the URL expires at the recorded deadline. It is made before the commit, so a failure
+        // to sign leaves no photo behind.
+        var uploadUrl = await objectStore.CreateUploadUrlAsync(
+            StationMediaObjectKeys.Upload(station.PublicId, mediaItem.PublicId),
+            mediaItem.ContentType,
+            mediaItem.ByteLength,
+            mediaItem.UploadExpiresAt);
+
+        // The completion notice is only a hint, so the upload deadline settles a photo that never reports in.
+        await outbox.ScheduleAsync(new CheckStationMediaUploadMessage(mediaItem.Id), mediaItem.UploadExpiresAt);
         try
         {
-            await database.SaveChangesAsync(cancellationToken);
+            await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException)
         {
             return Result.Fail<StationPhotoUploadResponse>(new ConcurrencyConflictError());
         }
-        catch (DbUpdateException exception) when (exception.IsStationMediaPositionTaken())
-        {
-            // A concurrent upload took the position before this one's gallery version was checked.
-            return Result.Fail<StationPhotoUploadResponse>(new ConcurrencyConflictError());
-        }
-
-        // Signing is local, so it follows the commit; an upload left without a URL expires like an
-        // abandoned one. The URL expires at the recorded deadline.
-        var mediaItemVersion = mediaItem.Versions.Single();
-        var uploadUrl = await objectStore.CreateUploadUrlAsync(
-            StationMediaObjectKeys.Upload(station.PublicId, mediaItem.PublicId, mediaItemVersion.PublicId),
-            mediaItemVersion.ContentType,
-            mediaItemVersion.ByteLength,
-            mediaItemVersion.UploadExpiresAt);
 
         return Result.Ok(new StationPhotoUploadResponse(
-            mediaItem.PublicId,
-            mediaItemVersion.PublicId,
-            uploadUrl.Url,
-            uploadUrl.ExpiresAt,
-            station.GalleryVersion));
+            mediaItem.PublicId, uploadUrl.Url, uploadUrl.ExpiresAt, station.GalleryVersion));
+    }
+
+    private async Task<Result<StationMediaItem>> StartPhotoAsync(
+        Domain.Equipment.Station station, StartStationPhotoUploadRequest request, CancellationToken cancellationToken)
+    {
+        // Photos that failed keep their positions but no longer count toward the limit.
+        var failedState = StationMediaState.Failed;
+        var galleryOccupancy = await database.StationMediaItems
+            .Where(item => item.StationId == station.Id && item.Position != null)
+            .GroupBy(item => item.StationId)
+            .Select(items => new GalleryOccupancy(
+                items.Count(item => item.State != failedState),
+                items.Max(item => item.Position)!.Value + 1))
+            .SingleOrDefaultAsync(cancellationToken);
+        return StationMediaItem.StartPhotoUpload(
+            station,
+            galleryOccupancy?.Count ?? 0,
+            galleryOccupancy?.NextPosition ?? 0,
+            request.ContentType,
+            request.ByteLength,
+            mediaOptions.Value.ToDomain(),
+            clock.GetUtcNow());
+    }
+
+    private async Task<Result<StationMediaItem>> StartReplacementAsync(
+        Domain.Equipment.Station station,
+        Guid replacesItemId,
+        StartStationPhotoUploadRequest request,
+        CancellationToken cancellationToken)
+    {
+        var replaced = await database.StationMediaItems.SingleOrDefaultAsync(
+            item => item.PublicId == replacesItemId && item.StationId == station.Id, cancellationToken);
+        if (replaced is null)
+        {
+            return Result.Fail<StationMediaItem>(new NotFoundError<Guid>("media item", replacesItemId));
+        }
+
+        var replacement = StationMediaItem.StartPhotoReplacement(
+            station,
+            replaced,
+            request.ContentType,
+            request.ByteLength,
+            mediaOptions.Value.ToDomain(),
+            clock.GetUtcNow());
+        if (replacement.IsFailed)
+        {
+            return replacement;
+        }
+
+        // A photo has one replacement at a time; an unfinished earlier one is dropped along with its files.
+        var unfinished = await database.StationMediaItems
+            .Where(item => item.ReplacesItemId == replaced.Id)
+            .ToListAsync(cancellationToken);
+        database.StationMediaItems.RemoveRange(unfinished);
+        foreach (var item in unfinished)
+        {
+            await outbox.PublishAsync(new DeleteStationMediaObjectsMessage(station.PublicId, item.PublicId));
+        }
+
+        return replacement;
     }
 
     private sealed record GalleryOccupancy(int Count, int NextPosition);

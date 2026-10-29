@@ -582,36 +582,36 @@ visible and preserves unrelated commands for known equipment.
   and [media limits](lab.md#222-station-media-limits).
   Depends on M04.02 and M05.01. Sub-items are sequenced as follows:
   - [x] M10.01.1 Storage adapter and buckets: an S3 adapter for signed upload and
-    download URLs, object verification, copy, and deletion; one-shot provisioning
+    download URLs, object verification and bounded reads, immutable publication, and
+    deletion; one-shot provisioning
     of private and public buckets, public read on the public bucket, and browser
     CORS for the application origin; per-host storage credentials limited to
-    their operations. Verify the storage contract through upload, download, copy,
-    and deletion against the local container.
-  - [x] M10.01.2 Gallery records and upload start: gallery items with public
-    identifiers, kind, and position, and per-version file records. An assigned
+    their operations. Verify the storage contract through upload, download,
+    publication, and deletion against the local container.
+  - [x] M10.01.2 Gallery records and upload start: gallery photos with public
+    identifiers, kind, position, and upload and processing state. An assigned
     operator starts an upload within the limits and receives a short-lived
-    signed URL for a private original. The completion notice verifies the
-    object's size and type, records it as uploaded, and commits the audit record
-    and processing message together; repeated notices have no further effect.
-    An upload that expires without arriving or arrives different fails and frees
-    its place in the gallery.
+    signed URL for a private upload. The completion notice moves the photo to
+    processing and queues the work; repeated notices have no further effect.
     Expose the limits to the editor through typed contracts. Verify limits
     under concurrently started uploads, unassigned-operator and driver
     denial, and rejected type and size.
-  - [ ] M10.01.3 Photo processing and publication: Wolverine messaging and a scoped
-    database role in the media worker; bounded SkiaSharp decoding into variants
-    written under immutable per-version keys in the public bucket; a publication
-    transaction that records the item's current published version and publishes
-    the station-changed event. Verify undecodable and oversized images, redelivery
-    and retries converging on one publication, a reused upload URL leaving
-    published bytes unchanged, and the previous version remaining published
-    while a replacement fails. Depends on M10.01.2.
-  - [ ] M10.01.4 Gallery management: reorder, replace, and remove with stale-version
-    rejection, audit records, and station-changed events. Removal covers items
-    whose uploads are pending or failed. A pending version's
-    upload URL can be issued again until the upload expires. Removed and
-    replaced objects are left to cleanup. Verify concurrent edits and that
-    removal hides the item immediately. Depends on M10.01.3.
+  - [x] M10.01.3 Photo processing and publication: Wolverine messaging and a scoped
+    database role in the media worker; bounded SkiaSharp decoding of the upload
+    into WebP variants written under immutable per-photo keys in the public
+    bucket, with rejected uploads failing with a reason; a publication
+    transaction that publishes the photo, takes over the place of the photo it
+    replaces, and publishes the station-changed event; a check scheduled at each
+    upload's deadline for uploads that never report in. Verify undecodable,
+    oversized, and mismatched files, redelivery and retries converging on one
+    publication, a reused upload URL leaving published bytes unchanged, and the
+    previous photo remaining published while a replacement fails. Depends on
+    M10.01.2.
+  - [x] M10.01.4 Gallery management: reorder, replace, and remove with
+    stale-version rejection on reorder and upload start, audit records, and
+    station-changed events. Removal covers photos whose uploads are pending or
+    failed, and deletes their stored objects. Verify concurrent edits and that
+    removal hides the photo immediately. Depends on M10.01.3.
   - [ ] M10.01.5 Driver and operator UI: station list, detail, and search contracts
     carry published variant URLs from the configured public base URL; the search
     document carries the first photo. Catalog cards and search results show the
@@ -630,13 +630,6 @@ visible and preserves unrelated commands for known equipment.
   within the video limits, verification of container and duration, publication
   with a poster image, and playback on station detail. Depends on M10.01 and
   the video processing selection.
-- [ ] M10.04 Reconcile and clean up station media. Depends on M10.01.
-  - [ ] M10.04.1 A recurring sweep resumes uploads whose object exists without a
-    completion notice and removes started uploads that expired unfinished.
-    Verify that a lost notice converges to publication.
-  - [ ] M10.04.2 A recurring sweep deletes orphaned variants, removed items, and
-    replaced versions after a grace period. Verify that a worker crash after
-    writing variants converges while the previous publication stays usable.
 
 Acceptance: an assigned operator maintains a station gallery within its limits,
 and visitors see only published media. Published bytes cannot be overwritten
@@ -651,7 +644,7 @@ charging completion intact.
   configured subdomain of the existing Cloudflare-managed domain, with private
   buckets off public delivery routes. Run adapter contract tests against R2,
   including browser CORS, presigned transfers, metadata/checksum handling,
-  publication copy, and deletion.
+  publication write, and deletion.
 - [ ] M11.02 Publish versioned frontend assets and media through CDN cache rules,
   with the entry page referencing the matching asset build, and add the CDN purge
   adapter to the publication/removal workflow. Verify warm versus cold requests

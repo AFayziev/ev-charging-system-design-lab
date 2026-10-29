@@ -126,11 +126,11 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 | Search query service | Station discovery queries over the search index, with read-only access and its own typed unavailable response |
 | Search index worker | Station/business-event and observation consumers and search indexing |
 | Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and bounded warming/recovery |
-| Media worker | Media processing/publication, summaries, and upload/orphan sweeps |
+| Media worker | Media processing/publication, upload deadline checks, stored-object cleanup, and summaries |
 | Notification worker | External notification delivery through a provider adapter, retries, and persisted delivery attempts |
 
 Recurring producers run with their owning workload: reconciliation/recovery
-polling in the charging worker and upload/orphan sweeps in the media worker.
+polling in the charging worker; the media worker settles unfinished uploads at their deadlines.
 Stalled-session detection also runs in the charging worker, from its session
 evidence. Each worker deployment has independent queues, concurrency budgets, retry
 policies, and durable recovery. Failure of one workload does not pause unrelated
@@ -164,7 +164,7 @@ operation.
 | Observation history, latest observations | Document database projections | Cache and diagnostic queries |
 | Hot query results | Cache | Reconstructable from owning stores |
 | Station text, location, capabilities | Search index | Rebuildable discovery index |
-| Originals, media variants, summaries | Object storage | CDN or private signed transfers |
+| Pending uploads, media variants, summaries | Object storage | CDN or private signed transfers |
 
 The relational database owns platform decisions; the charging provider owns
 physical state. The stream is the durable acceptance boundary for observations,
@@ -437,7 +437,7 @@ summary and deliver notifications; their failures do not roll back charging fact
 | Content | Delivery |
 |---|---|
 | Versioned frontend assets and published station media | Public objects through the CDN |
-| Originals and pending variants | Private direct upload and worker access |
+| Pending uploads | Private direct upload and worker access |
 | Session summaries | Private short-lived download URL after ownership check |
 
 The storage adapter exposes upload authorization, verification, publication, and
@@ -446,19 +446,23 @@ platform authorization. Local and hosted storage implementations use the same
 adapter boundary.
 
 Public assets use a dedicated delivery origin.
-Originals, pending uploads, and summaries remain in private storage
+Pending uploads and summaries remain in private storage
 and bypass the CDN.
 
 Media publication proceeds through a started private upload, direct browser
+transfer, a completion notice, bounded image processing of the uploaded file, then
+a relational publication transaction and outbox event. Published bytes use
+immutable keys distinct from the upload, so a reusable upload URL cannot overwrite
+them. A replacement is an item of its own and takes over the place of the item it
+replaces only when it publishes; the replaced item stays published until then.
 
-transfer, verification, bounded image processing, then a relational publication transaction
-and outbox event. Published bytes use a distinct immutable key, so a reusable
-upload URL cannot overwrite them. The previous version remains published until
-replacement is ready.
-
-Browser completion notices and storage notifications are verified hints. A sweep
-reconciles missing notices, abandoned uploads, and orphan variants. Stable
-asset/version identity makes retries converge after partial writes.
+The browser's completion notice is a hint that queues processing, and processing
+verifies the file itself. A notice that overtakes the file is retried by a delayed
+message until the upload URL expires, after which the item fails. A message
+scheduled for the upload deadline settles an upload that never reports in.
+Removal and replacement delete an item's stored objects by key prefix, as a
+message after the transaction. Stable item identity and per-item keys make
+retries converge after partial writes.
 
 Cache rules cover only public assets and published media. Versioned keys handle
 normal releases; the frontend entry page references the current build.

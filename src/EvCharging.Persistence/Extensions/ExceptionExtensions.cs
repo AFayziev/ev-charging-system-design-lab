@@ -75,11 +75,4 @@ public static class ExceptionExtensions
             SqlState: PostgresErrorCodes.ExclusionViolation,
             ConstraintName: "ex_reservations_driver_slot"
         };
-
-    public static bool IsStationMediaPositionTaken(this DbUpdateException exception) =>
-        exception.InnerException is PostgresException
-        {
-            SqlState: PostgresErrorCodes.UniqueViolation,
-            ConstraintName: StationMediaItemConfiguration.PositionIndexName
-        };
 }

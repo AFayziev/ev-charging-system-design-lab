@@ -1,4 +1,4 @@
 namespace EvCharging.Contracts.Media;
 
-/// <summary>Requests processing of a station media version whose original has been verified.</summary>
-public sealed record ProcessStationMediaMessage(Guid VersionId);
+/// <summary>Requests processing of a station photo whose upload has been completed.</summary>
+public sealed record ProcessStationMediaMessage(Guid ItemId);

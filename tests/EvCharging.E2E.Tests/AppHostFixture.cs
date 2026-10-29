@@ -153,6 +153,8 @@ public sealed class AppHostFixture : IAsyncLifetime
                 "--Parameters:gateway-instances=2",
                 // User-secrets must not switch E2E runs to real email delivery.
                 "--NotificationDelivery:Provider=Mailpit",
+                // Short enough to observe an upload that never reports in settling at its deadline.
+                "--StationMedia:UploadUrlLifetime=00:00:30",
                 "--ChargingProviders:WattHarborIntegrationKey=driver-wattharbor",
                 "--ChargingProviders:AmpTrailIntegrationKey=driver-amptrail",
                 $"--Parameters:wattharbor-provider-token-endpoint={tokenEndpoint}",

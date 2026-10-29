@@ -2,13 +2,12 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
-using EvCharging.Contracts.Events.Stations;
 using EvCharging.Domain.Equipment;
+using EvCharging.Messaging;
 using EvCharging.Persistence;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
-using Wolverine;
 using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.Stations;
@@ -67,10 +66,7 @@ public sealed class UpdateStationCommandHandler(
         Station station, CancellationToken cancellationToken)
     {
         outbox.Enroll(database);
-        // One group per station lets the search worker apply a station's events strictly in order.
-        await outbox.PublishAsync(
-            new StationChangedEvent(station.Id),
-            new DeliveryOptions { GroupId = station.Id.ToString() });
+        await outbox.PublishStationChangedAsync(station.Id);
 
         try
         {

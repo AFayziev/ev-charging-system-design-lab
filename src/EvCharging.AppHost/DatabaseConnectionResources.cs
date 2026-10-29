@@ -26,6 +26,9 @@ internal sealed class DatabaseConnectionResources
     /// <summary>Runtime connection for SearchIndexWorker message storage and station reads.</summary>
     public required IResourceBuilder<ConnectionStringResource> SearchMessaging { get; init; }
 
+    /// <summary>Runtime connection for MediaWorker message storage and gallery processing.</summary>
+    public required IResourceBuilder<ConnectionStringResource> MediaMessaging { get; init; }
+
     /// <summary>One-shot job that provisions database roles, schemas, and grants before migrations.</summary>
     public required IResourceBuilder<ContainerResource> Provisioning { get; init; }
 }

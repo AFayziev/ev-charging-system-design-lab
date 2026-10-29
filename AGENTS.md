@@ -48,7 +48,7 @@ implementation progress is recorded in the plan.
 | `EvCharging.SearchApi` | Resource | Anonymous station search over a read-only index role, with typed unavailability, routed by the gateway |
 | `EvCharging.SearchIndex` | Library | Station search document, index names and mapping shared by the indexer and the search API |
 | `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, warming, and recovery |
-| `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, and upload/orphan cleanup |
+| `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, upload deadline checks, and stored-object cleanup |
 | `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
 | `EvCharging.WattHarborProviderApi` | Resource | WattHarbor lab provider with authoritative synchronous results and command deduplication |
 | `EvCharging.WattHarborProviderApi.Migrations` | Resource | Provider-owned EF migrations and one-shot database initialization |

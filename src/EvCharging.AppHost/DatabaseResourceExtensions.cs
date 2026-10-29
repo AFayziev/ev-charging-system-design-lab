@@ -13,6 +13,7 @@ internal static class DatabaseResourceExtensions
         var chargingMessagingPassword = builder.AddPersistentSecret("charging-messaging-password");
         var notificationMessagingPassword = builder.AddPersistentSecret("notification-messaging-password");
         var searchMessagingPassword = builder.AddPersistentSecret("search-messaging-password");
+        var mediaMessagingPassword = builder.AddPersistentSecret("media-messaging-password");
 
         var write = AddConnection("platform-write", "platform_writer", writerPassword);
         var read = AddConnection("platform-read", "platform_reader", readerPassword);
@@ -24,6 +25,7 @@ internal static class DatabaseResourceExtensions
         var notificationMessaging = AddConnection(
             "notification-messaging", "notification_messaging", notificationMessagingPassword);
         var searchMessaging = AddConnection("search-messaging", "search_messaging", searchMessagingPassword);
+        var mediaMessaging = AddConnection("media-messaging", "media_messaging", mediaMessagingPassword);
 
         var endpoint = database.Resource.Parent.GetEndpoint("tcp");
         var provisioning = builder.AddDockerfile("database-provisioning", "../../infra/postgres/platform")
@@ -43,6 +45,7 @@ internal static class DatabaseResourceExtensions
             .WithEnvironment("CHARGING_MESSAGING_PASSWORD", chargingMessagingPassword)
             .WithEnvironment("NOTIFICATION_MESSAGING_PASSWORD", notificationMessagingPassword)
             .WithEnvironment("SEARCH_MESSAGING_PASSWORD", searchMessagingPassword)
+            .WithEnvironment("MEDIA_MESSAGING_PASSWORD", mediaMessagingPassword)
             .WaitFor(database);
 
         if (builder.ExecutionContext.IsRunMode)
@@ -60,6 +63,7 @@ internal static class DatabaseResourceExtensions
             ChargingMessaging = chargingMessaging,
             NotificationMessaging = notificationMessaging,
             SearchMessaging = searchMessaging,
+            MediaMessaging = mediaMessaging,
             Provisioning = provisioning
         };
 

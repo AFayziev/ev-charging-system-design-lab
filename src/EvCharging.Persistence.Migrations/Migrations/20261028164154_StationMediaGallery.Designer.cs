@@ -572,7 +572,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
-                    b.Property<StationMediaVersionState>("State")
+                    b.Property<StationMediaState>("State")
                         .HasColumnType("charging.station_media_version_state")
                         .HasColumnName("state")
                         .HasAnnotation("Audit:Included", true);

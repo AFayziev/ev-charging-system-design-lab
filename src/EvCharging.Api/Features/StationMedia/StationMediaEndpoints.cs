@@ -15,7 +15,9 @@ internal static class StationMediaEndpoints
             .RequireAuthorization(PlatformRole.Operator.ToClaimValue());
         media.MapGet("/edit", Editor);
         media.MapPost("/photo-uploads", StartPhotoUpload);
-        media.MapPost("/{itemId:guid}/versions/{versionId:guid}/upload-completion", CompleteUpload);
+        media.MapPost("/{itemId:guid}/upload-completion", CompleteUpload);
+        media.MapPut("/order", Reorder);
+        media.MapDelete("/{itemId:guid}", Remove);
         return app;
     }
 
@@ -59,32 +61,23 @@ internal static class StationMediaEndpoints
                     "Gallery is full",
                     limits.First().Message,
                     StationMediaLimitError.Code),
+            _ when result.HasError<StationMediaStateError>(out var states) => states.First().ToResponse(),
             _ when result.HasError<ConcurrencyConflictError>(out var conflicts) => conflicts.First().ToResponse(),
             _ => TypedResults.Created((string?)null, result.Value)
         };
     }
 
     private static async Task<Results<
-        Ok<StationMediaVersionResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult, ProblemHttpResult>>
-        CompleteUpload(Guid id, Guid itemId, Guid versionId, IMessageBus bus, CancellationToken cancellationToken)
+        Ok<StationMediaUploadStateResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult, ProblemHttpResult>>
+        CompleteUpload(Guid id, Guid itemId, IMessageBus bus, CancellationToken cancellationToken)
     {
-        var result = await bus.InvokeAsync<Result<StationMediaVersionResponse>>(
-            new CompleteStationMediaUploadCommand(id, itemId, versionId), cancellationToken);
+        var result = await bus.InvokeAsync<Result<StationMediaUploadStateResponse>>(
+            new CompleteStationMediaUploadCommand(id, itemId), cancellationToken);
         return result switch
         {
             _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
             _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
             _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
-            _ when result.HasError<StationMediaUploadMissingError>(out var absent) =>
-                ErrorResponseMappings.CodedConflict(
-                    "Upload missing",
-                    absent.First().Message,
-                    StationMediaUploadMissingError.Code),
-            _ when result.HasError<StationMediaUploadChangedError>(out var changes) =>
-                ErrorResponseMappings.CodedConflict(
-                    "Upload changed",
-                    changes.First().Message,
-                    StationMediaUploadChangedError.Code),
             _ when result.HasError<StationMediaUploadFailedError>(out var failures) =>
                 ErrorResponseMappings.CodedConflict(
                     "Upload failed",
@@ -93,4 +86,47 @@ internal static class StationMediaEndpoints
             _ => TypedResults.Ok(result.Value)
         };
     }
+
+    private static async Task<Results<
+        Ok<StationGalleryVersionResponse>,
+        ValidationProblem,
+        NotFound,
+        ChallengeHttpResult,
+        ForbidHttpResult,
+        ProblemHttpResult>> Reorder(
+            Guid id, ReorderStationGalleryRequest request, IMessageBus bus, CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<StationGalleryVersionResponse>>(
+            new ReorderStationGalleryCommand(id, request), cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
+            _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<ConcurrencyConflictError>(out var conflicts) => conflicts.First().ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
+
+    private static async Task<Results<
+        Ok<StationGalleryVersionResponse>, NotFound, ChallengeHttpResult, ForbidHttpResult, ProblemHttpResult>> Remove(
+            Guid id, Guid itemId, IMessageBus bus, CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<StationGalleryVersionResponse>>(
+            new RemoveStationMediaCommand(id, itemId), cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<ConcurrencyConflictError>(out var conflicts) => conflicts.First().ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
+
+    private static ProblemHttpResult ToResponse(this StationMediaStateError error) => TypedResults.Problem(
+        statusCode: StatusCodes.Status409Conflict,
+        title: "Photo cannot be changed",
+        detail: error.Message);
 }

@@ -15,7 +15,9 @@ public sealed class Station : IAuditableEntity
     public required string AccessInstructions { get; set; }
 
     // Gallery changes check and advance this version, separately from edits to the station's details.
-    public int GalleryVersion { get; set; }
+    public int GalleryVersion { get; private set; }
+
+    public void AdvanceGalleryVersion() => GalleryVersion++;
 
     public ICollection<Charger> Chargers { get; } = [];
 }

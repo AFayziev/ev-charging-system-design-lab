@@ -3,13 +3,7 @@
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": [ "s3:ListBucket" ],
-      "Resource": [ "arn:aws:s3:::${PRIVATE_BUCKET}" ],
-      "Condition": { "StringLike": { "s3:prefix": [ "uploads/*", "originals/*" ] } }
-    },
-    {
-      "Effect": "Allow",
-      "Action": [ "s3:PutObject", "s3:GetObject", "s3:DeleteObject" ],
+      "Action": [ "s3:PutObject", "s3:GetObject" ],
       "Resource": [ "arn:aws:s3:::${PRIVATE_BUCKET}/*" ]
     }
   ]

@@ -39,7 +39,6 @@ public class PlatformDbContext : DbContext
     public DbSet<Operation> Operations => Set<Operation>();
     public DbSet<Attempt> Attempts => Set<Attempt>();
     public DbSet<StationMediaItem> StationMediaItems => Set<StationMediaItem>();
-    public DbSet<StationMediaVersion> StationMediaVersions => Set<StationMediaVersion>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
     public DbSet<ReservationNotification> ReservationNotifications => Set<ReservationNotification>();

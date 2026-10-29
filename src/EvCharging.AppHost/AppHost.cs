@@ -8,6 +8,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 var chargingProviders = BindValidatedConfigSection<ChargingProviderOptions>(ChargingProviderOptions.SectionName);
 var chargingSettings = BindValidatedConfigSection<ChargingOptions>(ChargingOptions.SectionName);
 var searchSettings = BindValidatedConfigSection<SearchOptions>(SearchOptions.SectionName);
+var mediaSettings = BindValidatedConfigSection<StationMediaOptions>(StationMediaOptions.SectionName);
 
 var database = builder.AddPlatformDatabase();
 var databaseAccess = builder.AddDatabaseAccess(database);
@@ -31,6 +32,8 @@ var notificationMessageMigrations = builder.AddMessageStorageMigration(
     "notification", databaseAccess.Migration, databaseAccess.Provisioning);
 var searchMessageMigrations = builder.AddMessageStorageMigration(
     "search", databaseAccess.Migration, databaseAccess.Provisioning);
+var mediaMessageMigrations = builder.AddMessageStorageMigration(
+    "media", databaseAccess.Migration, databaseAccess.Provisioning);
 
 var gatewayOidcSecret = builder.AddPersistentSecret("gateway-oidc-secret");
 var wattHarborCallbackKey = builder.AddPersistentSecret("wattharbor-callback-key");
@@ -60,7 +63,15 @@ var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: 
     .WithReplicas(apiCount)
     .WithHttpHealthCheck("/health");
 
-api.WithReference(databaseAccess.Write)
+api.WithSettings(
+    mediaSettings,
+    StationMediaOptions.SectionName,
+    options => options.MaximumPhotosPerStation,
+    options => options.MaximumPhotoBytes,
+    options => options.MaximumPhotoPixels,
+    options => options.PhotoContentTypes,
+    options => options.UploadUrlLifetime)
+    .WithReference(databaseAccess.Write)
     .WithReference(databaseAccess.Read)
     .WithReference(databaseAccess.Write, "messaging")
     .WaitForCompletion(platformMigrations)
@@ -265,7 +276,13 @@ var cache = builder.AddProject<Projects.EvCharging_CacheWorker>("cache-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
 
 var media = builder.AddProject<Projects.EvCharging_MediaWorker>("media-worker")
-    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName);
+    .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
+    .WithSettings(mediaSettings, StationMediaOptions.SectionName, options => options.MaximumPhotoPixels)
+    .WithReference(databaseAccess.MediaMessaging, "messaging")
+    .WaitForCompletion(mediaMessageMigrations)
+    .WaitForCompletion(platformMigrations)
+    .WithReference(broker)
+    .WaitFor(broker);
 
 var notificationCount = await InstanceCountAsync("notification-worker-instances");
 var notification = builder.AddProject<Projects.EvCharging_NotificationWorker>("notification-worker")
@@ -298,7 +315,7 @@ else
     notification.WithReference(notificationMail.GetEndpoint("http")).WaitFor(notificationMail);
 }
 
-foreach (var worker in new[] { charging, observation, cache, media })
+foreach (var worker in new[] { charging, observation, cache })
 {
     worker.WithReference(databaseAccess.Write)
         .WaitForCompletion(platformMigrations)
@@ -329,9 +346,7 @@ search.WithReference(searchIndex).WaitFor(searchIndex);
 
 var objectStorage = builder.AddObjectStoreAccess(objectStore, gatewayPublicOrigin);
 api.WithObjectStorage(objectStorage, objectStorage.ApiFiles);
-media.WithObjectStorage(objectStorage, objectStorage.MediaWorker)
-    .WithReference(documents)
-    .WaitFor(documents);
+media.WithObjectStorage(objectStorage, objectStorage.MediaWorker);
 
 builder.Build().Run();
 
