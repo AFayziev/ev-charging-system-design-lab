@@ -1,0 +1,130 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 1px 3px rgb(16 28 60 / 6%);
+}
+
+.tileFailed {
+  border-color: #ffc9c9;
+}
+
+.thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  /* The operator sees each photo whole, whatever its shape; drivers' cards crop to a fixed frame. */
+  background: #f1f3f5 center / contain no-repeat;
+}
+
+.position {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.handle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 92%);
+  color: #59697a;
+  cursor: grab;
+  touch-action: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgb(255 255 255 / 84%);
+  color: #101c3c;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.overlayFailed {
+  background: rgb(255 245 245 / 95%);
+  color: #e03131;
+}
+
+.progress {
+  width: 80%;
+}
+
+.ribbon {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid #dee2e6;
+  background: rgb(255 255 255 / 95%);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ribbonFailed {
+  background: rgb(255 245 245 / 97%);
+  color: #e03131;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid #e9ecef;
+}
+
+.moves {
+  display: flex;
+  gap: 4px;
+}
+
+.confirm {
+  padding: 10px;
+  border-top: 1px solid #e9ecef;
+  background: #fff5f5;
+  font-size: 13px;
+}
+
+.meter {
+  width: 160px;
+}
+
+@media (max-width: 35.99em) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .meter {
+    width: 100%;
+  }
+}

@@ -3,12 +3,20 @@ import {
   queryOptions,
   type QueryClient,
 } from "@tanstack/react-query";
+import axios from "axios";
 import { api } from "@/lib/api";
 
 export interface ConnectorCapability {
   readonly connectorType: string;
   readonly powerSupply: string;
   readonly ratedPowerKW: number;
+}
+
+/** A published photo, with the variants a card and a full view load. */
+export interface StationPhoto {
+  readonly id: string;
+  readonly thumbnailUrl: string;
+  readonly displayUrl: string;
 }
 
 export interface StationSummary {
@@ -18,6 +26,7 @@ export interface StationSummary {
   readonly chargerCount: number;
   readonly connectorCount: number;
   readonly capabilities: readonly ConnectorCapability[];
+  readonly coverPhoto: StationPhoto | null;
 }
 
 export interface StationList {
@@ -64,6 +73,8 @@ export interface StationDetail {
   readonly longitude: number;
   readonly timeZoneId: string;
   readonly accessInstructions: string;
+  /** Published photos in gallery order. */
+  readonly photos: readonly StationPhoto[];
   readonly chargers: readonly {
     readonly id: string;
     readonly name: string;
@@ -101,6 +112,7 @@ export const stationKeys = {
   availability: (ids: readonly string[]) =>
     ["stations", "availability", ids] as const,
   editor: (id: string) => ["stations", "editor", id] as const,
+  gallery: (id: string) => ["stations", "gallery", id] as const,
   assignedLists: ["stations", "assigned"] as const,
   assigned: (afterId: string | null) =>
     ["stations", "assigned", afterId] as const,
@@ -115,6 +127,174 @@ export interface StationEditor {
 }
 
 export type StationEdit = Omit<StationEditor, "id">;
+
+export type GalleryItemState =
+  "uploading" | "processing" | "published" | "failed";
+
+/** The photo waiting to take the place of a published one. */
+export interface GalleryReplacement {
+  readonly id: string;
+  readonly state: GalleryItemState;
+  readonly failureCode: string | null;
+}
+
+export interface GalleryItem {
+  readonly id: string;
+  readonly position: number;
+  readonly state: GalleryItemState;
+  readonly failureCode: string | null;
+  readonly thumbnailUrl: string | null;
+  readonly replacement: GalleryReplacement | null;
+}
+
+export interface GalleryLimits {
+  readonly maximumPhotosPerStation: number;
+  readonly maximumPhotoBytes: number;
+  readonly maximumPhotoPixels: number;
+  readonly photoContentTypes: readonly string[];
+  readonly uploadUrlLifetimeSeconds: number;
+}
+
+export interface GalleryEditor {
+  readonly stationId: string;
+  readonly galleryVersion: number;
+  readonly items: readonly GalleryItem[];
+  readonly limits: GalleryLimits;
+}
+
+export interface PhotoUpload {
+  readonly itemId: string;
+  readonly uploadUrl: string;
+  readonly galleryVersion: number;
+}
+
+const galleryPath = (stationId: string) =>
+  `/api/stations/${encodeURIComponent(stationId)}/media`;
+
+const csrf = (antiforgeryToken: string) => ({
+  "X-CSRF-TOKEN": antiforgeryToken,
+});
+
+export async function getStationGallery(
+  stationId: string,
+  signal?: AbortSignal,
+): Promise<GalleryEditor> {
+  const response = await api.get<GalleryEditor>(
+    `${galleryPath(stationId)}/edit`,
+    { signal },
+  );
+  return response.data;
+}
+
+export async function startPhotoUpload(
+  stationId: string,
+  upload: {
+    readonly galleryVersion: number;
+    readonly contentType: string;
+    readonly byteLength: number;
+    readonly replacesItemId?: string;
+  },
+  antiforgeryToken: string,
+): Promise<PhotoUpload> {
+  const response = await api.post<PhotoUpload>(
+    `${galleryPath(stationId)}/photo-uploads`,
+    upload,
+    { headers: csrf(antiforgeryToken) },
+  );
+  return response.data;
+}
+
+/**
+ * Sends the bytes straight to storage through the signed URL. This is not an API call: it carries no
+ * session, no antiforgery header, and only the Content-Type the URL was signed for.
+ */
+export async function uploadToStorage(
+  uploadUrl: string,
+  file: File,
+  onProgress: (fraction: number) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  // Storage that accepts the connection but never answers leaves no error to show, so a transfer that
+  // makes no progress for a while is abandoned. A slow transfer that keeps moving is left alone.
+  const stalled = new AbortController();
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  const watch = () => {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => stalled.abort(), uploadStallMs);
+  };
+  watch();
+  try {
+    await axios.put(uploadUrl, file, {
+      headers: { "Content-Type": file.type },
+      signal: AbortSignal.any([signal, stalled.signal]),
+      onUploadProgress: (event) => {
+        watch();
+        if (event.total) onProgress(event.loaded / event.total);
+      },
+    });
+  } finally {
+    clearTimeout(stallTimer);
+  }
+}
+
+const uploadStallMs = 20_000;
+
+export async function completePhotoUpload(
+  stationId: string,
+  itemId: string,
+  antiforgeryToken: string,
+): Promise<void> {
+  await api.post(
+    `${galleryPath(stationId)}/${encodeURIComponent(itemId)}/upload-completion`,
+    undefined,
+    { headers: csrf(antiforgeryToken) },
+  );
+}
+
+export async function reorderGallery(
+  stationId: string,
+  galleryVersion: number,
+  itemIds: readonly string[],
+  antiforgeryToken: string,
+): Promise<void> {
+  await api.put(
+    `${galleryPath(stationId)}/order`,
+    { galleryVersion, itemIds },
+    { headers: csrf(antiforgeryToken) },
+  );
+}
+
+export async function removeGalleryItem(
+  stationId: string,
+  itemId: string,
+  antiforgeryToken: string,
+): Promise<void> {
+  await api.delete(`${galleryPath(stationId)}/${encodeURIComponent(itemId)}`, {
+    headers: csrf(antiforgeryToken),
+  });
+}
+
+const galleryPollingMs = 2_000;
+
+const isSettling = (state: GalleryItemState) =>
+  state === "uploading" || state === "processing";
+
+export const stationGalleryQuery = (stationId: string) =>
+  queryOptions({
+    queryKey: stationKeys.gallery(stationId),
+    queryFn: ({ signal }) => getStationGallery(stationId, signal),
+    // Photos are optimized in the background, so the editor follows them until they settle.
+    refetchInterval: (query) =>
+      query.state.data?.items.some(
+        (item) =>
+          isSettling(item.state) ||
+          (item.replacement !== null && isSettling(item.replacement.state)),
+      )
+        ? galleryPollingMs
+        : false,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
 
 export interface AssignedStationList {
   readonly stations: readonly Pick<StationSummary, "id" | "name" | "address">[];
@@ -142,7 +322,7 @@ export async function updateStation(
     `/api/stations/${encodeURIComponent(id)}`,
     edit,
     {
-      headers: { "X-CSRF-TOKEN": antiforgeryToken },
+      headers: csrf(antiforgeryToken),
       signal,
     },
   );

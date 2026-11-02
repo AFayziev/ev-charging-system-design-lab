@@ -51,6 +51,9 @@ public sealed class ObjectStoreFixture : IAsyncLifetime
 
     public Uri ServiceUrl => new($"http://{_storage.Hostname}:{_storage.GetMappedPublicPort(ServicePort)}");
 
+    /// <summary>The anonymous address of a published object, as browsers reach it.</summary>
+    public Uri PublicUrl(string key) => new(ServiceUrl, $"{PublicBucket}/{key}");
+
     /// <summary>The store as the API sees it, through its <c>api-files</c> user.</summary>
     public ObjectStore ApiStore { get; private set; } = null!;
 
@@ -133,8 +136,7 @@ public sealed class ObjectStoreFixture : IAsyncLifetime
             ["ObjectStorage:AccessKey"] = accessKey,
             ["ObjectStorage:SecretKey"] = secretKey,
             ["ObjectStorage:PrivateBucket"] = PrivateBucket,
-            ["ObjectStorage:PublicBucket"] = PublicBucket,
-            ["ObjectStorage:PublicBaseUrl"] = new Uri(ServiceUrl, PublicBucket).ToString()
+            ["ObjectStorage:PublicBucket"] = PublicBucket
         });
         builder.AddObjectStore();
         var host = builder.Build();

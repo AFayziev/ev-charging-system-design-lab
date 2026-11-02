@@ -23,16 +23,112 @@
   object-fit: cover;
 }
 
-.photo figcaption {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  padding: 3px 6px;
-  background: rgb(17 33 38 / 72%);
-  color: white;
-  font-size: 10px;
+.placeholder {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  height: 100%;
+  min-height: 180px;
+  background: #eef1f4;
+  color: #868e96;
+  font-size: 13px;
+  font-weight: 600;
   text-align: center;
+}
+
+.placeholder svg {
+  opacity: 0.55;
+}
+
+.gallery {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.galleryFrame {
+  position: relative;
+}
+
+.galleryHero {
+  aspect-ratio: 16 / 10;
+  max-height: 420px;
+  width: 100%;
+  background: #eef1f4;
+}
+
+.galleryHero img,
+.galleryHero .placeholder {
+  min-height: 0;
+}
+
+/* The whole photo is shown, whatever its shape; the thumbnails and cards crop instead. */
+.galleryHero img {
+  object-fit: contain;
+}
+
+.galleryPrevious,
+.galleryNext {
+  position: absolute;
+  /* Not a transform: the button's pressed style sets its own, which would move it out from under the pointer. */
+  top: calc(50% - 20px);
+  box-shadow: 0 1px 3px rgb(16 28 60 / 20%);
+}
+
+.galleryPrevious {
+  left: 10px;
+}
+
+.galleryNext {
+  right: 10px;
+}
+
+.galleryCount {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgb(16 28 60 / 70%);
+  color: white;
+  font-size: 12px;
+}
+
+.galleryStrip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.galleryStrip button {
+  flex: 0 0 72px;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.galleryStrip button[aria-current="true"] {
+  border-color: var(--mantine-color-teal-9);
+}
+
+.stripPhoto {
+  height: 100%;
+  border-radius: 0;
+}
+
+.stripPhoto img,
+.stripPhoto .placeholder {
+  min-height: 0;
+}
+
+.stripPhoto .placeholder svg {
+  width: 20px;
+  height: 20px;
 }
 
 .cardBody {
@@ -58,21 +154,6 @@
   grid-template-columns: minmax(0, 1fr) 340px;
   align-items: start;
   gap: 32px;
-}
-
-.stationHeading {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
-  align-items: start;
-  gap: 24px;
-}
-
-.stationHeading .photo {
-  height: 168px;
-}
-
-.stationHeading .photo img {
-  min-height: 0;
 }
 
 .stationLinks {
@@ -158,15 +239,6 @@
 }
 
 @media (max-width: 35.99em) {
-  .stationHeading {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
-  }
-
-  .stationHeading .photo {
-    height: 190px;
-  }
-
   .catalogCard {
     grid-template-columns: 96px minmax(0, 1fr);
   }

@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Station Gallery Prototype</title>
+<style>
+:root {
+  color-scheme: light;
+  --teal-0: #e6fcf5; --teal-1: #c3fae8; --teal-6: #12b886; --teal-7: #0ca678; --teal-9: #087f5b;
+  --red-0: #fff5f5; --red-6: #fa5252; --red-8: #e03131;
+  --yellow-0: #fff9db; --yellow-8: #e67700;
+  --blue-0: #e7f5ff; --blue-7: #1c7ed6;
+  --gray-1: #f1f3f5; --gray-2: #e9ecef; --gray-3: #dee2e6; --gray-5: #adb5bd;
+  --bg: #f5f7f9; --surface: #fff; --heading: #101c3c; --text: #273444; --muted: #59697a;
+  --radius: 4px; --radius-md: 8px;
+  --shadow: 0 1px 3px rgba(16,28,60,.06), 0 1px 2px rgba(16,28,60,.08);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; }
+h1, h2, h3 { color: var(--heading); margin: 0; font-weight: 700; }
+h1 { font-size: 1.875rem; line-height: 1.25; }
+h2 { font-size: 1.25rem; } h3 { font-size: 1rem; }
+button { font: inherit; cursor: pointer; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+/* shell */
+header.app { background: var(--surface); border-bottom: 1px solid var(--gray-3); }
+.app-inner { max-width: 1120px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 32px; min-height: 60px; }
+.brand { color: var(--teal-9); font-weight: 750; font-size: 20px; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+nav.tabs { display: flex; align-self: stretch; overflow-x: auto; }
+nav.tabs button { border: 0; background: none; border-bottom: 3px solid transparent; padding: 0 14px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+nav.tabs button:hover { background: var(--teal-0); color: var(--teal-9); }
+nav.tabs button[aria-selected="true"] { color: var(--teal-9); border-bottom-color: var(--teal-9); }
+main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+.layout { display: grid; grid-template-columns: 1fr 260px; gap: 24px; align-items: start; }
+
+.card { background: var(--surface); border: 1px solid var(--gray-3); border-radius: var(--radius-md); box-shadow: var(--shadow); }
+.pad { padding: 20px; }
+
+.btn { border: 1px solid transparent; border-radius: var(--radius); padding: 0 14px; height: 36px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.btn-primary { background: var(--teal-9); color: #fff; }
+.btn-primary:hover { background: #066649; }
+.btn-primary:disabled { background: var(--gray-3); color: var(--gray-5); cursor: not-allowed; }
+.btn-default { background: #fff; border-color: var(--gray-3); color: var(--text); }
+.btn-default:hover { background: var(--gray-1); }
+.btn-subtle { background: none; color: var(--teal-9); padding: 0 8px; height: 30px; }
+.btn-subtle:hover { background: var(--teal-0); }
+.btn-danger { background: var(--red-8); color: #fff; }
+.btn-sm { height: 30px; padding: 0 10px; font-size: 13px; }
+.icon-btn { width: 30px; height: 30px; border: 1px solid var(--gray-3); background: #fff; border-radius: var(--radius); display: inline-grid; place-items: center; color: var(--text); padding: 0; }
+.icon-btn:hover:not(:disabled) { background: var(--gray-1); }
+.icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.badge { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.badge-teal { background: var(--teal-0); color: var(--teal-9); }
+.badge-gray { background: var(--gray-2); color: var(--muted); }
+.badge-red { background: var(--red-0); color: var(--red-8); }
+.badge-blue { background: var(--blue-0); color: var(--blue-7); }
+
+.alert { border-radius: var(--radius); padding: 10px 14px; display: flex; gap: 10px; align-items: flex-start; border: 1px solid; }
+.alert-yellow { background: var(--yellow-0); border-color: #ffe066; color: #7a4a00; }
+.alert-red { background: var(--red-0); border-color: #ffc9c9; color: var(--red-8); }
+
+/* editor */
+.editor-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.meter { height: 6px; background: var(--gray-2); border-radius: 3px; overflow: hidden; width: 160px; margin-top: 6px; }
+.meter > i { display: block; height: 100%; background: var(--teal-9); transition: width .2s; }
+.drop { border: 2px dashed var(--gray-3); border-radius: var(--radius-md); padding: 22px; text-align: center; background: var(--surface); transition: border-color .15s, background .15s; margin-bottom: 16px; }
+.drop.over { border-color: var(--teal-6); background: var(--teal-0); }
+.drop.disabled { opacity: .6; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.tile { background: var(--surface); border: 1px solid var(--gray-3); border-radius: var(--radius-md); overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+.tile.dragging { opacity: .4; }
+.tile.drop-target { outline: 2px solid var(--teal-6); outline-offset: 2px; }
+.tile.failed { border-color: #ffc9c9; }
+.thumb { position: relative; aspect-ratio: 4/3; background: var(--gray-1) center/cover no-repeat; }
+.thumb .pos { position: absolute; top: 8px; left: 8px; }
+.thumb .handle { position: absolute; top: 6px; right: 6px; background: rgba(255,255,255,.92); border-radius: var(--radius); width: 28px; height: 28px; display: grid; place-items: center; cursor: grab; color: var(--muted); }
+.overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; text-align: center; background: rgba(255,255,255,.82); color: var(--heading); font-weight: 600; }
+.overlay.fail { background: rgba(255,245,245,.94); color: var(--red-8); }
+.bar { width: 80%; height: 6px; background: var(--gray-2); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--teal-9); transition: width .15s linear; }
+.spinner { width: 22px; height: 22px; border: 3px solid var(--teal-1); border-top-color: var(--teal-9); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ribbon { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 10px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.95); border-top: 1px solid var(--gray-3); }
+.ribbon.fail { color: var(--red-8); background: rgba(255,245,245,.97); }
+.ribbon .bar { flex: 1; width: auto; }
+.tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--gray-2); }
+.tile-foot .moves { display: flex; gap: 4px; }
+.confirm { padding: 10px; border-top: 1px solid var(--gray-2); background: var(--red-0); font-size: 13px; }
+.confirm .row { display: flex; gap: 6px; margin-top: 8px; }
+.empty { grid-column: 1/-1; text-align: center; padding: 32px; color: var(--muted); }
+
+/* side panel */
+.side h3 { margin-bottom: 8px; }
+.side section + section { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--gray-2); }
+.check { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; cursor: pointer; }
+.check input { accent-color: var(--teal-9); margin-top: 3px; }
+select { font: inherit; height: 32px; border: 1px solid var(--gray-3); border-radius: var(--radius); padding: 0 8px; width: 100%; background: #fff; color: var(--text); }
+.log { font: 11.5px/1.5 ui-monospace, Consolas, monospace; background: var(--gray-1); border-radius: var(--radius); padding: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; color: var(--text); }
+.log b { color: var(--teal-9); font-weight: 600; }
+.log .err { color: var(--red-8); }
+
+/* toasts */
+.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; max-width: calc(100vw - 32px); width: 340px; }
+.toast { background: #fff; border: 1px solid var(--gray-3); border-left: 4px solid var(--teal-9); border-radius: var(--radius); padding: 10px 12px; box-shadow: 0 4px 14px rgba(16,28,60,.12); animation: in .2s ease; }
+.toast.red { border-left-color: var(--red-8); } .toast.yellow { border-left-color: var(--yellow-8); }
+.toast strong { color: var(--heading); display: block; }
+@keyframes in { from { transform: translateY(8px); opacity: 0; } }
+
+/* driver detail */
+.detail { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; }
+.hero { position: relative; aspect-ratio: 16/10; border-radius: var(--radius-md); overflow: hidden; background: var(--gray-1) center/cover no-repeat; }
+.hero .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255,255,255,.9); color: var(--heading); font-size: 18px; box-shadow: var(--shadow); }
+.hero .prev { left: 10px; } .hero .next { right: 10px; }
+.hero .count { position: absolute; right: 10px; bottom: 10px; background: rgba(16,28,60,.7); color: #fff; border-radius: 10px; padding: 2px 10px; font-size: 12px; }
+.strip { display: flex; gap: 8px; margin-top: 10px; overflow-x: auto; }
+.strip button { flex: 0 0 72px; aspect-ratio: 4/3; border: 2px solid transparent; border-radius: var(--radius); background: var(--gray-1) center/cover no-repeat; padding: 0; }
+.strip button[aria-current="true"] { border-color: var(--teal-9); }
+.placeholder { display: grid; place-items: center; height: 100%; color: var(--teal-9); background: linear-gradient(135deg, var(--teal-0), #f1f8f5); text-align: center; }
+.placeholder svg { opacity: .55; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 12px 0; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-weight: 600; }
+.connector { display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--gray-2); }
+
+/* catalog */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.st-card { overflow: hidden; }
+.st-card .img { aspect-ratio: 16/9; background: var(--gray-1) center/cover no-repeat; }
+.st-card .body { padding: 14px; }
+.notes { margin-top: 24px; }
+.notes li { margin: 4px 0; }
+code { font: 12px ui-monospace, Consolas, monospace; background: var(--gray-1); padding: 1px 5px; border-radius: 3px; }
+
+[hidden] { display: none !important; }
+@media (max-width: 860px) {
+  .layout, .detail { grid-template-columns: 1fr; }
+  .app-inner { padding: 0 16px; gap: 16px; }
+  main { padding: 16px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+@media (max-width: 420px) { .brand span { display: none; } }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="app-inner">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+      <span>EV Charging</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-view="editor" aria-selected="true">Operator · Gallery</button>
+      <button role="tab" data-view="detail" aria-selected="false">Driver · Station</button>
+      <button role="tab" data-view="catalog" aria-selected="false">Driver · Catalog</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="layout">
+    <div>
+      <!-- OPERATOR EDITOR -->
+      <section id="view-editor">
+        <div class="editor-head">
+          <div>
+            <div class="muted small">Stations › Riverside Mall P2 › Photos</div>
+            <h1>Station photos</h1>
+            <p class="muted" style="margin:4px 0 0">The first photo is the cover in search and the catalog.</p>
+          </div>
+          <div style="text-align:right">
+            <strong id="occupancy" style="color:var(--heading)">0 / 5 photos</strong>
+            <div class="meter"><i id="meter"></i></div>
+            <div class="muted small" style="margin-top:4px">Pending uploads count. Failed ones don't.</div>
+          </div>
+        </div>
+
+        <div id="storage-banner" class="alert alert-yellow" style="margin-bottom:16px" hidden>
+          <span>⚠</span><div><strong>Photo storage is unavailable.</strong> Uploads are paused; the gallery and station stay usable. We'll retry automatically.</div>
+        </div>
+
+        <div id="drop" class="drop">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="var(--teal-9)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+          <div style="margin:6px 0 10px"><strong style="color:var(--heading)">Drag photos here</strong> <span class="muted">or</span></div>
+          <button id="add" class="btn btn-primary">Add photos</button>
+          <div class="muted small" id="limits-hint" style="margin-top:10px"></div>
+          <input id="file" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+          <input id="replace-file" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        </div>
+
+        <div id="grid" class="grid"></div>
+      </section>
+
+      <!-- DRIVER DETAIL -->
+      <section id="view-detail" hidden>
+        <div class="muted small">Stations › Riverside Mall P2</div>
+        <h1 style="margin-bottom:16px">Riverside Mall P2</h1>
+        <div class="detail">
+          <div>
+            <div id="hero" class="hero"></div>
+            <div id="strip" class="strip"></div>
+          </div>
+          <div class="card pad">
+            <span class="badge badge-teal">Available</span>
+            <dl class="kv">
+              <dt>Address</dt><dd>12 Amir Temur St, Tashkent</dd>
+              <dt>Hours</dt><dd>24/7</dd>
+              <dt>Operator</dt><dd>WattHarbor</dd>
+            </dl>
+            <div class="connector"><span>CCS2 · 150 kW</span><span class="badge badge-teal">2 free</span></div>
+            <div class="connector"><span>Type 2 · 22 kW</span><span class="badge badge-gray">Busy</span></div>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px">Reserve a connector</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- CATALOG -->
+      <section id="view-catalog" hidden>
+        <h1 style="margin-bottom:16px">Find a station</h1>
+        <div id="cards" class="cards"></div>
+      </section>
+
+      <div class="card pad notes">
+        <h3>How this maps to the API</h3>
+        <ul class="muted">
+          <li>Each file: <code>POST /stations/{id}/media/photo-uploads</code> with <code>galleryVersion</code>, <code>contentType</code>, <code>byteLength</code> → signed PUT URL bound to that exact type and size.</li>
+          <li>Browser PUTs bytes straight to storage (XHR for progress), then <code>POST …/{itemId}/upload-completion</code>. The tile moves to <em>Processing</em> and polls the editor query until <em>Published</em> or <em>Failed</em>.</li>
+          <li>Every write sends <code>galleryVersion</code>. A 409 conflict refetches the editor and retries once; uploads start one at a time so concurrent starts don't conflict with each other.</li>
+          <li><em>Replace</em> sends <code>replacesItemId</code>. The current photo stays visible to drivers until the replacement is published; a failed replacement keeps it.</li>
+          <li>Failure text is chosen from <code>failureCode</code> / problem <code>code</code>, never from message text.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- SCENARIO PANEL -->
+    <aside class="card pad side">
+      <section>
+        <h3>Prototype controls</h3>
+        <p class="muted small" style="margin:0 0 8px">Simulates the backend so each state can be shown.</p>
+        <label class="small muted" for="network">Network</label>
+        <select id="network"><option value="fast">Fast</option><option value="slow" selected>Slow 3G-ish</option></select>
+      </section>
+      <section>
+        <h3>Next upload</h3>
+        <label class="check"><input type="radio" name="outcome" value="ok" checked> Succeeds</label>
+        <label class="check"><input type="radio" name="outcome" value="undecodable"> Worker: <code>undecodable</code></label>
+        <label class="check"><input type="radio" name="outcome" value="too_many_pixels"> Worker: <code>too_many_pixels</code></label>
+        <label class="check"><input type="radio" name="outcome" value="upload_expired"> PUT stalls → <code>upload_expired</code></label>
+      </section>
+      <section>
+        <h3>Environment</h3>
+        <label class="check"><input type="checkbox" id="storage-down"> Storage unavailable</label>
+        <button id="conflict" class="btn btn-default btn-sm" style="margin-top:6px">Edit from another tab</button>
+        <button id="seed" class="btn btn-subtle btn-sm" style="margin-top:6px">Load sample photos</button>
+      </section>
+      <section>
+        <h3>Requests</h3>
+        <div id="log" class="log"></div>
+      </section>
+    </aside>
+  </div>
+</main>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+  const LIMITS = { maximumPhotosPerStation: 5, maximumPhotoBytes: 8 * 1024 * 1024, maximumPhotoPixels: 24_000_000,
+    photoContentTypes: ["image/jpeg", "image/png", "image/webp"], uploadUrlLifetimeSeconds: 900 };
+  const FAILURES = {
+    upload_missing: "The file never reached storage. Try again.",
+    upload_expired: "The upload took too long and expired. Try again on a steadier connection.",
+    undecodable: "This file isn't a readable image.",
+    too_many_pixels: "This image is larger than 24 megapixels. Resize it and try again.",
+    unsupported_format: "Only JPEG, PNG, or WebP images are accepted.",
+  };
+  const $ = (id) => document.getElementById(id);
+  const uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fmtMB = (b) => (b / 1024 / 1024).toFixed(1) + " MB";
+
+  // ---------- fake server ----------
+  const server = { version: 0, items: [] }; // {id, position, state, failureCode, src, replacesId}
+  function log(line, cls) {
+    const el = $("log"); const d = document.createElement("div");
+    d.innerHTML = line; if (cls) d.className = cls; el.prepend(d);
+  }
+  const occupied = () => server.items.filter((i) => i.position != null && i.state !== "Failed").length;
+  const storageDown = () => $("storage-down").checked;
+  const latency = () => ($("network").value === "slow" ? 450 : 120);
+
+  const api = {
+    async editor() {
+      await sleep(80);
+      const items = server.items.filter((i) => i.position != null).sort((a, b) => a.position - b.position)
+        .map((i) => {
+          const r = server.items.find((x) => x.replacesId === i.id);
+          return { id: i.id, position: i.position, state: i.state, failureCode: i.failureCode,
+            thumbnailUrl: i.state === "Published" ? i.src : null,
+            replacement: r ? { id: r.id, state: r.state, failureCode: r.failureCode } : null };
+        });
+      return { galleryVersion: server.version, items, limits: LIMITS };
+    },
+    async startUpload({ galleryVersion, contentType, byteLength, replacesItemId }, src) {
+      await sleep(latency());
+      log(`<b>POST</b> photo-uploads v${galleryVersion} ${contentType} ${byteLength}B${replacesItemId ? " replaces" : ""}`);
+      if (storageDown()) throw problem(503, null, "Storage unavailable");
+      if (!LIMITS.photoContentTypes.includes(contentType)) throw problem(400, null, "ContentType");
+      if (byteLength > LIMITS.maximumPhotoBytes) throw problem(400, null, "ByteLength");
+      if (galleryVersion !== server.version) throw problem(409, "concurrency_conflict");
+      const item = { id: uid(), state: "Uploading", failureCode: null, src, position: null, replacesId: null };
+      if (replacesItemId) {
+        server.items = server.items.filter((x) => x.replacesId !== replacesItemId); // drop unfinished replacement
+        item.replacesId = replacesItemId;
+      } else {
+        if (occupied() >= LIMITS.maximumPhotosPerStation) throw problem(409, "media_limit_reached");
+        item.position = Math.max(-1, ...server.items.filter((i) => i.position != null).map((i) => i.position)) + 1;
+      }
+      server.items.push(item); server.version++;
+      return { itemId: item.id, uploadUrl: "https://storage.local/private/uploads/…?X-Amz-Signature=…",
+        uploadExpiresAt: new Date(Date.now() + LIMITS.uploadUrlLifetimeSeconds * 1000), galleryVersion: server.version };
+    },
+    async put(itemId, bytes, onProgress, outcome) {
+      log(`<b>PUT</b> storage ${bytes}B (signed)`);
+      const steps = 20, total = $("network").value === "slow" ? 3200 : 900;
+      for (let s = 1; s <= steps; s++) {
+        await sleep(total / steps);
+        if (!server.items.some((i) => i.id === itemId)) throw problem(0, "aborted");
+        if (outcome === "upload_expired" && s === 13) { // stall until deadline
+          await sleep(1500); settle(itemId, "Failed", "upload_expired"); throw problem(403, "expired");
+        }
+        onProgress(s / steps);
+      }
+    },
+    async complete(itemId, outcome) {
+      await sleep(latency());
+      log(`<b>POST</b> ${itemId.slice(0, 8)}…/upload-completion`);
+      const item = server.items.find((i) => i.id === itemId);
+      if (!item) throw problem(404);
+      if (item.state === "Failed") throw problem(409, "upload_failed");
+      if (item.state === "Uploading") {
+        item.state = "Processing";
+        // media worker
+        setTimeout(() => {
+          if (outcome === "ok") settle(itemId, "Published"); else settle(itemId, "Failed", outcome);
+        }, 1800 + Math.random() * 900);
+      }
+      return { itemId, state: item.state };
+    },
+    async reorder(galleryVersion, itemIds) {
+      await sleep(latency());
+      log(`<b>PUT</b> order v${galleryVersion}`);
+      if (galleryVersion !== server.version) throw problem(409, "concurrency_conflict");
+      itemIds.forEach((id, idx) => { server.items.find((i) => i.id === id).position = idx; });
+      server.version++; return { galleryVersion: server.version };
+    },
+    async remove(itemId) {
+      await sleep(latency());
+      log(`<b>DELETE</b> ${itemId.slice(0, 8)}…`);
+      server.items = server.items.filter((i) => i.id !== itemId && i.replacesId !== itemId);
+      server.items.filter((i) => i.position != null).sort((a, b) => a.position - b.position).forEach((i, n) => (i.position = n));
+      server.version++; return { galleryVersion: server.version };
+    },
+  };
+  function settle(itemId, state, failureCode = null) {
+    const item = server.items.find((i) => i.id === itemId); if (!item) return;
+    log(`worker: ${itemId.slice(0, 8)}… → ${state}${failureCode ? " (" + failureCode + ")" : ""}`, failureCode ? "err" : "");
+    if (item.replacesId && state === "Published") {
+      const original = server.items.find((i) => i.id === item.replacesId);
+      item.position = original.position; item.replacesId = null; item.state = "Published";
+      server.items = server.items.filter((i) => i !== original);
+    } else { item.state = state; item.failureCode = failureCode; }
+    server.version++;
+    refresh();
+  }
+  function problem(status, code, field) {
+    const e = new Error(code || field || String(status)); e.status = status; e.code = code; e.field = field;
+    log(`  ← ${status} ${code || field || ""}`, "err"); return e;
+  }
+
+  // ---------- client state ----------
+  let view = null;           // editor response
+  const local = new Map();   // itemId -> { progress, preview }
+  const queue = [];
+  let busy = false;
+  let confirmId = null, replaceTarget = null, dragId = null;
+
+  async function refresh() { view = await api.editor(); render(); }
+
+  function toast(title, body, tone = "") {
+    const t = document.createElement("div"); t.className = "toast " + tone;
+    t.innerHTML = `<strong>${title}</strong><span class="muted">${body}</span>`;
+    $("toasts").append(t); setTimeout(() => t.remove(), 4200);
+  }
+
+  async function withConflictRetry(fn) {
+    try { return await fn(); }
+    catch (e) {
+      if (e.code !== "concurrency_conflict") throw e;
+      await refresh(); toast("Gallery changed elsewhere", "We refreshed it and tried again.", "yellow");
+      return await fn();
+    }
+  }
+
+  function enqueue(files, replacesItemId = null) {
+    const remaining = LIMITS.maximumPhotosPerStation - occupiedView() - queue.filter((q) => !q.replacesItemId).length;
+    let accepted = 0;
+    for (const file of files) {
+      if (!LIMITS.photoContentTypes.includes(file.type)) { toast(`${file.name} skipped`, "Use JPEG, PNG, or WebP.", "red"); continue; }
+      if (file.size > LIMITS.maximumPhotoBytes) { toast(`${file.name} skipped`, `It is ${fmtMB(file.size)}; the limit is 8 MB.`, "red"); continue; }
+      if (!replacesItemId && accepted >= remaining) { toast("Gallery is full", `Only ${LIMITS.maximumPhotosPerStation} photos per station. Remove one to add more.`, "red"); break; }
+      queue.push({ file, replacesItemId }); accepted++;
+    }
+    pump();
+  }
+  const occupiedView = () => (view ? view.items.filter((i) => i.state !== "Failed").length : 0);
+
+  async function pump() {
+    if (busy) return; busy = true;
+    while (queue.length) {
+      const { file, replacesItemId } = queue.shift();
+      const preview = URL.createObjectURL(file);
+      const outcome = document.querySelector("input[name=outcome]:checked").value;
+      let started;
+      try {
+        started = await withConflictRetry(() => api.startUpload(
+          { galleryVersion: view.galleryVersion, contentType: file.type, byteLength: file.size, replacesItemId }, preview));
+      } catch (e) {
+        if (e.code === "media_limit_reached") toast("Gallery is full", "Remove a photo to add another.", "red");
+        else if (e.status === 503) toast("Uploads are paused", "Photo storage is unavailable right now.", "yellow");
+        else toast("Couldn't start upload", file.name, "red");
+        continue;
+      }
+      local.set(started.itemId, { progress: 0, preview });
+      await refresh();
+      // transfer runs in background; next file may start
+      (async () => {
+        try {
+          await api.put(started.itemId, file.size, (p) => { local.get(started.itemId).progress = p; render(); }, outcome);
+          await api.complete(started.itemId, outcome === "upload_expired" ? "ok" : outcome);
+        } catch (e) { /* state comes from server */ }
+        await refresh();
+      })();
+    }
+    busy = false;
+  }
+
+  // ---------- rendering ----------
+  const icon = {
+    grip: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
+    left: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m15 18-6-6 6-6"/></svg>',
+    right: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m9 18 6-6-6-6"/></svg>',
+    bolt: '<svg width="44" height="44" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>',
+  };
+
+  function tile(item, idx, count) {
+    const l = local.get(item.id);
+    const bg = item.thumbnailUrl || l?.preview || "";
+    const failed = item.state === "Failed";
+    let overlay = "";
+    if (item.state === "Uploading") {
+      const p = Math.round((l?.progress ?? 0) * 100);
+      overlay = `<div class="overlay"><span>Uploading ${p}%</span><div class="bar"><i style="width:${p}%"></i></div>
+        <button class="btn btn-subtle btn-sm" data-act="remove-now" data-id="${item.id}">Cancel</button></div>`;
+    } else if (item.state === "Processing") {
+      overlay = `<div class="overlay"><div class="spinner"></div><span>Optimizing…</span></div>`;
+    } else if (failed) {
+      overlay = `<div class="overlay fail"><strong>Upload failed</strong><span class="small" style="font-weight:500">${FAILURES[item.failureCode] || "Try again."}</span></div>`;
+    }
+    let ribbon = "";
+    const r = item.replacement;
+    if (r && !overlay) {
+      if (r.state === "Uploading") {
+        const p = Math.round((local.get(r.id)?.progress ?? 0) * 100);
+        ribbon = `<div class="ribbon">Uploading ${p}% <div class="bar"><i style="width:${p}%"></i></div></div>`;
+      } else if (r.state === "Processing") ribbon = `<div class="ribbon"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Optimizing…</div>`;
+      else if (r.state === "Failed") ribbon = `<div class="ribbon fail" title="${FAILURES[r.failureCode] || ""}">Upload failed</div>`;
+    }
+    const pos = idx === 0 ? '<span class="badge badge-teal pos">Cover</span>' : `<span class="badge badge-gray pos">${idx + 1}</span>`;
+    const stateBadge = { Published: "", Uploading: '<span class="badge badge-blue">Uploading</span>',
+      Processing: '<span class="badge badge-blue">Processing</span>', Failed: '<span class="badge badge-red">Failed</span>' }[item.state];
+    const actions = failed
+      ? `<button class="btn btn-subtle btn-sm" data-act="replace" data-id="${item.id}">Upload</button>`
+      : item.state === "Published" ? `<button class="btn btn-subtle btn-sm" data-act="replace" data-id="${item.id}">Upload</button>` : stateBadge;
+    const confirm = confirmId === item.id ? `<div class="confirm">Remove this photo? Drivers stop seeing it right away.
+      <div class="row"><button class="btn btn-danger btn-sm" data-act="remove-now" data-id="${item.id}">Remove</button>
+      <button class="btn btn-default btn-sm" data-act="cancel">Keep</button></div></div>` : "";
+    return `<article class="tile ${failed ? "failed" : ""}" draggable="true" data-id="${item.id}">
+      <div class="thumb" style="background-image:${bg ? `url('${bg}')` : "none"}">${pos}
+        <span class="handle" title="Drag to reorder">${icon.grip}</span>${overlay}${ribbon}</div>
+      <div class="tile-foot">
+        <div class="moves">
+          <button class="icon-btn" data-act="move" data-dir="-1" data-id="${item.id}" ${idx === 0 ? "disabled" : ""} aria-label="Move earlier">${icon.left}</button>
+          <button class="icon-btn" data-act="move" data-dir="1" data-id="${item.id}" ${idx === count - 1 ? "disabled" : ""} aria-label="Move later">${icon.right}</button>
+        </div>
+        <div style="display:flex;gap:2px;align-items:center">${actions}
+          <button class="btn btn-subtle btn-sm" style="color:var(--red-8)" data-act="remove" data-id="${item.id}">Remove</button></div>
+      </div>${confirm}</article>`;
+  }
+
+  function render() {
+    if (!view) return;
+    const occ = occupiedView(), max = LIMITS.maximumPhotosPerStation;
+    $("occupancy").textContent = `${occ} / ${max} photos`;
+    $("meter").style.width = (occ / max) * 100 + "%";
+    const full = occ >= max, down = storageDown();
+    $("add").disabled = full || down;
+    $("drop").classList.toggle("disabled", full || down);
+    $("limits-hint").textContent = full
+      ? "The gallery is full. Remove or replace a photo to change it."
+      : `JPEG, PNG, or WebP · up to 8 MB and 24 megapixels · ${max - occ} slot${max - occ === 1 ? "" : "s"} left`;
+    $("storage-banner").hidden = !down;
+    $("grid").innerHTML = view.items.length
+      ? view.items.map((it, i) => tile(it, i, view.items.length)).join("")
+      : `<div class="empty">No photos yet. Drivers see a placeholder until you add one.</div>`;
+    renderDriver();
+  }
+
+  // ---------- driver views ----------
+  let heroIndex = 0;
+  const placeholder = (label) => `<div class="placeholder"><div>${icon.bolt}<div class="small" style="margin-top:6px;font-weight:600">${label}</div></div></div>`;
+  function renderDriver() {
+    const published = storageDown() ? [] : (view?.items || []).filter((i) => i.state === "Published");
+    heroIndex = Math.min(heroIndex, Math.max(0, published.length - 1));
+    const hero = $("hero");
+    if (!published.length) { hero.style.backgroundImage = "none"; hero.innerHTML = placeholder(storageDown() ? "Photos are temporarily unavailable" : "No photos yet"); $("strip").innerHTML = ""; }
+    else {
+      hero.style.backgroundImage = `url('${published[heroIndex].thumbnailUrl}')`;
+      hero.innerHTML = published.length > 1
+        ? `<button class="nav prev" data-hero="-1" aria-label="Previous">‹</button><button class="nav next" data-hero="1" aria-label="Next">›</button><span class="count">${heroIndex + 1} / ${published.length}</span>` : "";
+      $("strip").innerHTML = published.map((p, i) => `<button data-thumb="${i}" aria-current="${i === heroIndex}" style="background-image:url('${p.thumbnailUrl}')"></button>`).join("");
+    }
+    const cover = published[0]?.thumbnailUrl;
+    const stations = [
+      { name: "Riverside Mall P2", addr: "12 Amir Temur St", img: cover, free: "2 of 4 free" },
+      { name: "Chilonzor Hub", addr: "45 Bunyodkor Ave", img: null, free: "1 of 2 free" },
+      { name: "Airport Long-stay", addr: "Terminal 2, Level -1", img: null, free: "6 of 8 free" },
+    ];
+    $("cards").innerHTML = stations.map((s) => `<article class="card st-card">
+      <div class="img" style="background-image:${s.img ? `url('${s.img}')` : "none"}">${s.img ? "" : placeholder("")}</div>
+      <div class="body"><h3>${s.name}</h3><div class="muted">${s.addr}</div>
+      <div style="margin-top:8px"><span class="badge badge-teal">${s.free}</span></div></div></article>`).join("");
+  }
+  document.addEventListener("click", (e) => {
+    const h = e.target.closest("[data-hero]"), t = e.target.closest("[data-thumb]");
+    const n = (view?.items || []).filter((i) => i.state === "Published").length;
+    if (h) { heroIndex = (heroIndex + Number(h.dataset.hero) + n) % n; renderDriver(); }
+    if (t) { heroIndex = Number(t.dataset.thumb); renderDriver(); }
+  });
+
+  // ---------- interactions ----------
+  async function move(id, to) {
+    const ids = view.items.map((i) => i.id); const from = ids.indexOf(id);
+    if (to < 0 || to >= ids.length || to === from) return;
+    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    view.items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id)); render(); // optimistic
+    try { await withConflictRetry(() => api.reorder(view.galleryVersion, view.items.map((i) => i.id))); }
+    catch { toast("Couldn't save the order", "Try again.", "red"); }
+    await refresh();
+  }
+  $("grid").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-act]"); if (!b) return;
+    const id = b.dataset.id;
+    switch (b.dataset.act) {
+      case "move": move(id, view.items.findIndex((i) => i.id === id) + Number(b.dataset.dir)); break;
+      case "remove": confirmId = id; render(); break;
+      case "cancel": confirmId = null; render(); break;
+      case "remove-now":
+        confirmId = null; view.items = view.items.filter((i) => i.id !== id); render(); // hides immediately
+        await api.remove(id); toast("Photo removed", "Drivers no longer see it."); await refresh(); break;
+      case "replace": replaceTarget = id; $("replace-file").click(); break;
+    }
+  });
+  $("grid").addEventListener("dragstart", (e) => { const t = e.target.closest(".tile"); if (!t) return; dragId = t.dataset.id; t.classList.add("dragging"); });
+  $("grid").addEventListener("dragend", () => { dragId = null; document.querySelectorAll(".tile").forEach((t) => t.classList.remove("dragging", "drop-target")); });
+  $("grid").addEventListener("dragover", (e) => {
+    if (!dragId) return; e.preventDefault();
+    document.querySelectorAll(".tile").forEach((t) => t.classList.toggle("drop-target", t === e.target.closest(".tile") && t.dataset.id !== dragId));
+  });
+  $("grid").addEventListener("drop", (e) => {
+    const t = e.target.closest(".tile"); if (!dragId || !t) return; e.preventDefault();
+    move(dragId, view.items.findIndex((i) => i.id === t.dataset.id));
+  });
+
+  $("add").onclick = () => $("file").click();
+  $("file").onchange = (e) => { enqueue([...e.target.files]); e.target.value = ""; };
+  $("replace-file").onchange = (e) => {
+    const target = view.items.find((i) => i.id === replaceTarget);
+    if (e.target.files[0] && target) {
+      if (target.state === "Failed") { // a failed slot is retried by replacing it in place
+        api.remove(target.id).then(refresh).then(() => enqueue([e.target.files[0]]));
+      } else enqueue([e.target.files[0]], target.id);
+    }
+    e.target.value = ""; replaceTarget = null;
+  };
+  const drop = $("drop");
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { if (dragId) return; e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("over")));
+  drop.addEventListener("drop", (e) => { if (dragId) return; e.preventDefault(); if (!$("add").disabled) enqueue([...e.dataTransfer.files]); });
+
+  $("storage-down").onchange = render;
+  $("conflict").onclick = () => { server.version++; log("another editor changed the gallery (version bump)", "err"); toast("Simulated", "Your next change will hit a stale version."); };
+
+  // sample images rendered on canvas so the prototype needs no network
+  function sample(hue, label) {
+    const c = document.createElement("canvas"); c.width = 640; c.height = 480; const g = c.getContext("2d");
+    const grd = g.createLinearGradient(0, 0, 640, 480);
+    grd.addColorStop(0, `hsl(${hue},45%,72%)`); grd.addColorStop(1, `hsl(${hue + 30},50%,38%)`);
+    g.fillStyle = grd; g.fillRect(0, 0, 640, 480);
+    g.fillStyle = "rgba(255,255,255,.88)"; g.fillRect(250, 150, 140, 220); g.fillStyle = "#087f5b"; g.fillRect(270, 175, 100, 60);
+    g.fillStyle = "#fff"; g.font = "600 28px Segoe UI, sans-serif"; g.fillText(label, 24, 452);
+    return c.toDataURL("image/png");
+  }
+  $("seed").onclick = async () => {
+    [[160, "Entrance"], [200, "Bay 1–4"], [30, "Signage"]].forEach(([h, l]) => {
+      if (occupied() >= LIMITS.maximumPhotosPerStation) return;
+      const pos = Math.max(-1, ...server.items.filter((i) => i.position != null).map((i) => i.position)) + 1;
+      server.items.push({ id: uid(), position: pos, state: "Published", failureCode: null, src: sample(h, l), replacesId: null });
+      server.version++;
+    });
+    await refresh();
+  };
+
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.onclick = () => {
+    document.querySelectorAll("nav.tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
+    ["editor", "detail", "catalog"].forEach((v) => ($("view-" + v).hidden = v !== b.dataset.view));
+  });
+
+  $("seed").click();
+})();
+</script>
+</body>
+</html>

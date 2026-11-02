@@ -471,7 +471,7 @@ The initial booking-limit experiment configures admission limits as follows.
 | Photos per station | 5, including pending uploads |
 | Instructional videos per station | 1 |
 | Photo upload | JPEG, PNG, or WebP; at most 8 MB and 24 megapixels |
-| Photo variants | WebP thumbnail (480 px longest edge) and display image (1600 px longest edge) |
+| Photo variants | WebP thumbnail (480 px longest edge) for cards and thumbnail strips, and display image (1600 px longest edge) for the station detail view |
 | Instructional video upload | MP4; at most 50 MB and 60 seconds |
 | Upload URL lifetime | 30 minutes |
 | Pending upload retention | 1 day |

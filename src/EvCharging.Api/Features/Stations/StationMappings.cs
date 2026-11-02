@@ -1,13 +1,15 @@
 using EvCharging.Domain.Equipment;
+using EvCharging.S3ObjectStore;
 
 namespace EvCharging.Api.Features.Stations;
 
-internal static class StationResponseMappings
+internal static class StationMappings
 {
     public static StationSummaryResponse ToResponse(
         this Station station,
         int chargerCount,
-        IReadOnlyList<Connector> connectors)
+        IReadOnlyList<Connector> connectors,
+        StationPhotoResponse? coverPhoto)
     {
         var capabilities = connectors.Select(connector => connector.ToCapabilityResponse())
             .Distinct()
@@ -21,22 +23,25 @@ internal static class StationResponseMappings
             station.Address,
             chargerCount,
             connectors.Count,
-            capabilities);
+            capabilities,
+            coverPhoto);
     }
 
-    public static StationDetailResponse ToResponse(this Station station, bool canEdit) => new(
-        station.PublicId,
-        station.Name,
-        station.Address,
-        station.Latitude,
-        station.Longitude,
-        station.TimeZoneId,
-        station.AccessInstructions,
-        station.Chargers
-            .OrderBy(charger => charger.Id)
-            .Select(charger => charger.ToResponse())
-            .ToArray(),
-        canEdit);
+    public static StationDetailResponse ToResponse(
+        this Station station, bool canEdit, IReadOnlyList<StationPhotoResponse> photos) => new(
+            station.PublicId,
+            station.Name,
+            station.Address,
+            station.Latitude,
+            station.Longitude,
+            station.TimeZoneId,
+            station.AccessInstructions,
+            station.Chargers
+                .OrderBy(charger => charger.Id)
+                .Select(charger => charger.ToResponse())
+                .ToArray(),
+            photos,
+            canEdit);
 
     public static ChargerResponse ToResponse(this Charger charger) => new(
         charger.PublicId,
@@ -52,4 +57,7 @@ internal static class StationResponseMappings
 
     public static ConnectorCapabilityResponse ToCapabilityResponse(this Connector connector) => new(
         connector.ConnectorType, connector.PowerSupply, connector.RatedPowerKW);
+
+    public static StationPhotoResponse ToPhotoResponse(this StationMediaUrls urls, Guid stationId, Guid photoId) =>
+        new(photoId, urls.Thumbnail(stationId, photoId), urls.Display(stationId, photoId));
 }

@@ -33,6 +33,9 @@ internal sealed class StationMediaItemConfiguration : IEntityTypeConfiguration<S
             .HasForeignKey(item => item.ReplacesItemId)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasIndex(item => item.StationId);
+        // Serves the visible gallery and cover reads; the filter matches StationGalleryExtensions.Visible.
+        entity.HasIndex(item => new { item.StationId, item.Position })
+            .HasFilter("state = 'published' AND position IS NOT NULL");
         entity.HasIndex(item => item.ReplacesItemId).IsUnique();
         entity.ToTable(table =>
         {

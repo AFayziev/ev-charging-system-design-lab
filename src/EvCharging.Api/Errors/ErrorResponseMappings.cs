@@ -6,10 +6,8 @@ internal static class ErrorResponseMappings
 {
     public static NotFound ToResponse<TId>(this NotFoundError<TId> error) => TypedResults.NotFound();
 
-    public static ProblemHttpResult ToResponse(this ConcurrencyConflictError error) => TypedResults.Problem(
-        statusCode: StatusCodes.Status409Conflict,
-        title: "Resource changed",
-        detail: error.Message);
+    public static ProblemHttpResult ToResponse(this ConcurrencyConflictError error) =>
+        CodedConflict("Resource changed", error.Message, ConcurrencyConflictError.Code);
 
     // Conflicts the status alone cannot distinguish carry a machine-readable code for the frontend.
     public static ProblemHttpResult CodedConflict(string title, string detail, string code) => TypedResults.Problem(

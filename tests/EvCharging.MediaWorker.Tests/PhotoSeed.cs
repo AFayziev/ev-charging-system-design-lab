@@ -103,8 +103,7 @@ internal sealed class PhotoSeed(PlatformDatabaseFixture database, ObjectStoreFix
     public static byte[] PublishedBytes { get; } = "earlier published bytes"u8.ToArray();
 
     public Uri PublicUrl(Station station, SeededPhoto photo, string variant) =>
-        storage.MediaWorkerStore
-            .PublicUrl(StationMediaObjectKeys.Variant(station.PublicId, photo.Item.PublicId, variant));
+        storage.PublicUrl(StationMediaObjectKeys.Variant(station.PublicId, photo.Item.PublicId, variant));
 
     public async Task<StationMediaItem?> FindAsync(Guid id)
     {

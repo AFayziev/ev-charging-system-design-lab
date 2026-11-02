@@ -12,4 +12,5 @@ public sealed record StationSearchDocument(
     IReadOnlyList<ConnectorSearchDocument> Connectors,
     IReadOnlyList<string> ChargerNames,
     IReadOnlyList<string> ProviderNames,
-    string ConnectorText);
+    string ConnectorText,
+    Guid? CoverPhotoId);

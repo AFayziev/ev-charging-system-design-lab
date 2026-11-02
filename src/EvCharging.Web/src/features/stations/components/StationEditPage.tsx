@@ -32,6 +32,7 @@ import {
   type StationEdit,
   type StationDetail,
 } from "../api";
+import { StationGallerySection } from "./StationGallerySection";
 import { StationLoading } from "./StationPresentation";
 
 export function StationEditPage() {
@@ -152,7 +153,7 @@ function StationEditForm({
       <Stack gap="xl">
         <PageHeading
           title="Edit station"
-          description={`Update the information drivers see for ${confirmed.name}.`}
+          description={`Update the information for ${confirmed.name}.`}
         />
         <Card withBorder padding="lg" maw={760} w="100%">
           <form
@@ -218,6 +219,7 @@ function StationEditForm({
             </Stack>
           </form>
         </Card>
+        <StationGallerySection stationId={initial.id} />
       </Stack>
     </Stack>
   );

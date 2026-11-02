@@ -1,6 +1,7 @@
 import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
 import "@mantine/core/styles.css";
 import "@mantine/dates/styles.css";
+import "@mantine/dropzone/styles.css";
 import { MantineProvider, Text, Title, createTheme } from "@mantine/core";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";

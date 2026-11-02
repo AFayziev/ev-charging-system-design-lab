@@ -13,7 +13,7 @@ public static class StationSearchIndex
     public const string IndexPattern = "stations-*";
 
     /// <summary>Changing the mapping means raising this, which makes the worker rebuild into a new index.</summary>
-    public const string MappingVersion = "1";
+    public const string MappingVersion = "2";
 
     public const string MappingVersionKey = "mappingVersion";
 
@@ -28,7 +28,9 @@ public static class StationSearchIndex
         { document => document.Connectors, new NestedProperty { Properties = ConnectorProperties() } },
         { document => document.ChargerNames, new TextProperty() },
         { document => document.ProviderNames, new TextProperty() },
-        { document => document.ConnectorText, new TextProperty() }
+        { document => document.ConnectorText, new TextProperty() },
+        // Only returned with a hit; the photo's address is built at read time from the configured base URL.
+        { document => document.CoverPhotoId, new KeywordProperty { Index = false } }
     };
 
     private static Properties<ConnectorSearchDocument> ConnectorProperties() => new()

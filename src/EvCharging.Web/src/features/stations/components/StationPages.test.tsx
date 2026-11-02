@@ -49,6 +49,7 @@ const detailStation = {
   longitude: -0.12,
   timeZoneId: "Europe/London",
   accessInstructions: "North entrance",
+  photos: [],
   chargers: [
     {
       id: "charger",
@@ -140,6 +141,7 @@ it("keeps connector selection synchronized with the URL and booking form", async
     longitude: -0.12,
     timeZoneId: "Europe/London",
     accessInstructions: "North entrance",
+    photos: [],
     chargers: [
       {
         id: "charger",

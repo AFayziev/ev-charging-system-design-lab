@@ -355,10 +355,15 @@ internal static class ResourceExtensions
             .WithEnvironment("ObjectStorage__SecretKey", user.SecretKey)
             .WithEnvironment("ObjectStorage__PrivateBucket", ObjectStoreAccess.PrivateBucket)
             .WithEnvironment("ObjectStorage__PublicBucket", ObjectStoreAccess.PublicBucket)
-            .WithEnvironment(
-                "ObjectStorage__PublicBaseUrl",
-                ReferenceExpression.Create($"{storageAccess.PublicServiceUrl}/{ObjectStoreAccess.PublicBucket}"))
+            .WithPublicMediaUrl(storageAccess)
             .WaitForCompletion(storageAccess.Provisioning);
+
+    /// <summary>Gives a host that only links to published media the public delivery address, without credentials.</summary>
+    public static IResourceBuilder<T> WithPublicMediaUrl<T>(
+        this IResourceBuilder<T> host, ObjectStoreAccess storageAccess) where T : IResourceWithEnvironment =>
+        host.WithEnvironment(
+            "ObjectStorage__PublicBaseUrl",
+            ReferenceExpression.Create($"{storageAccess.PublicServiceUrl}/{ObjectStoreAccess.PublicBucket}"));
 
     internal static IResourceBuilder<ParameterResource> AddPersistentSecret(
         this IDistributedApplicationBuilder builder, string name) =>

@@ -12,4 +12,5 @@ internal sealed record StationSearchSource(
     int ChargerCount,
     List<ConnectorSearchDocument> Connectors,
     List<string> ChargerNames,
-    List<string?> ProviderNames);
+    List<string?> ProviderNames,
+    Guid? CoverPhotoId);

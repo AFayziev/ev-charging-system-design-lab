@@ -1,6 +1,7 @@
 using Elastic.Clients.Elasticsearch;
 using Elastic.Clients.Elasticsearch.Core.Search;
 using Elastic.Transport.Products.Elasticsearch;
+using EvCharging.S3ObjectStore;
 using EvCharging.SearchIndex;
 using Polly;
 using Polly.Registry;
@@ -10,6 +11,7 @@ namespace EvCharging.SearchApi.Features.Stations;
 internal sealed class StationSearchService(
     ElasticsearchClient client,
     ResiliencePipelineProvider<string> pipelines,
+    StationMediaUrls mediaUrls,
     ILogger<StationSearchService> logger)
 {
     private readonly ResiliencePipeline _pipeline = pipelines.GetPipeline(StationSearchResilience.PipelineKey);
@@ -61,7 +63,7 @@ internal sealed class StationSearchService(
             _ => (response.Hits.Count, true)
         };
 
-    private static StationSearchResultResponse ToResult(Hit<StationSearchDocument> hit, StationSearchSort sort)
+    private StationSearchResultResponse ToResult(Hit<StationSearchDocument> hit, StationSearchSort sort)
     {
         var station = hit.Source!;
         var capabilities = station.Connectors
@@ -81,8 +83,12 @@ internal sealed class StationSearchService(
             station.ChargerCount,
             station.ConnectorCount,
             capabilities,
+            station.CoverPhotoId is { } coverId ? ToPhoto(station.PublicId, coverId) : null,
             sort == StationSearchSort.Distance ? DistanceKm(hit) : null);
     }
+
+    private StationPhotoResponse ToPhoto(Guid stationId, Guid photoId) =>
+        new(photoId, mediaUrls.Thumbnail(stationId, photoId), mediaUrls.Display(stationId, photoId));
 
     private static double? DistanceKm(Hit<StationSearchDocument> hit) =>
         hit.Sort?.FirstOrDefault() is { } value && value.TryGetDouble(out var distance) ? distance : null;

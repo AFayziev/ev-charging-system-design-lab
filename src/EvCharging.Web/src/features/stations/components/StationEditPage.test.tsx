@@ -10,6 +10,10 @@ import { stationKeys } from "../api";
 
 const { get, put } = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { get, put } }));
+// These tests cover the details form; the photo gallery has its own requests.
+vi.mock("./StationGallerySection", () => ({
+  StationGallerySection: () => null,
+}));
 const station = {
   id: "709af89a-8fda-4724-a188-1e38aac99dd3",
   version: 123,

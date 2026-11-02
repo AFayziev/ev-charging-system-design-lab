@@ -1,6 +1,8 @@
 using EvCharging.Api.Errors;
 using EvCharging.Api.Pagination;
 using EvCharging.Persistence;
+using EvCharging.Persistence.Extensions;
+using EvCharging.S3ObjectStore;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,11 +18,12 @@ public sealed record StationSummaryResponse(
     string Address,
     int ChargerCount,
     int ConnectorCount,
-    IReadOnlyList<ConnectorCapabilityResponse> Capabilities);
+    IReadOnlyList<ConnectorCapabilityResponse> Capabilities,
+    StationPhotoResponse? CoverPhoto);
 
 public sealed record ConnectorCapabilityResponse(string ConnectorType, string PowerSupply, decimal RatedPowerKW);
 
-public sealed class ListStationsQueryHandler(PlatformReadDbContext database)
+public sealed class ListStationsQueryHandler(PlatformReadDbContext database, StationMediaUrls mediaUrls)
 {
     public async Task<Result<StationListResponse>> HandleAsync(
         ListStationsRequest request,
@@ -85,13 +88,22 @@ public sealed class ListStationsQueryHandler(PlatformReadDbContext database)
                     ChargerCount = station.Chargers.Count,
                     Connectors = station.Chargers
                         .SelectMany(charger => charger.Connectors)
-                        .ToList()
+                        .ToList(),
+                    CoverPhotoId = database.StationMediaItems
+                        .Visible()
+                        .Where(item => item.StationId == station.Id)
+                        .OrderBy(item => item.Position)
+                        .Select(item => (Guid?)item.PublicId)
+                        .FirstOrDefault()
                 })
             .ToListAsync(cancellationToken);
         var nextAfterId = CursorPagination.TrimPage(stations, limit, item => item.Station.PublicId);
 
         var summaries = stations
-            .Select(item => item.Station.ToResponse(item.ChargerCount, item.Connectors))
+            .Select(item => item.Station.ToResponse(
+                item.ChargerCount,
+                item.Connectors,
+                item.CoverPhotoId is { } coverId ? mediaUrls.ToPhotoResponse(item.Station.PublicId, coverId) : null))
             .ToArray();
         return new StationListResponse(summaries, nextAfterId);
     }

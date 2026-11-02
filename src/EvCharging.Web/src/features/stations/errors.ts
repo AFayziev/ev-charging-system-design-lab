@@ -21,6 +21,31 @@ export function isSearchUnavailable(error: unknown): boolean {
   }
 }
 
+/** The photo's slot count, gallery version, or state moved since the editor was loaded. */
+export const isConcurrencyConflict = (error: unknown): boolean =>
+  getHttpProblemCode(error) === "concurrency_conflict";
+
+export const isGalleryFull = (error: unknown): boolean =>
+  getHttpProblemCode(error) === "media_limit_reached";
+
+/** Why processing refused an upload, by the failure code the editor reports. */
+export function getPhotoFailureMessage(code: string | null): string {
+  switch (code) {
+    case "upload_missing":
+      return "The file never reached storage. Try again.";
+    case "upload_expired":
+      return "The upload took too long and expired. Try again on a steadier connection.";
+    case "undecodable":
+      return "This file isn't a readable image.";
+    case "too_many_pixels":
+      return "This image is too large in pixels. Resize it and try again.";
+    case "unsupported_format":
+      return "Only JPEG, PNG, or WebP images are accepted.";
+    default:
+      return "The photo could not be processed. Try again.";
+  }
+}
+
 export interface StationEditFailure extends HttpFailure {
   readonly recovery?: "reload";
 }

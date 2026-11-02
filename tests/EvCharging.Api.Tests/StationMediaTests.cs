@@ -9,6 +9,7 @@ using EvCharging.Contracts.Events.Stations;
 using EvCharging.Contracts.Media;
 using EvCharging.Domain.Equipment;
 using EvCharging.Domain.Media;
+using EvCharging.Persistence;
 using EvCharging.Persistence.Auditing;
 using EvCharging.S3ObjectStore;
 using EvCharging.Testing;
@@ -30,6 +31,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
 {
     private const string Jpeg = "image/jpeg";
     private const int MaximumPhotos = 2;
+    private const string PublicBaseUrl = "https://media.test/public";
     private static readonly byte[] Photo = "synthetic photo bytes"u8.ToArray();
     private static readonly ConcurrentQueue<Guid> ProcessingRequests = [];
     private static readonly ConcurrentQueue<Guid> DeletionRequests = [];
@@ -46,6 +48,10 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
                 services.AddAuthorization();
                 services.AddScoped<IAuthorizationHandler, StationAssignmentAuthorizationHandler>();
                 services.AddSingleton(objectStore.ApiStore);
+                services.AddDbContext<PlatformReadDbContext>(
+                    options => options.UseNpgsql(database.GetDataSource("platform_reader")));
+                services.Configure<PublicMediaOptions>(options => options.PublicBaseUrl = PublicBaseUrl);
+                services.AddSingleton<StationMediaUrls>();
                 services.Configure<StationMediaOptions>(options =>
                 {
                     options.MaximumPhotosPerStation = MaximumPhotos;
@@ -62,6 +68,8 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
                 options.Discovery.IncludeType<GetStationGalleryEditorQueryHandler>();
                 options.Discovery.IncludeType<ReorderStationGalleryCommandHandler>();
                 options.Discovery.IncludeType<RemoveStationMediaCommandHandler>();
+                options.Discovery.IncludeType<ListStationsQueryHandler>();
+                options.Discovery.IncludeType<GetStationQueryHandler>();
                 options.Discovery.IncludeType(typeof(MessageCapture));
                 options.PublishMessage<ProcessStationMediaMessage>().ToLocalQueue("station-media-processing-test");
                 options.PublishMessage<CheckStationMediaUploadMessage>().ToLocalQueue("station-media-check-test");
@@ -94,6 +102,31 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         Assert.True(await context.AuditEntries.AnyAsync(audit =>
             audit.ResourceType == AuditResourceType.StationMediaItem && audit.ResourceId == item.Id
             && audit.Action == AuditAction.Added));
+    }
+
+    // Published photos are shown in gallery order. The first photo may still be processing, and a replacement
+    // has no place of its own until it is published, so neither may leak into what is shown to public.
+    [Fact]
+    public async Task Browse_UnfinishedFirstPhotoAndPendingReplacement_ShowsOnlyPublishedPhotos()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var unfinished = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var published = (await StartPhotoUploadAsync(identity, station.PublicId, unfinished.GalleryVersion)).Value;
+        await PublishAsync(published.ItemId);
+        var replacement = await StartPhotoUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId);
+        Assert.True(replacement.IsSuccess);
+
+        var summary = await FindInListAsync(identity, station.PublicId);
+        var detail = (await _api!.InvokeAsync<Result<StationDetailResponse>>(
+            identity, new GetStationRequest(station.PublicId))).Value;
+
+        Assert.Equal(published.ItemId, summary.CoverPhoto?.Id);
+        var photo = Assert.Single(detail.Photos);
+        Assert.Equal(published.ItemId, photo.Id);
+        Assert.StartsWith(
+            $"{PublicBaseUrl}/stations/{station.PublicId}/media/{photo.Id}/",
+            photo.DisplayUrl.ToString());
     }
 
     [Fact]
@@ -465,8 +498,8 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         var photo = editor.Items[0];
         Assert.Equal((published.ItemId, StationMediaState.Published), (photo.Id, photo.State));
         Assert.Equal(
-            objectStore.ApiStore.PublicUrl(StationMediaObjectKeys.Variant(
-                station.PublicId, published.ItemId, StationMediaObjectKeys.ThumbnailVariant)),
+            new Uri($"{PublicBaseUrl}/{StationMediaObjectKeys.Variant(
+                station.PublicId, published.ItemId, StationMediaObjectKeys.ThumbnailVariant)}"),
             photo.ThumbnailUrl);
         Assert.Equal(
             (replacement.ItemId, StationMediaState.Uploading), (photo.Replacement!.Id, photo.Replacement.State));
@@ -488,6 +521,25 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
             new StartStationPhotoUploadCommand(
                 stationId,
                 new StartStationPhotoUploadRequest(version, contentType, byteLength ?? Photo.Length, replacesItemId)));
+
+    private async Task<StationSummaryResponse> FindInListAsync(UserIdentity identity, Guid stationId)
+    {
+        Guid? after = null;
+        do
+        {
+            var page = (await _api!.InvokeAsync<Result<StationListResponse>>(
+                identity, new ListStationsRequest(after, 50))).Value;
+            if (page.Stations.SingleOrDefault(station => station.Id == stationId) is { } found)
+            {
+                return found;
+            }
+
+            after = page.NextAfterId;
+        }
+        while (after is not null);
+
+        throw new InvalidOperationException("The station is not in the list.");
+    }
 
     private Task<Result<StationGalleryVersionResponse>> ReorderAsync(
         UserIdentity identity, Station station, int version, IReadOnlyList<Guid> itemIds) =>

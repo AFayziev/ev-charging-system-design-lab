@@ -25,6 +25,7 @@ builder.AddObservationStreamProducer();
 builder.AddObservationIngestion();
 builder.AddDocumentStore();
 builder.AddObjectStore();
+builder.AddStationMediaUrls();
 builder.Services.AddOptions<ObservationClockSkewOptions>()
     .BindConfiguration(ObservationClockSkewOptions.SectionName)
     .ValidateDataAnnotations()

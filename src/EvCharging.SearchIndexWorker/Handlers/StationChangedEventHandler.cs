@@ -18,7 +18,7 @@ public static class StationChangedEventHandler
         var station = await database.Stations
             .AsNoTracking()
             .Where(station => station.Id == message.StationId)
-            .ToSources()
+            .ToSources(database.StationMediaItems.AsNoTracking())
             .SingleAsync(cancellationToken);
 
         var indexed = await writer.IndexAsync(StationSearchProjection.ToDocument(station), cancellationToken);

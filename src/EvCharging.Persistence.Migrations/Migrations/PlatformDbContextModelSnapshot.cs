@@ -568,6 +568,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
                     b.HasIndex("StationId")
                         .HasDatabaseName("ix_station_media_items_station_id");
 
+                    b.HasIndex("StationId", "Position")
+                        .HasDatabaseName("ix_station_media_items_station_id_position")
+                        .HasFilter("state = 'published' AND position IS NOT NULL");
+
                     b.ToTable("station_media_items", "charging", t =>
                         {
                             t.HasCheckConstraint("ck_station_media_items_byte_length", "byte_length > 0");

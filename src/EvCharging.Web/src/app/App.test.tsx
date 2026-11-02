@@ -12,6 +12,10 @@ import { createAppQueryClient } from "./query-client";
 
 const { get, put } = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }));
 vi.mock("@/lib/api", () => ({ api: { get, put } }));
+// The shell tests cover the station details form; the photo gallery has its own requests.
+vi.mock("@/features/stations/components/StationGallerySection", () => ({
+  StationGallerySection: () => null,
+}));
 const anonymous = { signedIn: false, user: null, antiforgeryToken: "test" };
 const catalog = { stations: [], nextAfterId: null };
 const detail = {
@@ -22,6 +26,7 @@ const detail = {
   longitude: -0.12,
   timeZoneId: "Europe/London",
   accessInstructions: "Fictional lab site.",
+  photos: [],
   chargers: [],
 };
 

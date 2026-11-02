@@ -34,7 +34,7 @@ import { useUserSession } from "@/features/auth/useUserSession";
 import { PlatformRole } from "@/features/auth/PlatformRole";
 import { BookingForm } from "@/features/reservations/components/BookingForm";
 import { stationAvailabilityQuery, stationDetailQuery } from "../api";
-import { StationPhoto } from "./StationPhoto";
+import { StationGallery } from "./StationGallery";
 import {
   capabilityLabel,
   StationLoading,
@@ -98,7 +98,7 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
       {query.isSuccess && (
         <div className={classes.detailGrid}>
           <Stack gap="xl">
-            <div className={classes.stationHeading}>
+            <Stack gap="lg">
               <div>
                 <PageHeading
                   title={query.data.name}
@@ -132,8 +132,8 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
                   </Anchor>
                 </div>
               </div>
-              <StationPhoto />
-            </div>
+              <StationGallery photos={query.data.photos} />
+            </Stack>
             <Radio.Group
               value={connectorId}
               onChange={selectConnector}

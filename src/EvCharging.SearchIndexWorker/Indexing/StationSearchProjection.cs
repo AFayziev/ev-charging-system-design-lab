@@ -1,5 +1,7 @@
 using Elastic.Clients.Elasticsearch;
 using EvCharging.Domain.Equipment;
+using EvCharging.Domain.Media;
+using EvCharging.Persistence.Extensions;
 using EvCharging.SearchIndex;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,27 +18,38 @@ internal static class StationSearchProjection
         .Take(size);
 
     // Filter, order, and page the stations first; a filter on the projected shape cannot be translated.
-    public static IQueryable<StationSearchSource> ToSources(this IQueryable<Station> stations) => stations
-        .Select(
-            station => new StationSearchSource(
-                station.Id,
-                station.PublicId,
-                station.Name,
-                station.Address,
-                station.Latitude,
-                station.Longitude,
-                station.Chargers.Count,
-                station.Chargers
-                    .SelectMany(charger => charger.Connectors)
-                    .OrderBy(connector => connector.Id)
-                    .Select(connector => new ConnectorSearchDocument(
-                        connector.ConnectorType, connector.PowerSupply, connector.RatedPowerKW))
-                    .ToList(),
-                station.Chargers.OrderBy(charger => charger.Id).Select(charger => charger.Name).ToList(),
-                station.Chargers
-                    .OrderBy(charger => charger.Id)
-                    .Select(charger => (string?)charger.ProviderCharger!.ProviderStation!.ChargingProvider!.Name)
-                    .ToList()));
+    public static IQueryable<StationSearchSource> ToSources(
+        this IQueryable<Station> stations, IQueryable<StationMediaItem> media)
+    {
+        // Applied outside the projection: EF inlines a captured query, not a method call on one.
+        var visible = media.Visible();
+        return stations
+            .Select(
+                station => new StationSearchSource(
+                    station.Id,
+                    station.PublicId,
+                    station.Name,
+                    station.Address,
+                    station.Latitude,
+                    station.Longitude,
+                    station.Chargers.Count,
+                    station.Chargers
+                        .SelectMany(charger => charger.Connectors)
+                        .OrderBy(connector => connector.Id)
+                        .Select(connector => new ConnectorSearchDocument(
+                            connector.ConnectorType, connector.PowerSupply, connector.RatedPowerKW))
+                        .ToList(),
+                    station.Chargers.OrderBy(charger => charger.Id).Select(charger => charger.Name).ToList(),
+                    station.Chargers
+                        .OrderBy(charger => charger.Id)
+                        .Select(charger => (string?)charger.ProviderCharger!.ProviderStation!.ChargingProvider!.Name)
+                        .ToList(),
+                    visible
+                        .Where(item => item.StationId == station.Id)
+                        .OrderBy(item => item.Position)
+                        .Select(item => (Guid?)item.PublicId)
+                        .FirstOrDefault()));
+    }
 
     public static StationSearchDocument ToDocument(StationSearchSource station) => new(
         station.PublicId,
@@ -55,5 +68,6 @@ internal static class StationSearchProjection
         string.Join(
             ' ',
             station.Connectors.SelectMany(connector => new[] { connector.ConnectorType, connector.PowerSupply })
-                .Distinct()));
+                .Distinct()),
+        station.CoverPhotoId);
 }

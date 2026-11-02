@@ -180,8 +180,6 @@ public sealed partial class ObjectStore(
     public Task DeletePrivateAsync(string key, CancellationToken cancellationToken) =>
         _client.DeleteObjectAsync(_options.PrivateBucket, key, cancellationToken);
 
-    public Uri PublicUrl(string key) => new($"{_options.PublicBaseUrl.TrimEnd('/')}/{key}");
-
     // Signed URLs are credentials, so only the key and limits are logged.
     [LoggerMessage(
         LogLevel.Debug,

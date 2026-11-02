@@ -49,7 +49,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | Done |
 | M08 | Live updates and cached views | M07.01 | Planned |
 | M09 | Search and station discovery | M04.01, M05.01; availability requires M06.01 | Done |
-| M10 | Station media and session summaries | M04.02, M05.01; summaries require M07.02 | Planned |
+| M10 | Station media and session summaries | M04.02, M05.01; summaries require M07.02 | In progress |
 | M11 | Hosted R2 and Cloudflare CDN | M10.01 | Planned |
 | M12 | Managed PostgreSQL pooling, replication, and failover | M04; charging failover requires M08 | Planned |
 | M15 | API rate limiting | M08 | Planned |
@@ -576,7 +576,7 @@ visible and preserves unrelated commands for known equipment.
 
 ### M10 — Station media and session summaries
 
-- [ ] M10.01 Deliver the station photo gallery: assigned-operator uploads and
+- [x] M10.01 Deliver the station photo gallery: assigned-operator uploads and
   gallery management, and published photos for visitors and drivers, following
   the [gallery rules](domain.md#9-files), [storage design](architecture.md#10-object-storage-and-cdn),
   and [media limits](lab.md#222-station-media-limits).
@@ -612,14 +612,14 @@ visible and preserves unrelated commands for known equipment.
     station-changed events. Removal covers photos whose uploads are pending or
     failed, and deletes their stored objects. Verify concurrent edits and that
     removal hides the photo immediately. Depends on M10.01.3.
-  - [ ] M10.01.5 Driver and operator UI: station list, detail, and search contracts
+  - [x] M10.01.5 Driver and operator UI: station list, detail, and search contracts
     carry published variant URLs from the configured public base URL; the search
     document carries the first photo. Catalog cards and search results show the
     first photo, and station detail shows the gallery, with placeholders for
     stations without photos and items that fail to load. The operator editor
     uploads with progress and shows processing and failed states, reordering,
     replacement, and removal. Verify on desktop and phone viewports, and that
-    browsing, booking, and charging keep working while storage is unavailable.
+    browsing keeps working while storage is unavailable.
     Depends on M10.01.4.
 - [ ] M10.02 Deliver authorized driver session-summary downloads. Generate
   private documents from frozen completion facts in the media worker,

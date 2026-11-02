@@ -2,6 +2,8 @@ using EvCharging.Api.Authentication;
 using EvCharging.Api.Errors;
 using EvCharging.Contracts;
 using EvCharging.Persistence;
+using EvCharging.Persistence.Extensions;
+using EvCharging.S3ObjectStore;
 using FluentResults;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +21,7 @@ public sealed record StationDetailResponse(
     string TimeZoneId,
     string AccessInstructions,
     IReadOnlyList<ChargerResponse> Chargers,
+    IReadOnlyList<StationPhotoResponse> Photos,
     bool CanEdit);
 
 public sealed record ChargerResponse(
@@ -31,7 +34,10 @@ public sealed record ConnectorResponse(
     string PowerSupply,
     decimal RatedPowerKW);
 
-public sealed class GetStationQueryHandler(PlatformReadDbContext database, IAuthorizationService authorization)
+public sealed class GetStationQueryHandler(
+    PlatformReadDbContext database,
+    IAuthorizationService authorization,
+    StationMediaUrls mediaUrls)
 {
     public async Task<Result<StationDetailResponse>> HandleAsync(
         GetStationRequest request,
@@ -52,10 +58,19 @@ public sealed class GetStationQueryHandler(PlatformReadDbContext database, IAuth
             return Result.Fail<StationDetailResponse>(new NotFoundError<Guid>("station", request.Id));
         }
 
+        var photoIds = await database.StationMediaItems
+            .AsNoTracking()
+            .Visible()
+            .Where(item => item.StationId == station.Id)
+            .OrderBy(item => item.Position)
+            .Select(item => item.PublicId)
+            .ToListAsync(cancellationToken);
+        var photos = photoIds.Select(id => mediaUrls.ToPhotoResponse(station.PublicId, id)).ToArray();
+
         bool canEdit = user.Identity is not null
             && user.Principal.IsInRole(PlatformRole.Operator.ToClaimValue())
             && (await authorization.AuthorizeAsync(user.Principal, station, [StationAssignmentRequirement.Instance]))
                 .Succeeded;
-        return Result.Ok(station.ToResponse(canEdit));
+        return Result.Ok(station.ToResponse(canEdit, photos));
     }
 }

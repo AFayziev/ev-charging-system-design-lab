@@ -1,4 +1,5 @@
 using System.Net;
+using EvCharging.S3ObjectStore;
 using EvCharging.SearchApi.Features.Stations;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -33,9 +34,11 @@ internal sealed class SearchApiHost : IAsyncDisposable
         builder.Configuration["Search:RequestTimeout"] = "00:00:02";
         builder.Configuration["Search:RetryAttempts"] = "1";
         builder.Configuration["Search:RetryDelay"] = "00:00:00.100";
+        builder.Configuration["ObjectStorage:PublicBaseUrl"] = "https://media.test/public";
         builder.AddServiceDefaults();
         builder.AddHttpApiDefaults("/api");
         builder.AddSearchIndexClient();
+        builder.AddStationMediaUrls();
         builder.Services.AddStationSearch();
 
         var app = builder.Build();

@@ -3,6 +3,7 @@
     <InternalsVisibleTo Include="EvCharging.SearchApi.Tests" />
     <PackageReference Include="Aspire.Elastic.Clients.Elasticsearch" />
     <PackageReference Include="Microsoft.Extensions.Resilience" />
+    <ProjectReference Include="../EvCharging.S3ObjectStore/EvCharging.S3ObjectStore.csproj" />
     <ProjectReference Include="../EvCharging.SearchIndex/EvCharging.SearchIndex.csproj" />
     <ProjectReference Include="../EvCharging.ServiceDefaults/EvCharging.ServiceDefaults.csproj" />
   </ItemGroup>

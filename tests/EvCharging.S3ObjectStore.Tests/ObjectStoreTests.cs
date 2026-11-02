@@ -80,7 +80,7 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         Assert.True(await objectStore.MediaWorkerStore.PutPublicAsync(key, first, ImageType, CancellationToken.None));
         Assert.False(await objectStore.MediaWorkerStore.PutPublicAsync(key, second, ImageType, CancellationToken.None));
 
-        Assert.Equal(Bytes, await objectStore.Browser.GetByteArrayAsync(objectStore.MediaWorkerStore.PublicUrl(key)));
+        Assert.Equal(Bytes, await objectStore.Browser.GetByteArrayAsync(objectStore.PublicUrl(key)));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         using var content = new MemoryStream(Bytes);
         await objectStore.MediaWorkerStore.PutPublicAsync(key, content, ImageType, CancellationToken.None);
 
-        var response = await objectStore.Browser.GetAsync(objectStore.MediaWorkerStore.PublicUrl(key));
+        var response = await objectStore.Browser.GetAsync(objectStore.PublicUrl(key));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(Bytes, await response.Content.ReadAsByteArrayAsync());
@@ -145,13 +145,13 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
         {
             Assert.Equal(
                 HttpStatusCode.NotFound,
-                (await objectStore.Browser.GetAsync(objectStore.MediaWorkerStore.PublicUrl(key))).StatusCode);
+                (await objectStore.Browser.GetAsync(objectStore.PublicUrl(key))).StatusCode);
         }
 
         Assert.Equal(
             Bytes,
             await objectStore.Browser.GetByteArrayAsync(
-                objectStore.MediaWorkerStore.PublicUrl(keptKey)));
+                objectStore.PublicUrl(keptKey)));
     }
 
     [Fact]

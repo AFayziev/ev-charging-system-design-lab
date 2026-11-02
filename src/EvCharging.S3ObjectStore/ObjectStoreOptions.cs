@@ -27,12 +27,9 @@ public sealed class ObjectStoreOptions
     [Required]
     public string PrivateBucket { get; set; } = "";
 
-    /// <summary>Published media, readable anonymously through <see cref="PublicBaseUrl"/>.</summary>
+    /// <summary>Published media, readable anonymously through <see cref="PublicMediaOptions.PublicBaseUrl"/>.</summary>
     [Required]
     public string PublicBucket { get; set; } = "";
-
-    [Required, Url]
-    public string PublicBaseUrl { get; set; } = "";
 
     [Range(typeof(TimeSpan), "00:00:30", "01:00:00")]
     public TimeSpan DownloadUrlLifetime { get; set; } = TimeSpan.FromMinutes(5);

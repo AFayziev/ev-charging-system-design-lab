@@ -31,7 +31,7 @@ export function StationCard({
       : null;
   return (
     <Card withBorder className={classes.catalogCard} component="article">
-      <StationPhoto />
+      <StationPhoto photo={station.coverPhoto} />
       <Stack className={classes.cardBody}>
         <Stack gap={4}>
           <Group justify="space-between" align="flex-start" wrap="nowrap">

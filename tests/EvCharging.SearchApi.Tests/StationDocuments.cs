@@ -33,7 +33,8 @@ internal static class StationDocuments
             string.Join(
                 ' ',
                 connectors.SelectMany(connector => new[] { connector.ConnectorType, connector.PowerSupply })
-                    .Distinct()));
+                    .Distinct()),
+            CoverPhotoId: null);
 
     public static ConnectorSearchDocument Connector(string type, string supply, decimal kilowatts) =>
         new(type, supply, kilowatts);

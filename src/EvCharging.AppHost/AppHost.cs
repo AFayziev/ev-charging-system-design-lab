@@ -346,6 +346,7 @@ search.WithReference(searchIndex).WaitFor(searchIndex);
 
 var objectStorage = builder.AddObjectStoreAccess(objectStore, gatewayPublicOrigin);
 api.WithObjectStorage(objectStorage, objectStorage.ApiFiles);
+searchApi.WithPublicMediaUrl(objectStorage);
 media.WithObjectStorage(objectStorage, objectStorage.MediaWorker);
 
 builder.Build().Run();

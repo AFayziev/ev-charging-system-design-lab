@@ -43,7 +43,7 @@ public sealed record StationMediaLimitsResponse(
 public sealed class GetStationGalleryEditorQueryHandler(
     PlatformDbContext database,
     IAuthorizationService authorization,
-    ObjectStore objectStore,
+    StationMediaUrls mediaUrls,
     IOptionsSnapshot<StationMediaOptions> mediaOptions)
 {
     public async Task<Result<StationGalleryEditorResponse>> HandleAsync(
@@ -88,8 +88,7 @@ public sealed class GetStationGalleryEditorQueryHandler(
                 row.State,
                 row.FailureCode,
                 row.State == StationMediaState.Published
-                    ? objectStore.PublicUrl(StationMediaObjectKeys.Variant(
-                        station.PublicId, row.PublicId, StationMediaObjectKeys.ThumbnailVariant))
+                    ? mediaUrls.Thumbnail(station.PublicId, row.PublicId)
                     : null,
                 replacements.TryGetValue(row.Id, out var replacement)
                     ? new StationGalleryReplacementResponse(

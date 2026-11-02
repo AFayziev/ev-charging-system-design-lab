@@ -74,7 +74,7 @@ public sealed class StationSearchIndexBuilder(ElasticsearchClient client)
         {
             var page = await database.Stations
                 .PageAfter(after, PageSize)
-                .ToSources()
+                .ToSources(database.StationMediaItems.AsNoTracking())
                 .ToListAsync(cancellationToken);
             if (page.Count == 0)
             {

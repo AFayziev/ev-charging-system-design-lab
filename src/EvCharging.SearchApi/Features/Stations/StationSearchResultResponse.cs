@@ -8,4 +8,8 @@ public sealed record StationSearchResultResponse(
     int ChargerCount,
     int ConnectorCount,
     IReadOnlyList<ConnectorCapabilityResponse> Capabilities,
+    StationPhotoResponse? CoverPhoto,
     double? DistanceKm);
+
+/// <summary>A published photo, with the variants a card and a full view load.</summary>
+public sealed record StationPhotoResponse(Guid Id, Uri ThumbnailUrl, Uri DisplayUrl);
