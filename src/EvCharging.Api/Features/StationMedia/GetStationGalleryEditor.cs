@@ -21,7 +21,7 @@ public sealed record StationGalleryEditorResponse(
     IReadOnlyList<StationGalleryItemResponse> Items,
     StationMediaLimitsResponse Limits);
 
-/// <summary>A photo of the gallery in order, with the replacement that is waiting to take its place.</summary>
+/// <summary>A photo or video of the gallery in order, with the replacement that is waiting to take its place.</summary>
 public sealed record StationGalleryItemResponse(
     Guid Id,
     StationMediaKind Kind,
@@ -29,6 +29,7 @@ public sealed record StationGalleryItemResponse(
     StationMediaState State,
     string? FailureCode,
     Uri? ThumbnailUrl,
+    Uri? VideoUrl,
     StationGalleryReplacementResponse? Replacement);
 
 public sealed record StationGalleryReplacementResponse(Guid Id, StationMediaState State, string? FailureCode);
@@ -38,6 +39,10 @@ public sealed record StationMediaLimitsResponse(
     long MaximumPhotoBytes,
     long MaximumPhotoPixels,
     IReadOnlyList<string> PhotoContentTypes,
+    int MaximumVideosPerStation,
+    long MaximumVideoBytes,
+    double MaximumVideoDurationSeconds,
+    IReadOnlyList<string> VideoContentTypes,
     double UploadUrlLifetimeSeconds);
 
 public sealed class GetStationGalleryEditorQueryHandler(
@@ -87,8 +92,11 @@ public sealed class GetStationGalleryEditorQueryHandler(
                 row.Position!.Value,
                 row.State,
                 row.FailureCode,
-                row.State == StationMediaState.Published
+                row.State == StationMediaState.Published && row.Kind == StationMediaKind.Photo
                     ? mediaUrls.Thumbnail(station.PublicId, row.PublicId)
+                    : null,
+                row.State == StationMediaState.Published && row.Kind == StationMediaKind.Video
+                    ? mediaUrls.Video(station.PublicId, row.PublicId)
                     : null,
                 replacements.TryGetValue(row.Id, out var replacement)
                     ? new StationGalleryReplacementResponse(
@@ -120,5 +128,9 @@ internal static class StationMediaLimitsMappings
         options.MaximumPhotoBytes,
         options.MaximumPhotoPixels,
         options.PhotoContentTypes,
+        options.MaximumVideosPerStation,
+        options.MaximumVideoBytes,
+        options.MaximumVideoDuration.TotalSeconds,
+        options.VideoContentTypes,
         options.UploadUrlLifetime.TotalSeconds);
 }

@@ -9,10 +9,14 @@ namespace EvCharging.MediaWorker.Tests;
 internal sealed class PhotoSeed(PlatformDatabaseFixture database, ObjectStoreFixture storage)
 {
     public const string Jpeg = "image/jpeg";
+    public const string Mp4 = VideoFiles.Mp4;
     private static readonly StationMediaLimits Limits = new(
         10,
         1_000_000,
         new HashSet<string>(StringComparer.Ordinal) { Jpeg, "image/png", "image/webp" },
+        1,
+        1_000_000,
+        new HashSet<string>(StringComparer.Ordinal) { Mp4 },
         TimeSpan.FromMinutes(30));
 
     public async Task<Station> SeedStationAsync()
@@ -86,19 +90,67 @@ internal sealed class PhotoSeed(PlatformDatabaseFixture database, ObjectStoreFix
     }
 
     public async Task<SeededPhoto> StartReplacementAsync(
-        Station station, SeededPhoto replaced, byte[] file)
+        Station station, SeededPhoto replaced, byte[] file, string contentType = Jpeg)
     {
         await using var context = database.CreateContext("platform_migrator");
         var tracked = await context.Stations.SingleAsync(value => value.Id == station.Id);
         var target = await context.StationMediaItems.SingleAsync(value => value.Id == replaced.Item.Id);
-        var item = StationMediaItem.StartPhotoReplacement(
-            tracked, target, Jpeg, file.Length, Limits, DateTimeOffset.UtcNow).Value;
+        var item = StationMediaItem.StartReplacement(
+            tracked, target, contentType, file.Length, Limits, DateTimeOffset.UtcNow).Value;
         context.StationMediaItems.Add(item);
         await context.SaveChangesAsync();
         var photo = await UploadAsync(station, item, file);
         await ChangeAsync(item.Id, value => value.CompleteUpload());
         return photo;
     }
+
+    // A video whose upload has started. The file reaches storage through the signed URL unless the test leaves it out.
+    public async Task<SeededPhoto> StartVideoUploadAsync(
+        Station station,
+        int position,
+        byte[]? file,
+        long? declaredLength = null,
+        DateTimeOffset? startedAt = null)
+    {
+        await using var context = database.CreateContext("platform_migrator");
+        var tracked = await context.Stations.SingleAsync(value => value.Id == station.Id);
+        var byteLength = declaredLength ?? file?.Length ?? 1;
+        var item = StationMediaItem.StartVideoUpload(
+            tracked, 0, position, Mp4, byteLength, Limits, startedAt ?? DateTimeOffset.UtcNow).Value;
+        context.StationMediaItems.Add(item);
+        await context.SaveChangesAsync();
+        return await UploadAsync(station, item, file);
+    }
+
+    // A video whose upload has been reported, as a browser would do it.
+    public async Task<SeededPhoto> StartVideoProcessingAsync(
+        Station station,
+        int position,
+        byte[]? file,
+        long? declaredLength = null,
+        DateTimeOffset? startedAt = null)
+    {
+        var video = await StartVideoUploadAsync(station, position, file, declaredLength, startedAt);
+        await ChangeAsync(video.Item.Id, item => item.CompleteUpload());
+        return video;
+    }
+
+    // A published video whose file is in the public bucket, standing in for earlier processing.
+    public async Task<SeededPhoto> PublishedVideoAsync(Station station, int position)
+    {
+        var video = await StartVideoProcessingAsync(station, position, VideoFiles.H264Silent);
+        await ChangeAsync(video.Item.Id, item => item.Publish(null, DateTimeOffset.UtcNow));
+        using var content = new MemoryStream(PublishedBytes);
+        await storage.MediaWorkerStore.PutPublicAsync(
+            StationMediaObjectKeys.Video(station.PublicId, video.Item.PublicId),
+            content,
+            Mp4,
+            CancellationToken.None);
+        return video;
+    }
+
+    public Uri VideoUrl(Station station, SeededPhoto video) =>
+        storage.PublicUrl(StationMediaObjectKeys.Video(station.PublicId, video.Item.PublicId));
 
     public static byte[] PublishedBytes { get; } = "earlier published bytes"u8.ToArray();
 

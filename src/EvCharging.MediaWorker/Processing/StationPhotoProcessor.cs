@@ -66,7 +66,7 @@ public sealed class StationPhotoProcessor(
     }
 
     public static Result<IReadOnlyList<StationPhotoVariant>> Reject(string failureCode) =>
-        Result.Fail<IReadOnlyList<StationPhotoVariant>>(new StationPhotoRejectedError(failureCode));
+        Result.Fail<IReadOnlyList<StationPhotoVariant>>(new StationMediaRejectedError(failureCode));
 
     // Photos are only made smaller, never enlarged. Skia reports a bitmap it cannot produce as null.
     private static SKBitmap? ScaledToFit(SKBitmap bitmap, int longestEdge)

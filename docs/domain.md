@@ -372,6 +372,10 @@ does not make media visible.
 
 Each station has an ordered media gallery of photos and at most one short
 instructional video, within [configured limits](lab.md#222-station-media-limits).
+Photos and the video have separate limits, the video can be placed among the
+photos, and the cover is the first photo. A video is accepted when its file
+header describes an MP4 within the duration limit whose video is H.264 and whose
+sound, if any, is AAC; it is published as uploaded.
 Assigned operator users add, reorder, replace, and remove gallery items. Pending
 uploads count toward the limits; failed uploads do not. An upload that is
 rejected fails with a reason the operator sees. A replacement is an item of its

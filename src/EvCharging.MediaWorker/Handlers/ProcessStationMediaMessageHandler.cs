@@ -18,12 +18,13 @@ public sealed class ProcessStationMediaMessageHandler(
     PlatformDbContext database,
     IDbContextOutbox outbox,
     ObjectStore objectStore,
-    StationPhotoProcessor processor,
+    StationPhotoProcessor photoProcessor,
+    StationVideoVerifier videoVerifier,
     TimeProvider clock,
     IOptions<MediaProcessingOptions> processing,
     ILogger<ProcessStationMediaMessageHandler> logger)
 {
-    // Storage and decoding run with no transaction open. Variant keys are fixed per photo and written only if
+    // Storage and decoding run with no transaction open. Object keys are fixed per item and written only if
     // absent, so a retry after a lost commit finds them in place and publishes them in one transaction.
     [NonTransactional]
     public async Task<OutgoingMessages> HandleAsync(
@@ -52,7 +53,10 @@ public sealed class ProcessStationMediaMessageHandler(
             }
         }
 
-        var processed = await ProcessUploadAsync(item, cancellationToken);
+        var processed = await PrepareAsync(item, cancellationToken);
+
+        // Releases the streams, and with them the video's temporary file, once the item has settled.
+        using var prepared = processed.IsSuccess ? processed.Value : null;
         if (processed.HasError<StationUploadNotArrivedError>())
         {
             outgoing.Delay(message, processing.Value.MissingUploadRetryDelay);
@@ -60,15 +64,15 @@ public sealed class ProcessStationMediaMessageHandler(
         }
 
         outbox.Enroll(database);
-        var settled = processed.HasError<StationPhotoRejectedError>(out var rejections)
+        var settled = processed.HasError<StationMediaRejectedError>(out var rejections)
             ? Reject(item, rejections.First().FailureCode)
-            : await PublishAsync(item, replaced, processed.Value, cancellationToken);
+            : await PublishAsync(item, replaced, prepared!, cancellationToken);
         if (settled.IsFailed)
         {
-            // The photo was Processing when loaded, so settling it cannot be rejected. This is a defect, and the
+            // The item was Processing when loaded, so settling it cannot be rejected. This is a defect, and the
             // message goes to the error queue where it stays visible.
             throw new InvalidOperationException(
-                $"Photo {item.PublicId} could not be settled: "
+                $"Media item {item.PublicId} could not be settled: "
                 + string.Join(' ', settled.Errors.Select(error => error.Message)));
         }
 
@@ -94,54 +98,141 @@ public sealed class ProcessStationMediaMessageHandler(
         return outgoing;
     }
 
-    private async Task<Result<IReadOnlyList<StationPhotoVariant>>> ProcessUploadAsync(
+    private async Task<Result<PreparedStationMedia>> PrepareAsync(
         StationMediaItem item, CancellationToken cancellationToken)
     {
         var station = item.Station!;
         try
         {
-            var upload = await objectStore.ReadPrivateAsync(
-                StationMediaObjectKeys.Upload(station.PublicId, item.PublicId), item.ByteLength, cancellationToken);
-            if (upload is not null)
+            var prepared = item.Kind == StationMediaKind.Video
+                ? await PrepareVideoAsync(item, cancellationToken)
+                : await PreparePhotoAsync(item, cancellationToken);
+            if (prepared is not null)
             {
-                return ProcessUpload(item, upload);
+                return prepared;
             }
 
             return clock.GetUtcNow() < item.UploadExpiresAt
-                ? Result.Fail<IReadOnlyList<StationPhotoVariant>>(new StationUploadNotArrivedError())
-                : StationPhotoProcessor.Reject(StationMediaFailure.UploadMissing);
+                ? Result.Fail<PreparedStationMedia>(new StationUploadNotArrivedError())
+                : Reject(StationMediaFailure.UploadMissing);
         }
         catch (InvalidDataException exception)
         {
             // Storage only accepts the signed length, so a longer object is not the file this upload declared.
             logger.LogWarning(
                 exception,
-                "Upload of photo {ItemId} of station {StationId} is longer than the declared {ByteLength} bytes",
+                "Upload of {Kind} {ItemId} of station {StationId} is longer than the declared {ByteLength} bytes",
+                item.Kind,
                 item.PublicId,
                 station.PublicId,
                 item.ByteLength);
-            return StationPhotoProcessor.Reject(StationMediaFailure.Undecodable);
+            return Reject(StationMediaFailure.Undecodable);
         }
     }
 
-    // The upload is an untrusted file, so a decoder failure means the file is not a usable photo.
-    private Result<IReadOnlyList<StationPhotoVariant>> ProcessUpload(StationMediaItem item, byte[] upload)
+    // The upload is an untrusted file, so a decoder failure means the file is not a usable photo. Null means that
+    // storage has no upload.
+    private async Task<Result<PreparedStationMedia>?> PreparePhotoAsync(
+        StationMediaItem item, CancellationToken cancellationToken)
     {
+        var station = item.Station!;
+        var upload = await objectStore.ReadPrivateAsync(
+            StationMediaObjectKeys.Upload(station.PublicId, item.PublicId), item.ByteLength, cancellationToken);
+        if (upload is null)
+        {
+            return null;
+        }
+
         try
         {
-            return processor.Process(upload, item.ContentType);
+            var variants = photoProcessor.Process(upload, item.ContentType);
+            return variants.IsFailed
+                ? variants.ToResult<PreparedStationMedia>()
+                : Result.Ok(new PreparedStationMedia(
+                    variants.Value.Select(variant => new PreparedStationObject(
+                        StationMediaObjectKeys.Variant(station.PublicId, item.PublicId, variant.Name),
+                        new MemoryStream(variant.Content),
+                        "image/webp"))
+                        .ToList()));
         }
         catch (Exception exception) when (exception is not (OperationCanceledException or OutOfMemoryException))
         {
             logger.LogWarning(exception, "Photo {ItemId} could not be decoded", item.PublicId);
-            return StationPhotoProcessor.Reject(StationMediaFailure.Undecodable);
+            return Reject(StationMediaFailure.Undecodable);
         }
     }
+
+    // A video is verified from its header boxes and published as uploaded. It is held in a temporary file rather
+    // than in memory, which is deleted when the prepared media is disposed. Null means that storage has no upload.
+    private async Task<Result<PreparedStationMedia>?> PrepareVideoAsync(
+        StationMediaItem item, CancellationToken cancellationToken)
+    {
+        var station = item.Station!;
+        var file = new FileStream(
+            Path.Combine(Path.GetTempPath(), $"station-video-{Guid.NewGuid():N}"),
+            FileMode.CreateNew,
+            FileAccess.ReadWrite,
+            FileShare.None,
+            bufferSize: 81920,
+            FileOptions.DeleteOnClose);
+        var handedOver = false;
+        try
+        {
+            if (!await objectStore.DownloadPrivateAsync(
+                StationMediaObjectKeys.Upload(station.PublicId, item.PublicId),
+                item.ByteLength,
+                file,
+                cancellationToken))
+            {
+                return null;
+            }
+
+            var verified = Verify(file, item);
+            if (verified.IsFailed)
+            {
+                return verified.ToResult<PreparedStationMedia>();
+            }
+
+            file.Position = 0;
+            var video = new PreparedStationObject(
+                StationMediaObjectKeys.Video(station.PublicId, item.PublicId), file, "video/mp4");
+            handedOver = true;
+            return Result.Ok(new PreparedStationMedia([video]));
+        }
+        finally
+        {
+            // Once handed over, disposing the prepared media releases the file.
+            if (!handedOver)
+            {
+                file.Dispose();
+            }
+        }
+    }
+
+    // The upload is an untrusted file, so a failure to read it as a video means it is not a usable one. A fault of
+    // the temporary file is the worker's own and is left to retry.
+    private Result Verify(FileStream file, StationMediaItem item)
+    {
+        try
+        {
+            return videoVerifier.Verify(file, item.ContentType);
+        }
+        catch (Exception exception) when (
+            exception is not (OperationCanceledException or OutOfMemoryException or IOException))
+        {
+            logger.LogWarning(exception, "Video {ItemId} could not be read", item.PublicId);
+            return Result.Fail(new StationMediaRejectedError(StationMediaFailure.Undecodable));
+        }
+    }
+
+    private static Result<PreparedStationMedia> Reject(string failureCode) =>
+        Result.Fail<PreparedStationMedia>(new StationMediaRejectedError(failureCode));
 
     private Result Reject(StationMediaItem item, string failureCode)
     {
         logger.LogInformation(
-            "Photo {ItemId} of station {StationId} was rejected: {FailureCode}",
+            "{Kind} {ItemId} of station {StationId} was rejected: {FailureCode}",
+            item.Kind,
             item.PublicId,
             item.Station!.PublicId,
             failureCode);
@@ -151,19 +242,12 @@ public sealed class ProcessStationMediaMessageHandler(
     private async Task<Result> PublishAsync(
         StationMediaItem item,
         StationMediaItem? replaced,
-        IReadOnlyList<StationPhotoVariant> variants,
+        PreparedStationMedia prepared,
         CancellationToken cancellationToken)
     {
         var station = item.Station!;
-        await Task.WhenAll(variants.Select(async variant =>
-        {
-            using var content = new MemoryStream(variant.Content);
-            await objectStore.PutPublicAsync(
-                StationMediaObjectKeys.Variant(station.PublicId, item.PublicId, variant.Name),
-                content,
-                "image/webp",
-                cancellationToken);
-        }));
+        await Task.WhenAll(prepared.Objects.Select(preparedObject => objectStore.PutPublicAsync(
+            preparedObject.Key, preparedObject.Content, preparedObject.ContentType, cancellationToken)));
 
         var published = item.Publish(replaced, clock.GetUtcNow());
         if (published.IsFailed)

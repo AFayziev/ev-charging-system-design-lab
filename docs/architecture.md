@@ -450,7 +450,8 @@ Pending uploads and summaries remain in private storage
 and bypass the CDN.
 
 Media publication proceeds through a started private upload, direct browser
-transfer, a completion notice, bounded image processing of the uploaded file, then
+transfer, a completion notice, bounded processing of the uploaded file (decoding a photo, or
+verifying a video's header boxes), then
 a relational publication transaction and outbox event. Published bytes use
 immutable keys distinct from the upload, so a reusable upload URL cannot overwrite
 them. A replacement is an item of its own and takes over the place of the item it

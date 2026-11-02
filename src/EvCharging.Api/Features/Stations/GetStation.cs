@@ -21,7 +21,7 @@ public sealed record StationDetailResponse(
     string TimeZoneId,
     string AccessInstructions,
     IReadOnlyList<ChargerResponse> Chargers,
-    IReadOnlyList<StationPhotoResponse> Photos,
+    IReadOnlyList<StationMediaResponse> Media,
     bool CanEdit);
 
 public sealed record ChargerResponse(
@@ -58,19 +58,20 @@ public sealed class GetStationQueryHandler(
             return Result.Fail<StationDetailResponse>(new NotFoundError<Guid>("station", request.Id));
         }
 
-        var photoIds = await database.StationMediaItems
+        var gallery = await database.StationMediaItems
             .AsNoTracking()
             .Visible()
             .Where(item => item.StationId == station.Id)
             .OrderBy(item => item.Position)
-            .Select(item => item.PublicId)
+            .Select(item => new { item.PublicId, item.Kind })
             .ToListAsync(cancellationToken);
-        var photos = photoIds.Select(id => mediaUrls.ToPhotoResponse(station.PublicId, id)).ToArray();
+        var media = gallery.Select(item => mediaUrls.ToMediaResponse(station.PublicId, item.PublicId, item.Kind))
+            .ToArray();
 
         bool canEdit = user.Identity is not null
             && user.Principal.IsInRole(PlatformRole.Operator.ToClaimValue())
             && (await authorization.AuthorizeAsync(user.Principal, station, [StationAssignmentRequirement.Instance]))
                 .Succeeded;
-        return Result.Ok(station.ToResponse(canEdit, photos));
+        return Result.Ok(station.ToResponse(canEdit, media));
     }
 }

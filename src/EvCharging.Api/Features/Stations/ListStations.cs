@@ -90,7 +90,7 @@ public sealed class ListStationsQueryHandler(PlatformReadDbContext database, Sta
                         .SelectMany(charger => charger.Connectors)
                         .ToList(),
                     CoverPhotoId = database.StationMediaItems
-                        .Visible()
+                        .VisiblePhotos()
                         .Where(item => item.StationId == station.Id)
                         .OrderBy(item => item.Position)
                         .Select(item => (Guid?)item.PublicId)

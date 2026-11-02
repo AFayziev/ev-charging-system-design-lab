@@ -32,7 +32,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Observation stream | Confluent.Kafka client; Kafka in KRaft mode |
 | Object storage / CDN | RustFS locally, Cloudflare R2 hosted; AWSSDK.S3 / Cloudflare CDN |
 | Notification delivery | [Local Mailpit adapter and external-provider options](#18-notification-adapters) |
-| File processing | SkiaSharp images, PDFsharp summaries |
+| File processing | SkiaSharp images, TagLibSharp MP4 header verification, PDFsharp summaries |
 | HTTP resilience | Microsoft.Extensions.Http.Resilience and Polly |
 | Default diagnostics | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export to Aspire Dashboard |
 | Optional observability profile | OpenTelemetry Collector, Prometheus, Loki, Tempo, Grafana |
@@ -472,11 +472,14 @@ The initial booking-limit experiment configures admission limits as follows.
 | Instructional videos per station | 1 |
 | Photo upload | JPEG, PNG, or WebP; at most 8 MB and 24 megapixels |
 | Photo variants | WebP thumbnail (480 px longest edge) for cards and thumbnail strips, and display image (1600 px longest edge) for the station detail view |
-| Instructional video upload | MP4; at most 50 MB and 60 seconds |
+| Instructional video upload | MP4 with H.264 video and, if any, MPEG-4 audio (AAC); at most 50 MB and 60 seconds |
 | Upload URL lifetime | 30 minutes |
 | Pending upload retention | 1 day |
 
 Processing of the stored file remains authoritative for the size and type limits.
+A video is verified from its header boxes and published as uploaded, so it keeps
+the metadata of the operator's file; photos are re-encoded and lose theirs. The
+browser shows the first frame of a video until it is played.
 
 ### 2.3 Verification tools
 

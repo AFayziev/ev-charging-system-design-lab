@@ -131,18 +131,50 @@ public sealed partial class ObjectStore(
     /// </summary>
     public async Task<byte[]?> ReadPrivateAsync(string key, long maximumLength, CancellationToken cancellationToken)
     {
+        using var response = await OpenPrivateAsync(key, maximumLength, cancellationToken);
+        if (response is null)
+        {
+            return null;
+        }
+
+        var content = new byte[response.ContentLength];
+        await response.ResponseStream.ReadExactlyAsync(content, cancellationToken);
+        return content;
+    }
+
+    /// <summary>
+    /// Copies a private object into <paramref name="destination"/> without holding it in memory, for files too
+    /// large to buffer. Returns false when nothing is stored there. The length guard is that of
+    /// <see cref="ReadPrivateAsync"/>.
+    /// </summary>
+    public async Task<bool> DownloadPrivateAsync(
+        string key, long maximumLength, Stream destination, CancellationToken cancellationToken)
+    {
+        using var response = await OpenPrivateAsync(key, maximumLength, cancellationToken);
+        if (response is null)
+        {
+            return false;
+        }
+
+        await response.ResponseStream.CopyToAsync(destination, cancellationToken);
+        return true;
+    }
+
+    // Opens a private object no longer than expected, or returns null when there is none.
+    private async Task<GetObjectResponse?> OpenPrivateAsync(
+        string key, long maximumLength, CancellationToken cancellationToken)
+    {
         try
         {
-            using var response = await _client.GetObjectAsync(_options.PrivateBucket, key, cancellationToken);
+            var response = await _client.GetObjectAsync(_options.PrivateBucket, key, cancellationToken);
             if (response.ContentLength < 0 || response.ContentLength > maximumLength)
             {
+                response.Dispose();
                 throw new InvalidDataException(
                     $"The object {key} is {response.ContentLength} bytes, not the at most {maximumLength} expected.");
             }
 
-            var content = new byte[response.ContentLength];
-            await response.ResponseStream.ReadExactlyAsync(content, cancellationToken);
-            return content;
+            return response;
         }
         catch (AmazonS3Exception exception) when (exception.StatusCode == HttpStatusCode.NotFound)
         {

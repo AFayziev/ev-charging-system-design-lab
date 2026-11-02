@@ -11,6 +11,7 @@
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <None Include="../EvCharging.MediaWorker.Tests/Videos/h264-aac.mp4" Link="Videos/h264-aac.mp4" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../src/EvCharging.Gateway/EvCharging.Gateway.csproj" />
     <ProjectReference Include="../../src/EvCharging.Messaging/EvCharging.Messaging.csproj" />
     <ProjectReference Include="../../src/EvCharging.Persistence/EvCharging.Persistence.csproj" />

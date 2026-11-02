@@ -23,6 +23,7 @@ internal static class ApplicationServiceExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
         services.AddSingleton<StationPhotoProcessor>();
+        services.AddSingleton<StationVideoVerifier>();
         services.AddSingleton<IWolverineExtension, MediaMessagingExtension>();
         return services;
     }

@@ -21,5 +21,9 @@ internal static class MediaFailurePolicyExtensions
     // A concurrency conflict means a gallery change got in between; the handler reads the new state on the retry.
     private static bool IsRetryable(Exception exception) =>
         exception.IsTransientDatabaseFailure() || exception.IsTransientStorageFailure()
-        || exception is DbUpdateConcurrencyException;
+        || exception is DbUpdateConcurrencyException
+        // The worker's own temporary file, such as a full disk, clears up without anyone touching the upload.
+        || exception is IOException
+            and not (
+                FileNotFoundException or DirectoryNotFoundException or PathTooLongException or EndOfStreamException);
 }

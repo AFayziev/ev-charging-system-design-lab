@@ -19,6 +19,17 @@ export interface StationPhoto {
   readonly displayUrl: string;
 }
 
+/** A published item of a station's gallery: a photo, or the station's instructional video. */
+export type StationMedia =
+  | (StationPhoto & { readonly kind: "photo" })
+  | {
+      readonly id: string;
+      readonly kind: "video";
+      readonly videoUrl: string;
+    };
+
+export type MediaKind = StationMedia["kind"];
+
 export interface StationSummary {
   readonly id: string;
   readonly name: string;
@@ -73,8 +84,8 @@ export interface StationDetail {
   readonly longitude: number;
   readonly timeZoneId: string;
   readonly accessInstructions: string;
-  /** Published photos in gallery order. */
-  readonly photos: readonly StationPhoto[];
+  /** Published photos and video in gallery order. */
+  readonly media: readonly StationMedia[];
   readonly chargers: readonly {
     readonly id: string;
     readonly name: string;
@@ -140,10 +151,12 @@ export interface GalleryReplacement {
 
 export interface GalleryItem {
   readonly id: string;
+  readonly kind: MediaKind;
   readonly position: number;
   readonly state: GalleryItemState;
   readonly failureCode: string | null;
   readonly thumbnailUrl: string | null;
+  readonly videoUrl: string | null;
   readonly replacement: GalleryReplacement | null;
 }
 
@@ -152,6 +165,10 @@ export interface GalleryLimits {
   readonly maximumPhotoBytes: number;
   readonly maximumPhotoPixels: number;
   readonly photoContentTypes: readonly string[];
+  readonly maximumVideosPerStation: number;
+  readonly maximumVideoBytes: number;
+  readonly maximumVideoDurationSeconds: number;
+  readonly videoContentTypes: readonly string[];
   readonly uploadUrlLifetimeSeconds: number;
 }
 
@@ -162,7 +179,7 @@ export interface GalleryEditor {
   readonly limits: GalleryLimits;
 }
 
-export interface PhotoUpload {
+export interface MediaUpload {
   readonly itemId: string;
   readonly uploadUrl: string;
   readonly galleryVersion: number;
@@ -186,18 +203,19 @@ export async function getStationGallery(
   return response.data;
 }
 
-export async function startPhotoUpload(
+export async function startMediaUpload(
   stationId: string,
   upload: {
     readonly galleryVersion: number;
+    readonly kind: MediaKind;
     readonly contentType: string;
     readonly byteLength: number;
     readonly replacesItemId?: string;
   },
   antiforgeryToken: string,
-): Promise<PhotoUpload> {
-  const response = await api.post<PhotoUpload>(
-    `${galleryPath(stationId)}/photo-uploads`,
+): Promise<MediaUpload> {
+  const response = await api.post<MediaUpload>(
+    `${galleryPath(stationId)}/uploads`,
     upload,
     { headers: csrf(antiforgeryToken) },
   );
@@ -239,7 +257,7 @@ export async function uploadToStorage(
 
 const uploadStallMs = 20_000;
 
-export async function completePhotoUpload(
+export async function completeMediaUpload(
   stationId: string,
   itemId: string,
   antiforgeryToken: string,
@@ -283,7 +301,7 @@ export const stationGalleryQuery = (stationId: string) =>
   queryOptions({
     queryKey: stationKeys.gallery(stationId),
     queryFn: ({ signal }) => getStationGallery(stationId, signal),
-    // Photos are optimized in the background, so the editor follows them until they settle.
+    // Uploads are processed in the background, so the editor follows them until they settle.
     refetchInterval: (query) =>
       query.state.data?.items.some(
         (item) =>

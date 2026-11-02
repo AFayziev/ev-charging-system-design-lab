@@ -1,6 +1,6 @@
 namespace EvCharging.Domain.Media;
 
-/// <summary>Why a photo could not be published. The code is shown to the operator.</summary>
+/// <summary>Why a photo or video could not be published. The code is shown to the operator.</summary>
 public static class StationMediaFailure
 {
     public const string UploadMissing = "upload_missing";
@@ -8,7 +8,9 @@ public static class StationMediaFailure
     public const string Undecodable = "undecodable";
     public const string TooManyPixels = "too_many_pixels";
     public const string UnsupportedFormat = "unsupported_format";
+    public const string TooLong = "too_long";
+    public const string UnsupportedCodec = "unsupported_codec";
 
     public static readonly IReadOnlyList<string> Codes =
-        [UploadMissing, UploadExpired, Undecodable, TooManyPixels, UnsupportedFormat];
+        [UploadMissing, UploadExpired, Undecodable, TooManyPixels, UnsupportedFormat, TooLong, UnsupportedCodec];
 }

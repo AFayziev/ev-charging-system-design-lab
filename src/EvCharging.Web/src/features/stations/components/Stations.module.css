@@ -68,6 +68,23 @@
   object-fit: contain;
 }
 
+.galleryVideo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: black;
+  object-fit: contain;
+}
+
+.stripVideo {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: #1f2933;
+  color: white;
+}
+
 .galleryPrevious,
 .galleryNext {
   position: absolute;

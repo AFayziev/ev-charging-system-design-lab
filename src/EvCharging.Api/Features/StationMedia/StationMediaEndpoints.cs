@@ -14,7 +14,7 @@ internal static class StationMediaEndpoints
         var media = app.MapGroup("/stations/{id:guid}/media")
             .RequireAuthorization(PlatformRole.Operator.ToClaimValue());
         media.MapGet("/edit", Editor);
-        media.MapPost("/photo-uploads", StartPhotoUpload);
+        media.MapPost("/uploads", StartUpload);
         media.MapPost("/{itemId:guid}/upload-completion", CompleteUpload);
         media.MapPut("/order", Reorder);
         media.MapDelete("/{itemId:guid}", Remove);
@@ -37,19 +37,19 @@ internal static class StationMediaEndpoints
     }
 
     private static async Task<Results<
-        Created<StationPhotoUploadResponse>,
+        Created<StationMediaUploadResponse>,
         ValidationProblem,
         NotFound,
         ChallengeHttpResult,
         ForbidHttpResult,
-        ProblemHttpResult>> StartPhotoUpload(
+        ProblemHttpResult>> StartUpload(
             Guid id,
-            StartStationPhotoUploadRequest request,
+            StartStationMediaUploadRequest request,
             IMessageBus bus,
             CancellationToken cancellationToken)
     {
-        var result = await bus.InvokeAsync<Result<StationPhotoUploadResponse>>(
-            new StartStationPhotoUploadCommand(id, request), cancellationToken);
+        var result = await bus.InvokeAsync<Result<StationMediaUploadResponse>>(
+            new StartStationMediaUploadCommand(id, request), cancellationToken);
         return result switch
         {
             _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
@@ -127,6 +127,6 @@ internal static class StationMediaEndpoints
 
     private static ProblemHttpResult ToResponse(this StationMediaStateError error) => TypedResults.Problem(
         statusCode: StatusCodes.Status409Conflict,
-        title: "Photo cannot be changed",
+        title: "Media cannot be changed",
         detail: error.Message);
 }

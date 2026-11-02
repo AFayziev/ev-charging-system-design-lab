@@ -8,5 +8,8 @@ internal static class StationMediaMappings
         options.MaximumPhotosPerStation,
         options.MaximumPhotoBytes,
         options.PhotoContentTypes.ToHashSet(StringComparer.Ordinal),
+        options.MaximumVideosPerStation,
+        options.MaximumVideoBytes,
+        options.VideoContentTypes.ToHashSet(StringComparer.Ordinal),
         options.UploadUrlLifetime);
 }

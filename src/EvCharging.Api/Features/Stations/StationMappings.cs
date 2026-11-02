@@ -1,4 +1,5 @@
 using EvCharging.Domain.Equipment;
+using EvCharging.Domain.Media;
 using EvCharging.S3ObjectStore;
 
 namespace EvCharging.Api.Features.Stations;
@@ -28,7 +29,7 @@ internal static class StationMappings
     }
 
     public static StationDetailResponse ToResponse(
-        this Station station, bool canEdit, IReadOnlyList<StationPhotoResponse> photos) => new(
+        this Station station, bool canEdit, IReadOnlyList<StationMediaResponse> media) => new(
             station.PublicId,
             station.Name,
             station.Address,
@@ -40,7 +41,7 @@ internal static class StationMappings
                 .OrderBy(charger => charger.Id)
                 .Select(charger => charger.ToResponse())
                 .ToArray(),
-            photos,
+            media,
             canEdit);
 
     public static ChargerResponse ToResponse(this Charger charger) => new(
@@ -57,6 +58,18 @@ internal static class StationMappings
 
     public static ConnectorCapabilityResponse ToCapabilityResponse(this Connector connector) => new(
         connector.ConnectorType, connector.PowerSupply, connector.RatedPowerKW);
+
+    public static StationMediaResponse ToMediaResponse(
+        this StationMediaUrls urls, Guid stationId, Guid itemId, StationMediaKind kind)
+    {
+        if (kind == StationMediaKind.Video)
+        {
+            return new(itemId, kind, null, null, urls.Video(stationId, itemId));
+        }
+
+        var photo = urls.ToPhotoResponse(stationId, itemId);
+        return new(itemId, kind, photo.ThumbnailUrl, photo.DisplayUrl, null);
+    }
 
     public static StationPhotoResponse ToPhotoResponse(this StationMediaUrls urls, Guid stationId, Guid photoId) =>
         new(photoId, urls.Thumbnail(stationId, photoId), urls.Display(stationId, photoId));

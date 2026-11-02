@@ -1,4 +1,5 @@
 import axios, { HttpStatusCode } from "axios";
+import type { MediaKind } from "./api";
 import {
   getHttpFailure,
   getHttpProblemCode,
@@ -21,7 +22,7 @@ export function isSearchUnavailable(error: unknown): boolean {
   }
 }
 
-/** The photo's slot count, gallery version, or state moved since the editor was loaded. */
+/** The gallery's slot count, version, or an item's state moved since the editor was loaded. */
 export const isConcurrencyConflict = (error: unknown): boolean =>
   getHttpProblemCode(error) === "concurrency_conflict";
 
@@ -29,20 +30,31 @@ export const isGalleryFull = (error: unknown): boolean =>
   getHttpProblemCode(error) === "media_limit_reached";
 
 /** Why processing refused an upload, by the failure code the editor reports. */
-export function getPhotoFailureMessage(code: string | null): string {
+export function getMediaFailureMessage(
+  code: string | null,
+  kind: MediaKind,
+): string {
   switch (code) {
     case "upload_missing":
       return "The file never reached storage. Try again.";
     case "upload_expired":
       return "The upload took too long and expired. Try again on a steadier connection.";
     case "undecodable":
-      return "This file isn't a readable image.";
+      return kind === "video"
+        ? "This video couldn't be read. Check that it isn't damaged."
+        : "This file isn't a readable image.";
     case "too_many_pixels":
       return "This image is too large in pixels. Resize it and try again.";
     case "unsupported_format":
-      return "Only JPEG, PNG, or WebP images are accepted.";
+      return kind === "video"
+        ? "Only MP4 videos are accepted."
+        : "Only JPEG, PNG, or WebP images are accepted.";
+    case "too_long":
+      return "This video is too long. Trim it and try again.";
+    case "unsupported_codec":
+      return "Browsers can't play this video. Export it as MP4 with H.264 video and AAC audio.";
     default:
-      return "The photo could not be processed. Try again.";
+      return "The file could not be processed. Try again.";
   }
 }
 

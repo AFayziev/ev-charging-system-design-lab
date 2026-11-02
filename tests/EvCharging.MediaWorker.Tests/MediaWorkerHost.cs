@@ -27,6 +27,7 @@ internal sealed class MediaWorkerHost : IAsyncDisposable
     public const int ThumbnailEdge = 48;
     public const int DisplayEdge = 160;
     public const long MaximumPhotoPixels = 200_000;
+    public const int MaximumVideoSeconds = 60;
     private readonly IHost _host;
 
     private MediaWorkerHost(IHost host) => _host = host;
@@ -61,9 +62,11 @@ internal sealed class MediaWorkerHost : IAsyncDisposable
         }));
         builder.Services.AddSingleton(Options.Create(new StationMediaLimitsOptions
         {
-            MaximumPhotoPixels = MaximumPhotoPixels
+            MaximumPhotoPixels = MaximumPhotoPixels,
+            MaximumVideoDuration = TimeSpan.FromSeconds(MaximumVideoSeconds)
         }));
         builder.Services.AddSingleton<StationPhotoProcessor>();
+        builder.Services.AddSingleton<StationVideoVerifier>();
         builder.UseWolverine(options =>
         {
             options.UseEntityFrameworkCoreTransactions();

@@ -17,7 +17,7 @@ public sealed class MediaProcessingOptions
     [Range(1, 100)]
     public int WebpQuality { get; set; }
 
-    /// <summary>How many photos are decoded at once; each decoded photo can take about 100 MB.</summary>
+    /// <summary>How many uploads are processed at once; a decoded photo can take about 100 MB and a video its size on disk.</summary>
     [Range(1, 16)]
     public int MaximumConcurrentProcessing { get; set; }
 

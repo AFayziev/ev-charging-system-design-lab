@@ -14,13 +14,14 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconGripVertical,
+  IconMovie,
   IconReplace,
   IconTrash,
   IconUpload,
   IconX,
 } from "@tabler/icons-react";
-import type { GalleryItem, GalleryReplacement } from "../api";
-import { getPhotoFailureMessage } from "../errors";
+import type { GalleryItem, GalleryReplacement, MediaKind } from "../api";
+import { getMediaFailureMessage } from "../errors";
 import classes from "./GalleryEditor.module.css";
 
 /** What this browser knows about a photo it is sending: the file preview and how far the transfer is. */
@@ -63,7 +64,11 @@ export function GalleryTile({
 }: GalleryTileProps) {
   const sortable = useSortable({ id: item.id });
   const failed = item.state === "failed";
-  const background = item.thumbnailUrl ?? transfer?.preview;
+  const video = item.kind === "video";
+  const noun = video ? "video" : "photo";
+  const background = video
+    ? undefined
+    : (item.thumbnailUrl ?? transfer?.preview);
   const replacement = item.replacement;
   return (
     <article
@@ -74,12 +79,19 @@ export function GalleryTile({
         transition: sortable.transition,
         opacity: sortable.isDragging ? 0.5 : 1,
       }}
-      aria-label={`Photo ${index + 1}`}
+      aria-label={`${video ? "Video" : "Photo"} ${index + 1}`}
     >
       <div
         className={classes.thumb}
         style={background ? { backgroundImage: `url('${background}')` } : {}}
       >
+        {video && (
+          <IconMovie
+            className={classes.videoIcon}
+            size={44}
+            aria-hidden="true"
+          />
+        )}
         <Badge
           className={classes.position}
           color={index === 0 ? "teal" : "gray"}
@@ -90,7 +102,7 @@ export function GalleryTile({
         <button
           type="button"
           className={classes.handle}
-          aria-label={`Drag photo ${index + 1} to reorder`}
+          aria-label={`Drag ${noun} ${index + 1} to reorder`}
           ref={sortable.setActivatorNodeRef}
           {...sortable.attributes}
           {...sortable.listeners}
@@ -113,7 +125,7 @@ export function GalleryTile({
               <ActionIcon
                 variant="default"
                 size={32}
-                aria-label={`Cancel upload of photo ${index + 1}`}
+                aria-label={`Cancel upload of ${noun} ${index + 1}`}
                 onClick={onCancelUpload}
               >
                 <IconX size={16} aria-hidden="true" />
@@ -124,19 +136,20 @@ export function GalleryTile({
         {item.state === "processing" && (
           <div className={classes.overlay} role="status">
             <Loader size="sm" />
-            <span>Optimizing…</span>
+            <span>{video ? "Checking…" : "Optimizing…"}</span>
           </div>
         )}
         {failed && (
           <div className={`${classes.overlay} ${classes.overlayFailed}`}>
             <strong>Upload failed</strong>
             <Text size="xs" fw={500} c="inherit">
-              {getPhotoFailureMessage(item.failureCode)}
+              {getMediaFailureMessage(item.failureCode, item.kind)}
             </Text>
           </div>
         )}
         {item.state === "published" && replacement && (
           <ReplacementRibbon
+            kind={item.kind}
             replacement={replacement}
             transfer={replacementTransfer}
           />
@@ -148,7 +161,7 @@ export function GalleryTile({
             variant="default"
             size={32}
             disabled={index === 0}
-            aria-label={`Move photo ${index + 1} earlier`}
+            aria-label={`Move ${noun} ${index + 1} earlier`}
             onClick={() => onMove(index - 1)}
           >
             <IconChevronLeft size={16} aria-hidden="true" />
@@ -157,7 +170,7 @@ export function GalleryTile({
             variant="default"
             size={32}
             disabled={index === count - 1}
-            aria-label={`Move photo ${index + 1} later`}
+            aria-label={`Move ${noun} ${index + 1} later`}
             onClick={() => onMove(index + 1)}
           >
             <IconChevronRight size={16} aria-hidden="true" />
@@ -165,14 +178,14 @@ export function GalleryTile({
         </div>
         <div className={classes.moves}>
           {(item.state === "published" || failed) && (
-            <Tooltip label={failed ? "Upload again" : "Replace photo"}>
+            <Tooltip label={failed ? "Upload again" : `Replace ${noun}`}>
               <ActionIcon
                 variant="default"
                 size={32}
                 aria-label={
                   failed
-                    ? `Upload photo ${index + 1} again`
-                    : `Replace photo ${index + 1}`
+                    ? `Upload ${noun} ${index + 1} again`
+                    : `Replace ${noun} ${index + 1}`
                 }
                 onClick={onReplace}
               >
@@ -184,12 +197,12 @@ export function GalleryTile({
               </ActionIcon>
             </Tooltip>
           )}
-          <Tooltip label="Remove photo">
+          <Tooltip label={`Remove ${noun}`}>
             <ActionIcon
               variant="light"
               color="red"
               size={32}
-              aria-label={`Remove photo ${index + 1}`}
+              aria-label={`Remove ${noun} ${index + 1}`}
               onClick={onAskRemove}
             >
               <IconTrash size={16} aria-hidden="true" />
@@ -199,23 +212,23 @@ export function GalleryTile({
       </div>
       {confirmingRemoval && (
         <div className={classes.confirm}>
-          Remove this photo?
+          Remove this {noun}?
           <Group gap={6} mt={8}>
             <Tooltip label="Confirm removal">
               <ActionIcon
                 color="red"
                 size={32}
-                aria-label={`Confirm removal of photo ${index + 1}`}
+                aria-label={`Confirm removal of ${noun} ${index + 1}`}
                 onClick={onRemove}
               >
                 <IconCheck size={16} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
-            <Tooltip label="Keep photo">
+            <Tooltip label={`Keep ${noun}`}>
               <ActionIcon
                 variant="default"
                 size={32}
-                aria-label={`Keep photo ${index + 1}`}
+                aria-label={`Keep ${noun} ${index + 1}`}
                 onClick={onKeep}
               >
                 <IconX size={16} aria-hidden="true" />
@@ -230,9 +243,11 @@ export function GalleryTile({
 
 /** How the photo waiting to replace a published one is getting on. */
 function ReplacementRibbon({
+  kind,
   replacement,
   transfer,
 }: {
+  kind: MediaKind;
   replacement: GalleryReplacement;
   transfer: PhotoTransfer | undefined;
 }) {
@@ -256,7 +271,7 @@ function ReplacementRibbon({
         </div>
       );
     case "failed": {
-      const message = getPhotoFailureMessage(replacement.failureCode);
+      const message = getMediaFailureMessage(replacement.failureCode, kind);
       return (
         <div
           className={`${classes.ribbon} ${classes.ribbonFailed}`}

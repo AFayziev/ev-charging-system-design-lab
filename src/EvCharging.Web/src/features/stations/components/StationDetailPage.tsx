@@ -132,7 +132,7 @@ export function StationDetailPage({ canEdit = false }: { canEdit?: boolean }) {
                   </Anchor>
                 </div>
               </div>
-              <StationGallery photos={query.data.photos} />
+              <StationGallery media={query.data.media} />
             </Stack>
             <Radio.Group
               value={connectorId}

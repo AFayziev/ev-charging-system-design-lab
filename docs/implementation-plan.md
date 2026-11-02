@@ -626,10 +626,12 @@ visible and preserves unrelated commands for known equipment.
   with deterministic regeneration and visible pending/failure states.
   Summary content, generation trigger, and delivery are scoped before the task
   starts. Depends on M07.02 and M10.01.1.
-- [ ] M10.03 Add one short instructional video per station to the gallery: upload
-  within the video limits, verification of container and duration, publication
-  with a poster image, and playback on station detail. Depends on M10.01 and
-  the video processing selection.
+- [x] M10.03 Add one short instructional video per station to the gallery: upload
+  within the video limits, verification of the MP4 container, duration, and
+  H.264/AAC codecs from its header boxes, publication of the file as uploaded
+  (no transcoding and no poster), and playback on station detail. The video is
+  a positioned gallery item with its own limit; the cover stays the first photo.
+  Depends on M10.01.
 
 Acceptance: an assigned operator maintains a station gallery within its limits,
 and visitors see only published media. Published bytes cannot be overwritten
@@ -744,7 +746,7 @@ blind resubmission.
 | Elasticsearch | M09 |
 | Independent cache and search index workers | M08, M09 |
 | S3 adapter / local container | Compatibility selection M01.08; station-media flow M10.01 |
-| SkiaSharp, PDFsharp | M10 |
+| SkiaSharp, TagLibSharp, PDFsharp | M10 |
 | R2 and Cloudflare CDN | M11 |
 | Azure managed PostgreSQL | M12 |
 | OpenTelemetry and Aspire Dashboard | M01.06 onward |
@@ -763,7 +765,6 @@ their boundary becomes usable.
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
 | Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
-| Instructional video processing | Verify container and duration and produce a poster image; options include FFmpeg in the media worker or a constrained pass-through with an operator-supplied poster | M10.03 |
 | API rate limiting | Enforce limits at the gateway or through instance middleware backed by a central store (for example, Redis), consistently across replicas | M15.01 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.01 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

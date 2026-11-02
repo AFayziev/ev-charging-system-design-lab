@@ -31,17 +31,19 @@ import { FailureAlert, StatusAlert } from "@/components/StatusAlert";
 import { useUserSession } from "@/features/auth/useUserSession";
 import { getHttpFailure, getHttpProblemCode } from "@/lib/http-errors";
 import {
-  completePhotoUpload,
+  completeMediaUpload,
   removeGalleryItem,
   reorderGallery,
-  startPhotoUpload,
+  startMediaUpload,
   stationGalleryQuery,
   stationKeys,
   uploadToStorage,
   type GalleryEditor,
-  type PhotoUpload,
+  type MediaKind,
+  type MediaUpload,
 } from "../api";
 import { isConcurrencyConflict, isGalleryFull } from "../errors";
+import { readVideoDuration } from "../videoDuration";
 import { GalleryTile, type PhotoTransfer } from "./GalleryTile";
 import classes from "./GalleryEditor.module.css";
 
@@ -59,7 +61,13 @@ const storageUnavailable: Notice = {
 
 const megabytes = (bytes: number) => `${Math.round(bytes / 1024 / 1024)} MB`;
 
-/** The operator's photo gallery: upload, follow processing, reorder, replace and remove. */
+const kinds: readonly MediaKind[] = ["photo", "video"];
+
+/** "image/jpeg" as "JPEG". */
+const typeName = (contentType: string) =>
+  contentType.slice(contentType.indexOf("/") + 1).toUpperCase();
+
+/** The operator's gallery of photos and one video: upload, follow processing, reorder, replace and remove. */
 export function StationGallerySection({ stationId }: { stationId: string }) {
   const query = useQuery(stationGalleryQuery(stationId));
   return (
@@ -117,10 +125,34 @@ function GalleryEditorPanel({
   );
 
   const { limits, items } = editor;
-  // Failed photos keep their place but no longer count toward the limit.
-  const occupied = items.filter((item) => item.state !== "failed").length;
-  const free = Math.max(0, limits.maximumPhotosPerStation - occupied);
-  const full = free === 0;
+  const kindOf = (file: File): MediaKind =>
+    limits.videoContentTypes.includes(file.type) ? "video" : "photo";
+  const capacity: Record<MediaKind, number> = {
+    photo: limits.maximumPhotosPerStation,
+    video: limits.maximumVideosPerStation,
+  };
+  const maximumBytes: Record<MediaKind, number> = {
+    photo: limits.maximumPhotoBytes,
+    video: limits.maximumVideoBytes,
+  };
+  const acceptedTypes: Record<MediaKind, readonly string[]> = {
+    photo: limits.photoContentTypes,
+    video: limits.videoContentTypes,
+  };
+  // Failed items keep their place but no longer count toward their limit. Each kind has its own limit.
+  const occupied: Record<MediaKind, number> = {
+    photo: items.filter(
+      (item) => item.kind !== "video" && item.state !== "failed",
+    ).length,
+    video: items.filter(
+      (item) => item.kind === "video" && item.state !== "failed",
+    ).length,
+  };
+  const free: Record<MediaKind, number> = {
+    photo: Math.max(0, capacity.photo - occupied.photo),
+    video: Math.max(0, capacity.video - occupied.video),
+  };
+  const full = kinds.every((kind) => free[kind] === 0);
   const refresh = () => client.invalidateQueries({ queryKey: key });
   const currentVersion = () =>
     client.getQueryData<GalleryEditor>(key)?.galleryVersion ??
@@ -142,7 +174,7 @@ function GalleryEditorPanel({
       return {
         tone: "error",
         title: "Gallery is full",
-        message: "Remove a photo to add another.",
+        message: "Remove an item to add another.",
       };
     if (isConcurrencyConflict(error))
       return {
@@ -175,7 +207,7 @@ function GalleryEditorPanel({
   };
 
   const transfer = async (
-    upload: PhotoUpload,
+    upload: MediaUpload,
     file: File,
     controller: AbortController,
   ) => {
@@ -202,7 +234,7 @@ function GalleryEditorPanel({
       return;
     }
     try {
-      await completePhotoUpload(stationId, itemId, token);
+      await completeMediaUpload(stationId, itemId, token);
     } catch (error) {
       // A rejected upload is shown on its tile; anything else is a failure to report.
       if (getHttpProblemCode(error) !== "upload_failed")
@@ -218,13 +250,27 @@ function GalleryEditorPanel({
     replacesItemId?: string,
     position?: number,
   ) => {
-    let upload: PhotoUpload;
+    const kind = kindOf(file);
+    if (kind === "video") {
+      // A clip this browser can read and finds too long is turned away before any of it is sent.
+      const seconds = await readVideoDuration(file);
+      if (seconds !== null && seconds > limits.maximumVideoDurationSeconds) {
+        setNotice({
+          tone: "error",
+          title: "Video is too long",
+          message: `${file.name}: videos can be at most ${limits.maximumVideoDurationSeconds} seconds.`,
+        });
+        return;
+      }
+    }
+    let upload: MediaUpload;
     try {
       upload = await withVersion((galleryVersion) =>
-        startPhotoUpload(
+        startMediaUpload(
           stationId,
           {
             galleryVersion,
+            kind,
             contentType: file.type,
             byteLength: file.size,
             replacesItemId,
@@ -258,24 +304,50 @@ function GalleryEditorPanel({
     startQueue.current = startQueue.current.then(start);
   };
 
+  const rejectFiles = (names: readonly string[], alsoFull?: string) =>
+    setNotice({
+      tone: "error",
+      title: "Some files were skipped",
+      message: `${names.join(", ")}: photos can be ${limits.photoContentTypes.map(typeName).join(", ")} up to ${megabytes(limits.maximumPhotoBytes)}, and a video can be MP4 up to ${megabytes(limits.maximumVideoBytes)}.${alsoFull ? ` ${alsoFull}` : ""}`,
+    });
+
   const enqueue = (files: readonly File[], replacesItemId?: string) => {
-    const accepted = replacesItemId ? files : files.slice(0, free);
-    if (accepted.length < files.length)
+    // Each kind fills its own slots; a replacement takes no new slot.
+    const remaining = { ...free };
+    const oversized: File[] = [];
+    const accepted: File[] = [];
+    const skipped: File[] = [];
+    for (const file of files) {
+      const kind = kindOf(file);
+      if (file.size > maximumBytes[kind]) oversized.push(file);
+      else if (replacesItemId || remaining[kind] > 0) {
+        remaining[kind] -= 1;
+        accepted.push(file);
+      } else skipped.push(file);
+    }
+    const fullNotice =
+      skipped.length === 0
+        ? undefined
+        : skipped.every((file) => kindOf(file) === "video")
+          ? `Only ${capacity.video} video fits. ${skipped.length} not added.`
+          : `Only ${capacity.photo} photos fit. ${skipped.length} not added.`;
+    if (oversized.length > 0)
+      rejectFiles(
+        oversized.map((file) => file.name),
+        fullNotice,
+      );
+    else if (fullNotice)
       setNotice({
         tone: "warning",
         title: "Gallery is full",
-        message: `Only ${limits.maximumPhotosPerStation} photos fit. ${files.length - accepted.length} not added.`,
+        message: fullNotice,
       });
     else setNotice(null);
     for (const file of accepted) queue(() => begin(file, replacesItemId));
   };
 
   const reject = (rejections: readonly FileRejection[]) =>
-    setNotice({
-      tone: "error",
-      title: "Some files were skipped",
-      message: `${rejections.map((r) => r.file.name).join(", ")}: use JPEG, PNG, or WebP up to ${megabytes(limits.maximumPhotoBytes)}.`,
-    });
+    rejectFiles(rejections.map((rejection) => rejection.file.name));
 
   const move = async (itemId: string, to: number) => {
     // The gallery as it is now: a photo just added is not in the props this render started from.
@@ -338,6 +410,17 @@ function GalleryEditorPanel({
     const target = items.find((item) => item.id === replaceTarget.current);
     replaceTarget.current = null;
     if (!file || !target) return;
+    if (kindOf(file) !== target.kind) {
+      setNotice({
+        tone: "error",
+        title: "Different kind of file",
+        message:
+          target.kind === "video"
+            ? "Replace a video with another video."
+            : "Replace a photo with another photo.",
+      });
+      return;
+    }
     if (target.state === "failed") {
       // A failed slot is retried by removing it and sending the file as a new photo in the same place.
       setNotice(null);
@@ -365,13 +448,16 @@ function GalleryEditorPanel({
         </Text>
         <Stack gap={4} className={classes.meter}>
           <Text fw={700} size="sm">
-            {occupied} / {limits.maximumPhotosPerStation} photos
+            {occupied.photo} / {capacity.photo} photos
           </Text>
           <Progress
-            value={(occupied / limits.maximumPhotosPerStation) * 100}
+            value={(occupied.photo / capacity.photo) * 100}
             size="sm"
             aria-label="Gallery occupancy"
           />
+          <Text size="xs" c="dimmed">
+            {occupied.video} / {capacity.video} video
+          </Text>
         </Stack>
       </Group>
       {notice && (
@@ -387,18 +473,25 @@ function GalleryEditorPanel({
       <Dropzone
         onDrop={(files) => enqueue(files)}
         onReject={reject}
-        accept={[...limits.photoContentTypes]}
-        maxSize={limits.maximumPhotoBytes}
+        accept={[...limits.photoContentTypes, ...limits.videoContentTypes]}
+        maxSize={Math.max(limits.maximumPhotoBytes, limits.maximumVideoBytes)}
         disabled={full}
-        aria-label="Add photos"
+        aria-label="Add photos or a video"
       >
         <Stack align="center" gap={4} py="sm">
           <IconPhotoUp size={30} aria-hidden="true" />
-          <Text fw={600}>Drag photos here or click to add</Text>
+          <Text fw={600}>Drag photos or a video here, or click to add</Text>
           <Text size="xs" c="dimmed">
             {full
               ? "The gallery is full."
-              : `JPEG, PNG, or WebP · up to ${megabytes(limits.maximumPhotoBytes)} · ${free} slot${free === 1 ? "" : "s"} left`}
+              : [
+                  free.photo > 0 &&
+                    `${limits.photoContentTypes.map(typeName).join(", ")} · up to ${megabytes(limits.maximumPhotoBytes)} · ${free.photo} slot${free.photo === 1 ? "" : "s"} left`,
+                  free.video > 0 &&
+                    `MP4 video · up to ${megabytes(limits.maximumVideoBytes)} and ${limits.maximumVideoDurationSeconds} s`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
           </Text>
         </Stack>
       </Dropzone>
@@ -444,7 +537,12 @@ function GalleryEditorPanel({
                   onMove={(to) => void move(item.id, to)}
                   onReplace={() => {
                     replaceTarget.current = item.id;
-                    replaceInput.current?.click();
+                    if (replaceInput.current) {
+                      // A replacement is a file of the same kind as the item it replaces.
+                      replaceInput.current.accept =
+                        acceptedTypes[item.kind].join(",");
+                      replaceInput.current.click();
+                    }
                   }}
                   onCancelUpload={() => cancelUpload(item.id)}
                   onAskRemove={() => setConfirming(item.id)}

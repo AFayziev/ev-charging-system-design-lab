@@ -21,7 +21,7 @@ const station = {
   longitude: 0,
   timeZoneId: "Europe/London",
   accessInstructions: "",
-  photos: [],
+  media: [],
   chargers: [
     {
       id: "charger",

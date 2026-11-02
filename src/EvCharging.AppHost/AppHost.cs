@@ -70,6 +70,10 @@ api.WithSettings(
     options => options.MaximumPhotoBytes,
     options => options.MaximumPhotoPixels,
     options => options.PhotoContentTypes,
+    options => options.MaximumVideosPerStation,
+    options => options.MaximumVideoBytes,
+    options => options.MaximumVideoDuration,
+    options => options.VideoContentTypes,
     options => options.UploadUrlLifetime)
     .WithReference(databaseAccess.Write)
     .WithReference(databaseAccess.Read)
@@ -277,7 +281,11 @@ var cache = builder.AddProject<Projects.EvCharging_CacheWorker>("cache-worker")
 
 var media = builder.AddProject<Projects.EvCharging_MediaWorker>("media-worker")
     .WithEnvironment("DOTNET_ENVIRONMENT", builder.Environment.EnvironmentName)
-    .WithSettings(mediaSettings, StationMediaOptions.SectionName, options => options.MaximumPhotoPixels)
+    .WithSettings(
+        mediaSettings,
+        StationMediaOptions.SectionName,
+        options => options.MaximumPhotoPixels,
+        options => options.MaximumVideoDuration)
     .WithReference(databaseAccess.MediaMessaging, "messaging")
     .WaitForCompletion(mediaMessageMigrations)
     .WaitForCompletion(platformMigrations)

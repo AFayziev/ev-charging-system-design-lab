@@ -2,8 +2,8 @@ using FluentResults;
 
 namespace EvCharging.MediaWorker.Processing;
 
-/// <summary>The upload cannot become a published photo; <see cref="FailureCode"/> is the reason kept on the photo.</summary>
-public sealed class StationPhotoRejectedError(string failureCode) : Error($"The photo was rejected: {failureCode}.")
+/// <summary>The upload cannot become a published item; <see cref="FailureCode"/> is the reason kept on the item.</summary>
+public sealed class StationMediaRejectedError(string failureCode) : Error($"The upload was rejected: {failureCode}.")
 {
     public string FailureCode { get; } = failureCode;
 }

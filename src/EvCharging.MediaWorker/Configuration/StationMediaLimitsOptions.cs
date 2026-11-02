@@ -9,4 +9,7 @@ public sealed class StationMediaLimitsOptions
 
     [Range(1L, long.MaxValue)]
     public long MaximumPhotoPixels { get; set; }
+
+    [Range(typeof(TimeSpan), "00:00:01", "00:10:00")]
+    public TimeSpan MaximumVideoDuration { get; set; }
 }

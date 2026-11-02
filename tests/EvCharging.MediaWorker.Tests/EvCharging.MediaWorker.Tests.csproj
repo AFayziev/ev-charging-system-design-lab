@@ -7,6 +7,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <None Include="Videos/**" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../src/EvCharging.MediaWorker/EvCharging.MediaWorker.csproj" />
     <ProjectReference Include="../EvCharging.Testing/EvCharging.Testing.csproj" />
   </ItemGroup>

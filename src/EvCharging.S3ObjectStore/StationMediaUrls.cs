@@ -24,6 +24,9 @@ public sealed class StationMediaUrls(IOptions<PublicMediaOptions> options)
     public Uri Display(Guid stationId, Guid itemId) =>
         Variant(stationId, itemId, StationMediaObjectKeys.DisplayVariant);
 
+    public Uri Video(Guid stationId, Guid itemId) =>
+        new($"{_baseUrl}/{StationMediaObjectKeys.Video(stationId, itemId)}");
+
     private Uri Variant(Guid stationId, Guid itemId, string variant)
     {
         var key = StationMediaObjectKeys.Variant(stationId, itemId, variant);

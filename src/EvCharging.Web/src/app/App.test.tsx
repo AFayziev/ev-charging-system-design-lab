@@ -26,7 +26,7 @@ const detail = {
   longitude: -0.12,
   timeZoneId: "Europe/London",
   accessInstructions: "Fictional lab site.",
-  photos: [],
+  media: [],
   chargers: [],
 };
 

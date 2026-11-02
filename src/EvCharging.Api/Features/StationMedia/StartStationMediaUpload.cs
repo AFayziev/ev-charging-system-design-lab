@@ -17,22 +17,23 @@ using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.Api.Features.StationMedia;
 
-public sealed record StartStationPhotoUploadRequest(
+public sealed record StartStationMediaUploadRequest(
     [property: Range(0, int.MaxValue)] int GalleryVersion,
+    StationMediaKind Kind,
     [property: Required, MaxLength(100)] string ContentType,
     long ByteLength,
     Guid? ReplacesItemId = null);
 
-public sealed record StartStationPhotoUploadCommand(Guid StationId, StartStationPhotoUploadRequest Request)
-    : IAuthenticatedRequest<StationPhotoUploadResponse>;
+public sealed record StartStationMediaUploadCommand(Guid StationId, StartStationMediaUploadRequest Request)
+    : IAuthenticatedRequest<StationMediaUploadResponse>;
 
-public sealed record StationPhotoUploadResponse(
+public sealed record StationMediaUploadResponse(
     Guid ItemId,
     Uri UploadUrl,
     DateTimeOffset UploadExpiresAt,
     int GalleryVersion);
 
-public sealed class StartStationPhotoUploadCommandHandler(
+public sealed class StartStationMediaUploadCommandHandler(
     PlatformDbContext database,
     IDbContextOutbox outbox,
     IAuthorizationService authorization,
@@ -40,30 +41,30 @@ public sealed class StartStationPhotoUploadCommandHandler(
     TimeProvider clock,
     IOptionsSnapshot<StationMediaOptions> mediaOptions)
 {
-    public async Task<Result<StationPhotoUploadResponse>> HandleAsync(
-        StartStationPhotoUploadCommand command, ClaimsPrincipal user, CancellationToken cancellationToken)
+    public async Task<Result<StationMediaUploadResponse>> HandleAsync(
+        StartStationMediaUploadCommand command, ClaimsPrincipal user, CancellationToken cancellationToken)
     {
         var station = await database.Stations
             .SingleOrDefaultAsync(station => station.PublicId == command.StationId, cancellationToken);
         if (station is null)
         {
-            return Result.Fail<StationPhotoUploadResponse>(new NotFoundError<Guid>("station", command.StationId));
+            return Result.Fail<StationMediaUploadResponse>(new NotFoundError<Guid>("station", command.StationId));
         }
 
         var permission = await authorization.AuthorizeAsync(user, station, [StationAssignmentRequirement.Instance]);
         if (!permission.Succeeded)
         {
-            return Result.Fail<StationPhotoUploadResponse>(new ForbiddenError());
+            return Result.Fail<StationMediaUploadResponse>(new ForbiddenError());
         }
 
         outbox.Enroll(database);
         var request = command.Request;
         var upload = request.ReplacesItemId is { } replacesItemId
             ? await StartReplacementAsync(station, replacesItemId, request, cancellationToken)
-            : await StartPhotoAsync(station, request, cancellationToken);
+            : await StartItemAsync(station, request, cancellationToken);
         if (upload.IsFailed)
         {
-            return Result.Fail<StationPhotoUploadResponse>(upload.Errors.Select(error => error switch
+            return Result.Fail<StationMediaUploadResponse>(upload.Errors.Select(error => error switch
             {
                 StationMediaUploadValidationError validation => validation.ToValidationError(),
                 _ => error
@@ -93,39 +94,41 @@ public sealed class StartStationPhotoUploadCommandHandler(
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Result.Fail<StationPhotoUploadResponse>(new ConcurrencyConflictError());
+            return Result.Fail<StationMediaUploadResponse>(new ConcurrencyConflictError());
         }
 
-        return Result.Ok(new StationPhotoUploadResponse(
+        return Result.Ok(new StationMediaUploadResponse(
             mediaItem.PublicId, uploadUrl.Url, uploadUrl.ExpiresAt, station.GalleryVersion));
     }
 
-    private async Task<Result<StationMediaItem>> StartPhotoAsync(
-        Domain.Equipment.Station station, StartStationPhotoUploadRequest request, CancellationToken cancellationToken)
+    private async Task<Result<StationMediaItem>> StartItemAsync(
+        Domain.Equipment.Station station, StartStationMediaUploadRequest request, CancellationToken cancellationToken)
     {
-        // Photos that failed keep their positions but no longer count toward the limit.
+        // Items that failed keep their positions but no longer count toward their limit. Each kind has its own
+        // limit; positions are shared by the whole gallery.
         var failedState = StationMediaState.Failed;
+        var kind = request.Kind;
         var galleryOccupancy = await database.StationMediaItems
             .Where(item => item.StationId == station.Id && item.Position != null)
             .GroupBy(item => item.StationId)
             .Select(items => new GalleryOccupancy(
-                items.Count(item => item.State != failedState),
+                items.Count(item => item.Kind == kind && item.State != failedState),
                 items.Max(item => item.Position)!.Value + 1))
             .SingleOrDefaultAsync(cancellationToken);
-        return StationMediaItem.StartPhotoUpload(
-            station,
-            galleryOccupancy?.Count ?? 0,
-            galleryOccupancy?.NextPosition ?? 0,
-            request.ContentType,
-            request.ByteLength,
-            mediaOptions.Value.ToDomain(),
-            clock.GetUtcNow());
+        var limits = mediaOptions.Value.ToDomain();
+        var count = galleryOccupancy?.Count ?? 0;
+        var nextPosition = galleryOccupancy?.NextPosition ?? 0;
+        return kind == StationMediaKind.Video
+            ? StationMediaItem.StartVideoUpload(
+                station, count, nextPosition, request.ContentType, request.ByteLength, limits, clock.GetUtcNow())
+            : StationMediaItem.StartPhotoUpload(
+                station, count, nextPosition, request.ContentType, request.ByteLength, limits, clock.GetUtcNow());
     }
 
     private async Task<Result<StationMediaItem>> StartReplacementAsync(
         Domain.Equipment.Station station,
         Guid replacesItemId,
-        StartStationPhotoUploadRequest request,
+        StartStationMediaUploadRequest request,
         CancellationToken cancellationToken)
     {
         var replaced = await database.StationMediaItems.SingleOrDefaultAsync(
@@ -135,7 +138,7 @@ public sealed class StartStationPhotoUploadCommandHandler(
             return Result.Fail<StationMediaItem>(new NotFoundError<Guid>("media item", replacesItemId));
         }
 
-        var replacement = StationMediaItem.StartPhotoReplacement(
+        var replacement = StationMediaItem.StartReplacement(
             station,
             replaced,
             request.ContentType,
@@ -147,7 +150,7 @@ public sealed class StartStationPhotoUploadCommandHandler(
             return replacement;
         }
 
-        // A photo has one replacement at a time; an unfinished earlier one is dropped along with its files.
+        // An item has one replacement at a time; an unfinished earlier one is dropped along with its files.
         var unfinished = await database.StationMediaItems
             .Where(item => item.ReplacesItemId == replaced.Id)
             .ToListAsync(cancellationToken);
@@ -163,13 +166,13 @@ public sealed class StartStationPhotoUploadCommandHandler(
     private sealed record GalleryOccupancy(int Count, int NextPosition);
 }
 
-internal static class StartStationPhotoUploadMappings
+internal static class StartStationMediaUploadMappings
 {
     public static ValidationError ToValidationError(this StationMediaUploadValidationError error) => new(
         error.Field switch
         {
-            StationMediaUploadField.ContentType => nameof(StartStationPhotoUploadRequest.ContentType),
-            StationMediaUploadField.ByteLength => nameof(StartStationPhotoUploadRequest.ByteLength),
+            StationMediaUploadField.ContentType => nameof(StartStationMediaUploadRequest.ContentType),
+            StationMediaUploadField.ByteLength => nameof(StartStationMediaUploadRequest.ByteLength),
             _ => throw new ArgumentOutOfRangeException(nameof(error), error.Field, "Unknown upload field.")
         },
         error.Message);

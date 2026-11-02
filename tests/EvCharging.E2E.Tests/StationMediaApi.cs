@@ -97,14 +97,19 @@ internal static class StationMediaApi
         SendAsync(page, "PUT", $"/api/stations/{stationId}/media/order", new { galleryVersion = version, itemIds });
 
     internal static async Task<StartedUpload> StartUploadAsync(
-        IPage page, string stationId, byte[] file, string contentType, Guid? replacesItemId = null)
+        IPage page,
+        string stationId,
+        byte[] file,
+        string contentType,
+        Guid? replacesItemId = null,
+        string kind = "photo")
     {
         int version = (await EditorAsync(page, stationId)).GetProperty("galleryVersion").GetInt32();
         var response = await SendAsync(
             page,
             "POST",
-            $"/api/stations/{stationId}/media/photo-uploads",
-            new { galleryVersion = version, contentType, byteLength = file.Length, replacesItemId });
+            $"/api/stations/{stationId}/media/uploads",
+            new { galleryVersion = version, kind, contentType, byteLength = file.Length, replacesItemId });
         Assert.Equal(201, response.GetProperty("status").GetInt32());
         var body = response.GetProperty("body");
         return new StartedUpload(

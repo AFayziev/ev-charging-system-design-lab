@@ -7,9 +7,16 @@ namespace EvCharging.Domain.Tests.Media;
 public sealed class StationMediaItemTests
 {
     private const string Jpeg = "image/jpeg";
+    private const string Mp4 = "video/mp4";
     private static readonly DateTimeOffset Now = new(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
     private static readonly StationMediaLimits Limits = new(
-        2, 1000, new HashSet<string>(StringComparer.Ordinal) { Jpeg, "image/png" }, TimeSpan.FromMinutes(30));
+        2,
+        1000,
+        new HashSet<string>(StringComparer.Ordinal) { Jpeg, "image/png" },
+        1,
+        5000,
+        new HashSet<string>(StringComparer.Ordinal) { Mp4 },
+        TimeSpan.FromMinutes(30));
 
     [Fact]
     public void StartPhotoUpload_WithinLimits_AwaitsTheUploadAtTheNextPosition()
@@ -50,6 +57,70 @@ public sealed class StationMediaItemTests
         var result = StationMediaItem.StartPhotoUpload(CreateStation(), 0, 0, contentType, byteLength, Limits, Now);
 
         Assert.Equal(field, Assert.IsType<StationMediaUploadValidationError>(Assert.Single(result.Errors)).Field);
+    }
+
+    [Fact]
+    public void StartVideoUpload_WithinLimits_AwaitsAVideoAtTheNextPosition()
+    {
+        var station = CreateStation();
+
+        var result = StationMediaItem.StartVideoUpload(station, 0, 2, Mp4, 5000, Limits, Now);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            (StationMediaKind.Video, 2, StationMediaState.Uploading, Mp4),
+            (result.Value.Kind, result.Value.Position, result.Value.State, result.Value.ContentType));
+        Assert.Equal(1, station.GalleryVersion);
+    }
+
+    [Fact]
+    public void StartVideoUpload_VideoLimitReached_RejectsWhilePhotosStillFit()
+    {
+        var station = CreateStation();
+
+        var video = StationMediaItem.StartVideoUpload(station, 1, 1, Mp4, 5000, Limits, Now);
+        var photo = StationMediaItem.StartPhotoUpload(station, 1, 1, Jpeg, 1000, Limits, Now);
+
+        Assert.IsType<StationMediaLimitError>(Assert.Single(video.Errors));
+        Assert.True(photo.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData("video/webm", 5000, StationMediaUploadField.ContentType)]
+    [InlineData(Jpeg, 5000, StationMediaUploadField.ContentType)]
+    [InlineData(Mp4, 0, StationMediaUploadField.ByteLength)]
+    [InlineData(Mp4, 5001, StationMediaUploadField.ByteLength)]
+    public void StartVideoUpload_OutsideFileLimits_RejectsTheField(
+        string contentType, long byteLength, StationMediaUploadField field)
+    {
+        var result = StationMediaItem.StartVideoUpload(CreateStation(), 0, 0, contentType, byteLength, Limits, Now);
+
+        Assert.Equal(field, Assert.IsType<StationMediaUploadValidationError>(Assert.Single(result.Errors)).Field);
+    }
+
+    [Fact]
+    public void StartPhotoUpload_VideoType_IsRejected()
+    {
+        var result = StationMediaItem.StartPhotoUpload(CreateStation(), 0, 0, Mp4, 1000, Limits, Now);
+
+        Assert.Equal(
+            StationMediaUploadField.ContentType,
+            Assert.IsType<StationMediaUploadValidationError>(Assert.Single(result.Errors)).Field);
+    }
+
+    [Fact]
+    public void StartReplacement_PublishedVideo_KeepsTheKindAndValidatesAsAVideo()
+    {
+        var station = CreateStation();
+        var video = StationMediaItem.StartVideoUpload(station, 0, 1, Mp4, 5000, Limits, Now).Value;
+        Assert.True(video.CompleteUpload().IsSuccess);
+        Assert.True(video.Publish(null, Now).IsSuccess);
+
+        var replacement = StationMediaItem.StartReplacement(station, video, Mp4, 4000, Limits, Now);
+        var wrongKind = StationMediaItem.StartReplacement(station, video, Jpeg, 500, Limits, Now);
+
+        Assert.Equal(StationMediaKind.Video, replacement.Value.Kind);
+        Assert.IsType<StationMediaUploadValidationError>(Assert.Single(wrongKind.Errors));
     }
 
     [Fact]
@@ -146,12 +217,12 @@ public sealed class StationMediaItemTests
     }
 
     [Fact]
-    public void StartPhotoReplacement_PublishedPhoto_WaitsWithoutAPositionAndDoesNotCountTowardTheLimit()
+    public void StartReplacement_PublishedPhoto_WaitsWithoutAPositionAndDoesNotCountTowardTheLimit()
     {
         var station = CreateStation();
         var published = Publish(StartProcessing(position: 1));
 
-        var result = StationMediaItem.StartPhotoReplacement(station, published, Jpeg, 500, Limits, Now);
+        var result = StationMediaItem.StartReplacement(station, published, Jpeg, 500, Limits, Now);
 
         Assert.True(result.IsSuccess);
         var replacement = result.Value;
@@ -163,11 +234,11 @@ public sealed class StationMediaItemTests
     }
 
     [Fact]
-    public void StartPhotoReplacement_PhotoThatIsNotPublished_IsRejectedWithoutAdvancingTheGalleryVersion()
+    public void StartReplacement_PhotoThatIsNotPublished_IsRejectedWithoutAdvancingTheGalleryVersion()
     {
         var station = CreateStation();
 
-        var result = StationMediaItem.StartPhotoReplacement(station, StartProcessing(), Jpeg, 500, Limits, Now);
+        var result = StationMediaItem.StartReplacement(station, StartProcessing(), Jpeg, 500, Limits, Now);
 
         Assert.IsType<StationMediaStateError>(Assert.Single(result.Errors));
         Assert.Equal(0, station.GalleryVersion);
@@ -178,7 +249,7 @@ public sealed class StationMediaItemTests
     {
         var station = CreateStation();
         var replaced = Publish(StartProcessing(position: 2));
-        var replacement = StationMediaItem.StartPhotoReplacement(station, replaced, Jpeg, 500, Limits, Now).Value;
+        var replacement = StationMediaItem.StartReplacement(station, replaced, Jpeg, 500, Limits, Now).Value;
         replacement.CompleteUpload();
 
         var result = replacement.Publish(replaced, Now.AddMinutes(5));
@@ -195,7 +266,7 @@ public sealed class StationMediaItemTests
     {
         var station = CreateStation();
         var replaced = Publish(StartProcessing(position: 2));
-        var replacement = StationMediaItem.StartPhotoReplacement(station, replaced, Jpeg, 500, Limits, Now).Value;
+        var replacement = StationMediaItem.StartReplacement(station, replaced, Jpeg, 500, Limits, Now).Value;
         replacement.CompleteUpload();
 
         var result = replacement.Publish(null, Now);
@@ -249,7 +320,7 @@ public sealed class StationMediaItemTests
     {
         var station = CreateStation();
         var published = Publish(StartProcessing());
-        var replacement = StationMediaItem.StartPhotoReplacement(station, published, Jpeg, 1000, Limits, Now).Value;
+        var replacement = StationMediaItem.StartReplacement(station, published, Jpeg, 1000, Limits, Now).Value;
         int versionBefore = station.GalleryVersion;
 
         var removed = published.RemoveFromGallery(station, [replacement]);

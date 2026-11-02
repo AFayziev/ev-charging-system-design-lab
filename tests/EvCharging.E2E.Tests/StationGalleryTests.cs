@@ -67,7 +67,7 @@ public sealed class StationGalleryTests(AppHostFixture fixture)
             // Station detail shows both photos, the cover first.
             await driver.GotoAsync(Url($"/stations/{stationId}"));
             var gallery = driver.GetByRole(AriaRole.Region, new() { Name = "Station photos" });
-            await Expect(gallery.Locator("figure img"))
+            await Expect(gallery.Locator("figure img").First)
                 .ToHaveAttributeAsync("src", new Regex(coverId), new() { Timeout = Patience });
             await Expect(gallery.GetByRole(AriaRole.Button, new() { NameRegex = new Regex("^Show photo") }))
                 .ToHaveCountAsync(2);
@@ -96,6 +96,39 @@ public sealed class StationGalleryTests(AppHostFixture fixture)
         await page.GetByRole(AriaRole.Button, new() { Name = "Remove photo 1" }).ClickAsync();
         await page.GetByRole(AriaRole.Button, new() { Name = "Confirm removal of photo 1" }).ClickAsync();
         await Expect(page.GetByText("No photos yet.")).ToBeVisibleAsync();
+    }
+
+    // Playwright's Chromium has no H.264, so this checks what is delivered and not that it plays; playing it is
+    // checked by hand in a full browser.
+    [Fact]
+    public async Task Gallery_OperatorUploadsAVideo_DriverSeesItOnStationDetail()
+    {
+        var file = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "Videos", "h264-aac.mp4"));
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync();
+        var operatorPage = await browser.NewPageAsync();
+        await fixture.LoginAsync(operatorPage, "operator");
+        string stationId = await StationMediaApi.NorthStationIdAsync(operatorPage);
+        await StationMediaApi.ClearGalleryAsync(operatorPage, stationId);
+
+        await operatorPage.GotoAsync(Url($"/stations/{stationId}/edit"));
+        await Expect(operatorPage.GetByText("0 / 1 video")).ToBeVisibleAsync();
+        await FileInput(operatorPage).SetInputFilesAsync(
+            new FilePayload { Name = "how-to-plug-in.mp4", MimeType = "video/mp4", Buffer = file });
+        await Expect(operatorPage.GetByRole(AriaRole.Button, new() { Name = "Replace video 1" }))
+            .ToBeVisibleAsync(new() { Timeout = Patience });
+        await Expect(operatorPage.GetByText("1 / 1 video")).ToBeVisibleAsync();
+
+        await using var driverContext = await browser.NewContextAsync();
+        var driver = await driverContext.NewPageAsync();
+        await fixture.LoginAsync(driver, "driver");
+        await driver.GotoAsync(Url($"/stations/{stationId}"));
+        var player = driver.GetByLabel("Station video");
+        await Expect(player).ToBeVisibleAsync(new() { Timeout = Patience });
+        await Expect(player).ToHaveAttributeAsync("src", new Regex(@"/video\.mp4#t=0\.1$"));
+        string source = (await player.GetAttributeAsync("src"))!;
+        using var storage = new HttpClient();
+        Assert.Equal(file, await storage.GetByteArrayAsync(source[..source.IndexOf('#')]));
     }
 
     [Fact]

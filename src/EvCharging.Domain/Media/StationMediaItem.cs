@@ -5,8 +5,8 @@ using FluentResults;
 namespace EvCharging.Domain.Media;
 
 /// <summary>
-/// A photo in a station's gallery, from the start of its upload to its publication. A replacement is a photo
-/// of its own that takes over the place of the photo it replaces when it publishes.
+/// A photo or video in a station's gallery, from the start of its upload to its publication. A replacement is an
+/// item of its own that takes over the place of the item it replaces when it publishes.
 /// </summary>
 public sealed class StationMediaItem : IAuditableEntity
 {
@@ -44,28 +44,29 @@ public sealed class StationMediaItem : IAuditableEntity
         string contentType,
         long byteLength,
         StationMediaLimits limits,
-        DateTimeOffset now)
-    {
-        var validation = ValidatePhoto(contentType, byteLength, limits);
-        if (validation.IsFailed)
-        {
-            return validation.ToResult<StationMediaItem>();
-        }
-
-        if (galleryItemCount >= limits.MaximumPhotosPerStation)
-        {
-            return Result.Fail<StationMediaItem>(new StationMediaLimitError(
-                $"A station can have at most {limits.MaximumPhotosPerStation} photos."));
-        }
-
-        return Result.Ok(AwaitUpload(station, contentType, byteLength, limits, now, nextPosition, null));
-    }
+        DateTimeOffset now) =>
+        StartUpload(
+            station, StationMediaKind.Photo, galleryItemCount, nextPosition, contentType, byteLength, limits, now);
 
     /// <summary>
-    /// Starts the upload of a photo that replaces a published one. It does not count toward the limit, and the
-    /// replaced photo stays as it is until the replacement publishes.
+    /// Starts a video upload at the gallery's next position. The video count covers videos that have not failed
+    /// and are not replacements. The station's gallery version advances with the change.
     /// </summary>
-    public static Result<StationMediaItem> StartPhotoReplacement(
+    public static Result<StationMediaItem> StartVideoUpload(
+        Station station,
+        int videoCount,
+        int nextPosition,
+        string contentType,
+        long byteLength,
+        StationMediaLimits limits,
+        DateTimeOffset now) =>
+        StartUpload(station, StationMediaKind.Video, videoCount, nextPosition, contentType, byteLength, limits, now);
+
+    /// <summary>
+    /// Starts the upload of an item of the same kind that replaces a published one. It does not count toward the
+    /// limit, and the replaced item stays as it is until the replacement publishes.
+    /// </summary>
+    public static Result<StationMediaItem> StartReplacement(
         Station station,
         StationMediaItem replaced,
         string contentType,
@@ -75,16 +76,17 @@ public sealed class StationMediaItem : IAuditableEntity
     {
         if (replaced.State != StationMediaState.Published)
         {
-            return Result.Fail<StationMediaItem>(new StationMediaStateError("Only a published photo can be replaced."));
+            return Result.Fail<StationMediaItem>(new StationMediaStateError("Only a published item can be replaced."));
         }
 
-        var validation = ValidatePhoto(contentType, byteLength, limits);
+        var validation = Validate(KindRules.For(replaced.Kind, limits), contentType, byteLength);
         if (validation.IsFailed)
         {
             return validation.ToResult<StationMediaItem>();
         }
 
-        return Result.Ok(AwaitUpload(station, contentType, byteLength, limits, now, null, replaced.Id));
+        return Result.Ok(AwaitUpload(
+            station, replaced.Kind, contentType, byteLength, limits, now, null, replaced.Id));
     }
 
     /// <summary>
@@ -166,7 +168,7 @@ public sealed class StationMediaItem : IAuditableEntity
         return false;
     }
 
-    /// <summary>Records that the photo cannot be published; it no longer counts toward the photo limit.</summary>
+    /// <summary>Records that the item cannot be published; it no longer counts toward its kind's limit.</summary>
     public Result Fail(string code)
     {
         if (State is not (StationMediaState.Uploading or StationMediaState.Processing))
@@ -206,28 +208,83 @@ public sealed class StationMediaItem : IAuditableEntity
         return Result.Ok();
     }
 
-    private static Result ValidatePhoto(
-        string contentType, long byteLength, StationMediaLimits limits)
+    private static Result<StationMediaItem> StartUpload(
+        Station station,
+        StationMediaKind kind,
+        int kindItemCount,
+        int nextPosition,
+        string contentType,
+        long byteLength,
+        StationMediaLimits limits,
+        DateTimeOffset now)
     {
-        if (!limits.PhotoContentTypes.Contains(contentType))
+        var rules = KindRules.For(kind, limits);
+        var validation = Validate(rules, contentType, byteLength);
+        if (validation.IsFailed)
+        {
+            return validation.ToResult<StationMediaItem>();
+        }
+
+        if (kindItemCount >= rules.MaximumItems)
+        {
+            return Result.Fail<StationMediaItem>(new StationMediaLimitError(
+                $"A station can have at most {rules.MaximumItems} {rules.Limited(rules.MaximumItems)}."));
+        }
+
+        return Result.Ok(AwaitUpload(station, kind, contentType, byteLength, limits, now, nextPosition, null));
+    }
+
+    private static Result Validate(KindRules rules, string contentType, long byteLength)
+    {
+        if (!rules.ContentTypes.Contains(contentType))
         {
             return Result.Fail(new StationMediaUploadValidationError(
                 StationMediaUploadField.ContentType,
-                $"Photos must be one of: {string.Join(", ", limits.PhotoContentTypes.Order(StringComparer.Ordinal))}."));
+                $"{rules.Subject} must be one of: {string.Join(", ", rules.ContentTypes.Order(StringComparer.Ordinal))}."));
         }
 
-        if (byteLength <= 0 || byteLength > limits.MaximumPhotoBytes)
+        if (byteLength <= 0 || byteLength > rules.MaximumBytes)
         {
             return Result.Fail(new StationMediaUploadValidationError(
                 StationMediaUploadField.ByteLength,
-                $"Photos must be between 1 and {limits.MaximumPhotoBytes} bytes."));
+                $"{rules.Subject} must be between 1 and {rules.MaximumBytes} bytes."));
         }
 
         return Result.Ok();
     }
 
+    /// <summary>The limits and wording that apply to one kind of gallery item.</summary>
+    private sealed record KindRules(
+        string Subject,
+        string Singular,
+        string Plural,
+        int MaximumItems,
+        long MaximumBytes,
+        IReadOnlySet<string> ContentTypes)
+    {
+        public string Limited(int count) => count == 1 ? Singular : Plural;
+
+        public static KindRules For(StationMediaKind kind, StationMediaLimits limits) =>
+            kind == StationMediaKind.Video
+                ? new(
+                    "Videos",
+                    "video",
+                    "videos",
+                    limits.MaximumVideosPerStation,
+                    limits.MaximumVideoBytes,
+                    limits.VideoContentTypes)
+                : new(
+                    "Photos",
+                    "photo",
+                    "photos",
+                    limits.MaximumPhotosPerStation,
+                    limits.MaximumPhotoBytes,
+                    limits.PhotoContentTypes);
+    }
+
     private static StationMediaItem AwaitUpload(
         Station station,
+        StationMediaKind kind,
         string contentType,
         long byteLength,
         StationMediaLimits limits,
@@ -243,7 +300,7 @@ public sealed class StationMediaItem : IAuditableEntity
             PublicId = Guid.NewGuid(),
             Station = station,
             StationId = station.Id,
-            Kind = StationMediaKind.Photo,
+            Kind = kind,
             State = StationMediaState.Uploading,
             ContentType = contentType,
             ByteLength = byteLength,

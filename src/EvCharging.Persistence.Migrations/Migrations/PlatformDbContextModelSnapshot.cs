@@ -32,7 +32,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_notification_kind", new[] { "cancelled", "charging_completed", "created", "expired" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "reservation_state", new[] { "active", "cancelled", "consumed", "expired" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "session_lifecycle", new[] { "active", "completed", "failed", "starting", "stopping" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_kind", new[] { "photo" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_kind", new[] { "photo", "video" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "charging", "station_media_state", new[] { "failed", "processing", "published", "uploading" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
@@ -576,7 +576,7 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         {
                             t.HasCheckConstraint("ck_station_media_items_byte_length", "byte_length > 0");
 
-                            t.HasCheckConstraint("ck_station_media_items_failure_code", "(state = 'failed') = (failure_code IS NOT NULL) AND (failure_code IS NULL OR failure_code IN ('upload_missing', 'upload_expired', 'undecodable', 'too_many_pixels', 'unsupported_format'))");
+                            t.HasCheckConstraint("ck_station_media_items_failure_code", "(state = 'failed') = (failure_code IS NOT NULL) AND (failure_code IS NULL OR failure_code IN ('upload_missing', 'upload_expired', 'undecodable', 'too_many_pixels', 'unsupported_format', 'too_long', 'unsupported_codec'))");
 
                             t.HasCheckConstraint("ck_station_media_items_position", "position >= 0");
 

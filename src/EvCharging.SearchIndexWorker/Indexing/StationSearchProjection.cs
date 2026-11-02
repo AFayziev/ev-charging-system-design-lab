@@ -22,7 +22,7 @@ internal static class StationSearchProjection
         this IQueryable<Station> stations, IQueryable<StationMediaItem> media)
     {
         // Applied outside the projection: EF inlines a captured query, not a method call on one.
-        var visible = media.Visible();
+        var visible = media.VisiblePhotos();
         return stations
             .Select(
                 station => new StationSearchSource(

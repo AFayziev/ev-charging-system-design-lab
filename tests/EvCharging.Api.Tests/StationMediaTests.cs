@@ -30,9 +30,12 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     IAsyncLifetime
 {
     private const string Jpeg = "image/jpeg";
+    private const string Mp4 = "video/mp4";
+    private const long MaximumVideoBytes = 5000;
     private const int MaximumPhotos = 2;
     private const string PublicBaseUrl = "https://media.test/public";
     private static readonly byte[] Photo = "synthetic photo bytes"u8.ToArray();
+    private static readonly byte[] Video = "synthetic video bytes"u8.ToArray();
     private static readonly ConcurrentQueue<Guid> ProcessingRequests = [];
     private static readonly ConcurrentQueue<Guid> DeletionRequests = [];
     private static readonly ConcurrentQueue<Guid> StationChanges = [];
@@ -40,7 +43,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     private ApiHandlerHost? _api;
 
     public async Task InitializeAsync() =>
-        _api = await ApiHandlerHost.StartAsync<StartStationPhotoUploadCommandHandler>(
+        _api = await ApiHandlerHost.StartAsync<StartStationMediaUploadCommandHandler>(
             database,
             _clock,
             services =>
@@ -58,6 +61,10 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
                     options.MaximumPhotoBytes = 1000;
                     options.MaximumPhotoPixels = 1_000_000;
                     options.PhotoContentTypes = [Jpeg];
+                    options.MaximumVideosPerStation = 1;
+                    options.MaximumVideoBytes = MaximumVideoBytes;
+                    options.MaximumVideoDuration = TimeSpan.FromSeconds(60);
+                    options.VideoContentTypes = [Mp4];
                     options.UploadUrlLifetime = TimeSpan.FromMinutes(30);
                 });
             },
@@ -90,7 +97,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
 
-        var result = await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion);
+        var result = await StartUploadAsync(identity, station.PublicId, station.GalleryVersion);
 
         Assert.True(result.IsSuccess);
         var upload = result.Value;
@@ -104,16 +111,182 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
             && audit.Action == AuditAction.Added));
     }
 
+    [Fact]
+    public async Task StartVideoUpload_AssignedOperator_SignsAnUploadForTheVideo()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+
+        var result = await StartVideoUploadAsync(identity, station.PublicId, station.GalleryVersion);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            HttpStatusCode.OK, (await objectStore.PutAsync(result.Value.UploadUrl, Video, Mp4)).StatusCode);
+        await using var context = database.CreateContext();
+        var item = await context.StationMediaItems.SingleAsync(item => item.PublicId == result.Value.ItemId);
+        Assert.Equal(
+            (StationMediaKind.Video, 0, StationMediaState.Uploading, Mp4),
+            (item.Kind, item.Position, item.State, item.ContentType));
+        Assert.True(await context.AuditEntries.AnyAsync(audit =>
+            audit.ResourceType == AuditResourceType.StationMediaItem && audit.ResourceId == item.Id
+            && audit.Action == AuditAction.Added));
+    }
+
+    [Fact]
+    public async Task StartVideoUpload_StationAlreadyHasAVideo_ReportsTheLimitWhilePhotosStillStart()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var first = (await StartVideoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+
+        var second = await StartVideoUploadAsync(identity, station.PublicId, first.GalleryVersion);
+        var photo = await StartUploadAsync(identity, station.PublicId, first.GalleryVersion);
+
+        Assert.True(second.HasError<StationMediaLimitError>());
+        Assert.True(photo.IsSuccess);
+        await using var context = database.CreateContext();
+        var started = await context.StationMediaItems.SingleAsync(item => item.PublicId == photo.Value.ItemId);
+        Assert.Equal((StationMediaKind.Photo, 1), (started.Kind, started.Position));
+        Assert.Equal(2, await CountItemsAsync(station));
+    }
+
+    [Fact]
+    public async Task StartVideoUpload_FailedVideo_NoLongerCountsTowardTheLimit()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var failed = (await StartVideoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        await SettleAsync(failed.ItemId, item => item.Fail(StationMediaFailure.UnsupportedCodec));
+
+        var result = await StartVideoUploadAsync(identity, station.PublicId, await GalleryVersionAsync(station));
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData("video/webm", 100, nameof(StartStationMediaUploadRequest.ContentType))]
+    [InlineData(Jpeg, 100, nameof(StartStationMediaUploadRequest.ContentType))]
+    [InlineData(Mp4, MaximumVideoBytes + 1, nameof(StartStationMediaUploadRequest.ByteLength))]
+    [InlineData(Mp4, 0, nameof(StartStationMediaUploadRequest.ByteLength))]
+    public async Task StartVideoUpload_OutsideFileLimits_RejectsTheField(
+        string contentType, long byteLength, string field)
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+
+        var result = await StartUploadAsync(
+            identity,
+            station.PublicId,
+            station.GalleryVersion,
+            contentType,
+            byteLength,
+            kind: StationMediaKind.Video);
+
+        Assert.True(result.HasError<ValidationError>(out var errors));
+        Assert.Equal(field, Assert.Single(errors).PropertyName);
+        Assert.Equal(0, await CountItemsAsync(station));
+    }
+
+    [Fact]
+    public async Task StartVideoUpload_VideoFileDeclaredAsAPhoto_IsRejected()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+
+        var result = await StartUploadAsync(identity, station.PublicId, station.GalleryVersion, Mp4, 100);
+
+        Assert.True(result.HasError<ValidationError>());
+    }
+
+    // Editors that reload after each conflict keep starting uploads; only one of them gets the single video slot.
+    [Fact]
+    public async Task StartVideoUpload_ConcurrentEditors_StartOnlyOneVideo()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+
+        var started = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+        {
+            while (true)
+            {
+                var editor = await EditorAsync(identity, station);
+                var result = await StartVideoUploadAsync(identity, station.PublicId, editor.GalleryVersion);
+                if (result.IsSuccess || result.HasError<StationMediaLimitError>())
+                {
+                    return result.IsSuccess;
+                }
+
+                if (!result.HasError<ConcurrencyConflictError>())
+                {
+                    throw new InvalidOperationException(result.Errors[0].Message);
+                }
+            }
+        }));
+
+        Assert.Equal(1, started.Count(success => success));
+        Assert.Equal(1, await CountItemsAsync(station));
+    }
+
+    [Fact]
+    public async Task StartVideoUpload_ReplacingAPublishedVideo_TakesNoSlotAndOnlyAcceptsAVideo()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var video = (await StartVideoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        await PublishAsync(video.ItemId);
+
+        var wrongKind = await StartUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: video.ItemId);
+        var replacement = await StartVideoUploadAsync(
+            identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: video.ItemId);
+
+        Assert.True(wrongKind.HasError<ValidationError>());
+        Assert.True(replacement.IsSuccess);
+        await using var context = database.CreateContext();
+        var started = await context.StationMediaItems.SingleAsync(item => item.PublicId == replacement.Value.ItemId);
+        Assert.Equal((StationMediaKind.Video, (int?)null), (started.Kind, started.Position));
+    }
+
+    // The cover is the first published photo, so a video placed in front of the photos is never the cover.
+    [Fact]
+    public async Task Browse_VideoBeforeThePhotos_IsShownInOrderButNeverBecomesTheCover()
+    {
+        var (station, identity) = await database.SeedAssignedStationAsync();
+        var video = (await StartVideoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var photo = (await StartUploadAsync(identity, station.PublicId, video.GalleryVersion)).Value;
+        await PublishAsync(video.ItemId);
+        await PublishAsync(photo.ItemId);
+
+        var summary = await FindInListAsync(identity, station.PublicId);
+        var detail = (await _api!.InvokeAsync<Result<StationDetailResponse>>(
+            identity, new GetStationRequest(station.PublicId))).Value;
+        var editor = await EditorAsync(identity, station);
+
+        Assert.Equal(photo.ItemId, summary.CoverPhoto?.Id);
+        Assert.Equal(
+            [(video.ItemId, StationMediaKind.Video), (photo.ItemId, StationMediaKind.Photo)],
+            detail.Media.Select(item => (item.Id, item.Kind)));
+        var published = detail.Media[0];
+        Assert.Equal(
+            $"{PublicBaseUrl}/stations/{station.PublicId}/media/{video.ItemId}/video.mp4",
+            published.VideoUrl!.ToString());
+        Assert.Null(published.ThumbnailUrl);
+        Assert.Null(detail.Media[1].VideoUrl);
+        var tile = editor.Items[0];
+        Assert.Equal((StationMediaKind.Video, (Uri?)null), (tile.Kind, tile.ThumbnailUrl));
+        Assert.Equal(published.VideoUrl, tile.VideoUrl);
+        Assert.Equal(
+            (1, MaximumVideoBytes, 60d),
+            (
+                editor.Limits.MaximumVideosPerStation,
+                editor.Limits.MaximumVideoBytes,
+                editor.Limits.MaximumVideoDurationSeconds));
+        Assert.Equal([Mp4], editor.Limits.VideoContentTypes);
+    }
+
     // Published photos are shown in gallery order. The first photo may still be processing, and a replacement
     // has no place of its own until it is published, so neither may leak into what is shown to public.
     [Fact]
     public async Task Browse_UnfinishedFirstPhotoAndPendingReplacement_ShowsOnlyPublishedPhotos()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var unfinished = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
-        var published = (await StartPhotoUploadAsync(identity, station.PublicId, unfinished.GalleryVersion)).Value;
+        var unfinished = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var published = (await StartUploadAsync(identity, station.PublicId, unfinished.GalleryVersion)).Value;
         await PublishAsync(published.ItemId);
-        var replacement = await StartPhotoUploadAsync(
+        var replacement = await StartUploadAsync(
             identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId);
         Assert.True(replacement.IsSuccess);
 
@@ -122,11 +295,11 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
             identity, new GetStationRequest(station.PublicId))).Value;
 
         Assert.Equal(published.ItemId, summary.CoverPhoto?.Id);
-        var photo = Assert.Single(detail.Photos);
-        Assert.Equal(published.ItemId, photo.Id);
+        var photo = Assert.Single(detail.Media);
+        Assert.Equal((published.ItemId, StationMediaKind.Photo), (photo.Id, photo.Kind));
         Assert.StartsWith(
             $"{PublicBaseUrl}/stations/{station.PublicId}/media/{photo.Id}/",
-            photo.DisplayUrl.ToString());
+            photo.DisplayUrl!.ToString());
     }
 
     [Fact]
@@ -135,7 +308,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         var (station, _) = await database.SeedAssignedStationAsync();
         var (_, otherOperator) = await database.SeedAssignedStationAsync();
 
-        var result = await StartPhotoUploadAsync(otherOperator, station.PublicId, station.GalleryVersion);
+        var result = await StartUploadAsync(otherOperator, station.PublicId, station.GalleryVersion);
 
         Assert.True(result.HasError<ForbiddenError>());
     }
@@ -146,20 +319,20 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         var (station, _) = await database.SeedAssignedStationAsync();
         var (_, driver) = await database.SeedDriverAsync();
 
-        var result = await StartPhotoUploadAsync(driver, station.PublicId, station.GalleryVersion);
+        var result = await StartUploadAsync(driver, station.PublicId, station.GalleryVersion);
 
         Assert.True(result.HasError<ForbiddenError>());
     }
 
     [Theory]
-    [InlineData("image/gif", 10, nameof(StartStationPhotoUploadRequest.ContentType))]
-    [InlineData(Jpeg, 1001, nameof(StartStationPhotoUploadRequest.ByteLength))]
+    [InlineData("image/gif", 10, nameof(StartStationMediaUploadRequest.ContentType))]
+    [InlineData(Jpeg, 1001, nameof(StartStationMediaUploadRequest.ByteLength))]
     public async Task StartPhotoUpload_OutsideFileLimits_RejectsTheField(
         string contentType, long byteLength, string field)
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
 
-        var result = await StartPhotoUploadAsync(
+        var result = await StartUploadAsync(
             identity,
             station.PublicId,
             station.GalleryVersion,
@@ -177,7 +350,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         var (station, identity) = await database.SeedAssignedStationAsync();
         await FillGalleryAsync(identity, station);
 
-        var result = await StartPhotoUploadAsync(identity, station.PublicId, await GalleryVersionAsync(station));
+        var result = await StartUploadAsync(identity, station.PublicId, await GalleryVersionAsync(station));
 
         Assert.True(result.HasError<StationMediaLimitError>());
     }
@@ -186,9 +359,9 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     public async Task StartPhotoUpload_StaleVersion_ConflictsWithoutStarting()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        Assert.True((await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).IsSuccess);
+        Assert.True((await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).IsSuccess);
 
-        var stale = await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion);
+        var stale = await StartUploadAsync(identity, station.PublicId, station.GalleryVersion);
 
         Assert.True(stale.HasError<ConcurrencyConflictError>());
         Assert.Equal(1, await CountItemsAsync(station));
@@ -207,7 +380,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
             {
                 var editor = await _api!.InvokeAsync<Result<StationGalleryEditorResponse>>(
                     identity, new GetStationGalleryEditorRequest(station.PublicId));
-                var result = await StartPhotoUploadAsync(identity, station.PublicId, editor.Value.GalleryVersion);
+                var result = await StartUploadAsync(identity, station.PublicId, editor.Value.GalleryVersion);
                 if (result.HasError<StationMediaLimitError>())
                 {
                     return successes;
@@ -230,7 +403,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     public async Task CompleteUpload_UploadingPhoto_RequestsProcessingOnce()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var upload = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var upload = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
         var completion = new CompleteStationMediaUploadCommand(station.PublicId, upload.ItemId);
 
         Result<StationMediaUploadStateResponse>? first = null;
@@ -266,7 +439,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
 
         Assert.True(result.HasError<StationMediaUploadFailedError>());
         Assert.True(repeated.HasError<StationMediaUploadFailedError>());
-        Assert.True((await StartPhotoUploadAsync(
+        Assert.True((await StartUploadAsync(
             identity, station.PublicId, await GalleryVersionAsync(station))).IsSuccess);
     }
 
@@ -275,7 +448,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
         var (_, otherOperator) = await database.SeedAssignedStationAsync();
-        var upload = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var upload = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
 
         var result = await _api!.InvokeAsync<Result<StationMediaUploadStateResponse>>(
             otherOperator, new CompleteStationMediaUploadCommand(station.PublicId, upload.ItemId));
@@ -290,7 +463,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         var uploads = await FillGalleryAsync(identity, station);
         await PublishAsync(uploads[0].ItemId);
 
-        var result = await StartPhotoUploadAsync(
+        var result = await StartUploadAsync(
             identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: uploads[0].ItemId);
 
         Assert.True(result.IsSuccess);
@@ -308,12 +481,12 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     public async Task StartPhotoUpload_ReplacingAgain_DropsTheUnfinishedReplacementAndItsFiles()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var published = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var published = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
         await PublishAsync(published.ItemId);
-        var first = (await StartPhotoUploadAsync(
+        var first = (await StartUploadAsync(
             identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId)).Value;
 
-        var second = (await StartPhotoUploadAsync(
+        var second = (await StartUploadAsync(
             identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId)).Value;
 
         await using var context = database.CreateContext();
@@ -326,9 +499,9 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     public async Task StartPhotoUpload_ReplacingAPhotoThatIsNotPublished_ConflictsWithoutStarting()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var pending = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var pending = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
 
-        var result = await StartPhotoUploadAsync(
+        var result = await StartUploadAsync(
             identity, station.PublicId, pending.GalleryVersion, replacesItemId: pending.ItemId);
 
         Assert.True(result.HasError<StationMediaStateError>());
@@ -340,7 +513,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
 
-        var result = await StartPhotoUploadAsync(
+        var result = await StartUploadAsync(
             identity, station.PublicId, station.GalleryVersion, replacesItemId: Guid.NewGuid());
 
         Assert.True(result.HasError<NotFoundError<Guid>>());
@@ -433,9 +606,9 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     public async Task Remove_PublishedPhotoWithAReplacement_RemovesBoth()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var published = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var published = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
         await PublishAsync(published.ItemId);
-        var replacement = (await StartPhotoUploadAsync(
+        var replacement = (await StartUploadAsync(
             identity, station.PublicId, await GalleryVersionAsync(station), replacesItemId: published.ItemId)).Value;
 
         Assert.True((await RemoveAsync(identity, station, published.ItemId)).IsSuccess);
@@ -475,7 +648,7 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
         var (_, otherOperator) = await database.SeedAssignedStationAsync();
-        var upload = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var upload = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
 
         var result = await RemoveAsync(otherOperator, station, upload.ItemId);
 
@@ -487,10 +660,10 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
     public async Task Editor_PublishedPhotoWithAReplacement_ShowsThumbnailAndReplacementState()
     {
         var (station, identity) = await database.SeedAssignedStationAsync();
-        var published = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
+        var published = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion)).Value;
         await PublishAsync(published.ItemId);
-        var pending = (await StartPhotoUploadAsync(identity, station.PublicId, station.GalleryVersion + 1)).Value;
-        var replacement = (await StartPhotoUploadAsync(
+        var pending = (await StartUploadAsync(identity, station.PublicId, station.GalleryVersion + 1)).Value;
+        var replacement = (await StartUploadAsync(
             identity, station.PublicId, pending.GalleryVersion, replacesItemId: published.ItemId)).Value;
 
         var editor = await EditorAsync(identity, station);
@@ -509,18 +682,25 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         Assert.Equal(2, editor.Items.Count);
     }
 
-    private Task<Result<StationPhotoUploadResponse>> StartPhotoUploadAsync(
+    private Task<Result<StationMediaUploadResponse>> StartVideoUploadAsync(
+        UserIdentity identity, Guid stationId, int version, Guid? replacesItemId = null) =>
+        StartUploadAsync(
+            identity, stationId, version, Mp4, Video.Length, replacesItemId, StationMediaKind.Video);
+
+    private Task<Result<StationMediaUploadResponse>> StartUploadAsync(
         UserIdentity identity,
         Guid stationId,
         int version,
         string contentType = Jpeg,
         long? byteLength = null,
-        Guid? replacesItemId = null) =>
-        _api!.InvokeAsync<Result<StationPhotoUploadResponse>>(
+        Guid? replacesItemId = null,
+        StationMediaKind kind = StationMediaKind.Photo) =>
+        _api!.InvokeAsync<Result<StationMediaUploadResponse>>(
             identity,
-            new StartStationPhotoUploadCommand(
+            new StartStationMediaUploadCommand(
                 stationId,
-                new StartStationPhotoUploadRequest(version, contentType, byteLength ?? Photo.Length, replacesItemId)));
+                new StartStationMediaUploadRequest(
+                    version, kind, contentType, byteLength ?? Photo.Length, replacesItemId)));
 
     private async Task<StationSummaryResponse> FindInListAsync(UserIdentity identity, Guid stationId)
     {
@@ -556,13 +736,13 @@ public sealed class StationMediaTests(PlatformDatabaseFixture database, ObjectSt
         (await _api!.InvokeAsync<Result<StationGalleryEditorResponse>>(
             identity, new GetStationGalleryEditorRequest(station.PublicId))).Value;
 
-    private async Task<List<StationPhotoUploadResponse>> FillGalleryAsync(UserIdentity identity, Station station)
+    private async Task<List<StationMediaUploadResponse>> FillGalleryAsync(UserIdentity identity, Station station)
     {
-        var uploads = new List<StationPhotoUploadResponse>();
+        var uploads = new List<StationMediaUploadResponse>();
         var version = station.GalleryVersion;
         for (int photo = 0; photo < MaximumPhotos; photo++)
         {
-            var upload = (await StartPhotoUploadAsync(identity, station.PublicId, version)).Value;
+            var upload = (await StartUploadAsync(identity, station.PublicId, version)).Value;
             uploads.Add(upload);
             version = upload.GalleryVersion;
         }

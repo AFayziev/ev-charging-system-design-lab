@@ -15,6 +15,9 @@ public static class StationMediaObjectKeys
     public static string Upload(Guid stationId, Guid itemId) =>
         $"{ObjectStore.UploadPrefix}{Prefix(stationId, itemId)}";
 
+    /// <summary>The published video, stored as uploaded under the same prefix as a photo's variants.</summary>
+    public static string Video(Guid stationId, Guid itemId) => $"{Prefix(stationId, itemId)}/video.mp4";
+
     public static string Variant(Guid stationId, Guid itemId, string variant) =>
         $"{Prefix(stationId, itemId)}/{variant}.webp";
 
