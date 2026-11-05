@@ -1,5 +1,6 @@
 using EvCharging.Contracts.Charging;
 using EvCharging.Contracts.Observations;
+using EvCharging.Domain.Charging;
 using EvCharging.Domain.Observations;
 using EvCharging.ObservationStream;
 using EvCharging.Persistence;
@@ -28,9 +29,10 @@ internal sealed class SessionEvidenceBatchHandler(
 
         // A fresh context for every attempt, so a retry never sees the tracked state of a failed one.
         await using var scope = scopes.CreateAsyncScope();
-        var database = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
 
-        var readings = await MatchSessionsAsync(database, envelopes, cancellationToken);
+        var database = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        var (readings, starting) = await MatchSessionsAsync(database, envelopes, cancellationToken);
+
         if (readings.Count == 0)
         {
             return;
@@ -38,11 +40,13 @@ internal sealed class SessionEvidenceBatchHandler(
 
         var outbox = scope.ServiceProvider.GetRequiredService<IDbContextOutbox>();
         outbox.Enroll(database);
+
         var sessionIds = readings.Keys.ToList();
         var evidence = await database.SessionEvidence
             .Where(row => sessionIds.Contains(row.SessionId))
             .ToDictionaryAsync(row => row.SessionId, cancellationToken);
         var advanced = new List<Guid>();
+
         foreach (var (sessionId, sessionReadings) in readings)
         {
             if (!evidence.TryGetValue(sessionId, out var row))
@@ -53,6 +57,7 @@ internal sealed class SessionEvidenceBatchHandler(
 
             var observedBefore = row.LastObservedAt;
             bool finalised = false;
+
             foreach (var reading in sessionReadings.OrderBy(envelope => envelope.OccurredAt)
                 .ThenBy(envelope => envelope.SourceEventId))
             {
@@ -70,7 +75,13 @@ internal sealed class SessionEvidenceBatchHandler(
                 advanced.Add(sessionId);
             }
 
-            if (finalised)
+            if (starting.Contains(sessionId))
+            {
+                // Charging or an end shows the start happened, whatever its status checks found. Confirming it also
+                // hands on a final reading, which a starting session cannot complete with.
+                await ConfirmObservedStartAsync(outbox, sessionId, sessionReadings);
+            }
+            else if (finalised)
             {
                 await outbox.PublishAsync(new CompleteChargingSessionMessage(sessionId));
             }
@@ -89,23 +100,47 @@ internal sealed class SessionEvidenceBatchHandler(
         await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
     }
 
-    // A reading belongs to a session when its identity is a started session of the same integration.
-    private async Task<Dictionary<Guid, List<ObservationEnvelope>>> MatchSessionsAsync(
-        PlatformDbContext database,
-        IReadOnlyList<ObservationEnvelope> envelopes,
-        CancellationToken cancellationToken)
+    private static async Task ConfirmObservedStartAsync(
+        IDbContextOutbox outbox,
+        Guid sessionId,
+        List<ObservationEnvelope> readings)
+    {
+        var started = readings
+            .Where(envelope => envelope.State is ObservationState.Charging or ObservationState.Stopped)
+            .Select(envelope => envelope.OccurredAt)
+            .ToList();
+
+        if (started.Count > 0)
+        {
+            await outbox.PublishAsync(new ConfirmObservedChargingStartMessage(sessionId, started.Min()));
+        }
+    }
+
+    // A reading belongs to a session when its identity is a started session of the same integration. 
+    // The sessions still starting are returned alongside, for confirmation.
+    private async Task<(Dictionary<Guid, List<ObservationEnvelope>> Readings, HashSet<Guid> StartingSessionIds)>
+        MatchSessionsAsync(
+            PlatformDbContext database,
+            IReadOnlyList<ObservationEnvelope> envelopes,
+            CancellationToken cancellationToken)
     {
         var publicIds = envelopes.Select(envelope => envelope.ExternalSessionId).Distinct().ToList();
-        var sessionIds = (await database.Attempts
+        var sessions = await database.Attempts
             .Where(attempt => publicIds.Contains(attempt.SessionPublicId))
-            .Select(attempt => new { attempt.Operation!.SessionId, attempt.SessionPublicId, attempt.IntegrationKey })
+            .Select(attempt => new MatchedSession(
+                attempt.Operation!.SessionId,
+                attempt.SessionPublicId,
+                attempt.IntegrationKey,
+                attempt.Operation.Session!.Lifecycle))
             .Distinct()
-            .ToListAsync(cancellationToken))
+            .ToListAsync(cancellationToken);
+        var sessionIds = sessions
             .ToDictionary(session => (session.SessionPublicId, session.IntegrationKey), session => session.SessionId);
 
         var matched = envelopes
             .Where(envelope => sessionIds.ContainsKey((envelope.ExternalSessionId, envelope.IntegrationKey)))
             .ToList();
+
         if (matched.Count < envelopes.Count)
         {
             logger.LogWarning(
@@ -113,8 +148,20 @@ internal sealed class SessionEvidenceBatchHandler(
                 envelopes.Count - matched.Count);
         }
 
-        return matched
+        var readings = matched
             .GroupBy(envelope => sessionIds[(envelope.ExternalSessionId, envelope.IntegrationKey)])
             .ToDictionary(group => group.Key, group => group.ToList());
+        var startingSessionIds = sessions
+            .Where(session => session.Lifecycle == SessionLifecycle.Starting && readings.ContainsKey(session.SessionId))
+            .Select(session => session.SessionId)
+            .ToHashSet();
+
+        return (readings, startingSessionIds);
     }
+
+    private sealed record MatchedSession(
+        Guid SessionId,
+        Guid SessionPublicId,
+        string IntegrationKey,
+        SessionLifecycle Lifecycle);
 }

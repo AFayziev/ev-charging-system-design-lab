@@ -9,7 +9,7 @@ external effects.
 
 Drivers discover stations, reserve connectors, control charging, and follow
 progress. Operator users maintain assigned station content,
-inspect sessions and attempts, and request reconciliation.
+inspect sessions and attempts, and release connectors held by uncertain starts.
 Infrastructure fault injection belongs to the test harness rather than the UI.
 
 Billing, payments, tariffs, roaming, route planning, fleet management, and a
@@ -421,7 +421,9 @@ Correlated logs and traces provide request-level troubleshooting.
 
 The [domain transition table](domain.md#62-session-lifecycle) defines resulting
 states; [provider contracts](integrations.md) determine authoritative evidence.
-Reconciliation requests from operator users use the same durable path and are audited.
+Session observations can also confirm an unsettled start. An operator release is
+an audited conditional transition; if the start settles first, the release is
+refused. Observations after release are only recorded.
 
 ### 9.3 Completion
 
@@ -501,8 +503,8 @@ persisted operation limit across worker retries and redelivery. Outcome lookups
 use bounded request retries, timeouts, and concurrency, without a
 persisted per-operation query budget. Scheduled reconciliation starts with a short
 run of checks and then continues at a slower cadence until evidence settles the
-operation; resends stay within the persisted request limit, and manual or operator
-checks can obtain a result sooner without authorizing an effect.
+operation; resends stay within the persisted request limit, and manual checks can
+obtain a result sooner without authorizing an effect.
 [Lab defaults](lab.md#22-default-timings) set the baseline limits.
 
 Per-dependency deadlines, cancellation, circuit breaking, concurrency limits, and

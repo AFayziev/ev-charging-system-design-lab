@@ -22,7 +22,9 @@ internal static class CommandExecutionExtensions
 
     public static Task<Operation?> LoadOperationAsync(
         this PlatformDbContext database, Guid id, CancellationToken cancellationToken) =>
-        database.Operations.Include(value => value.Session!).ThenInclude(value => value.Reservation)
+        database.Operations
+            .Include(value => value.Session!)
+            .ThenInclude(value => value.Reservation)
             .SingleOrDefaultAsync(value => value.Id == id, cancellationToken);
 
     /// <summary>
@@ -45,6 +47,7 @@ internal static class CommandExecutionExtensions
         bool isRetry = attemptNumber > 1;
         bool claimed = await ClaimAttemptAsync(
             database, operation, attemptNumber, policy.MaximumCommandRequests, cancellationToken);
+
         if (!claimed)
         {
             logger.LogInformation(
@@ -53,11 +56,13 @@ internal static class CommandExecutionExtensions
                 operation.Kind,
                 attemptNumber,
                 operation.Id);
+
             return null;
         }
 
         // The batch claim bypasses tracking. Reload before any subsequent tracked write.
         await database.Entry(operation).ReloadAsync(cancellationToken);
+
         var session = operation.Session ?? throw new InvalidOperationException("Session must be loaded.");
         var attempt = new Attempt
         {
@@ -72,7 +77,9 @@ internal static class CommandExecutionExtensions
             OperationPublicId = operation.PublicId,
             SessionPublicId = session.PublicId
         };
+
         database.Attempts.Add(attempt);
+
         if (isRetry)
         {
             await database.SaveChangesAsync(cancellationToken);
@@ -90,6 +97,7 @@ internal static class CommandExecutionExtensions
             attemptNumber,
             operation.Kind,
             operation.PublicId);
+
         return attempt;
     }
 
@@ -107,19 +115,24 @@ internal static class CommandExecutionExtensions
         CancellationToken cancellationToken)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
         var driverId = await database.Operations.Where(value => value.Id == authorized.OperationId)
             .Select(value => value.DriverId)
             .SingleAsync(cancellationToken);
+
         await database.LockDriverReservationsAsync(driverId, cancellationToken);
+
         var attempt = await database.Attempts.SingleAsync(value => value.Id == authorized.Id, cancellationToken);
         var operation = await database.LoadOperationAsync(authorized.OperationId, cancellationToken)
             ?? throw new InvalidOperationException("The authorized operation is missing.");
+
         if (attempt.FinishedAt is not null || operation.Outcome is CommandOutcome.Confirmed or CommandOutcome.Rejected)
         {
             return;
         }
 
         var transitioned = transition(operation, RecordResult(attempt, result));
+
         if (transitioned.IsFailed)
         {
             throw new InvalidOperationException(
@@ -129,8 +142,10 @@ internal static class CommandExecutionExtensions
 
         attempt.Outcome = operation.Outcome;
         attempt.FinishedAt = clock.GetUtcNow();
+
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
         logger.LogInformation(
             "{Kind} {OperationId} completed attempt {AttemptId} with {Outcome}",
             operation.Kind,
@@ -140,8 +155,8 @@ internal static class CommandExecutionExtensions
     }
 
     /// <summary>
-    /// Applies provider evidence found by a status check, unless the operation is already settled. An attempt whose
-    /// response was never recorded is closed with the result.
+    /// Applies provider evidence from a status check or from observations, unless the operation is already settled.
+    /// An attempt whose response was never recorded is closed with the result.
     /// </summary>
     public static async Task ResolveAsync(
         this PlatformDbContext database,
@@ -153,11 +168,14 @@ internal static class CommandExecutionExtensions
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
         await database.LockDriverReservationsAsync(unresolved.DriverId, cancellationToken);
+
         var operation = await database.LoadOperationAsync(unresolved.Id, cancellationToken)
             ?? throw new InvalidOperationException("The checked operation is missing.");
+
         if (operation.Outcome is not (CommandOutcome.Confirmed or CommandOutcome.Rejected))
         {
             var transitioned = transition(operation);
+
             if (transitioned.IsFailed)
             {
                 throw new InvalidOperationException(
@@ -168,6 +186,7 @@ internal static class CommandExecutionExtensions
             var latest = await database.Attempts.Where(value => value.OperationId == operation.Id)
                 .OrderByDescending(value => value.Number)
                 .FirstAsync(cancellationToken);
+
             if (latest.FinishedAt is null)
             {
                 latest.FinishedAt = clock.GetUtcNow();
@@ -179,8 +198,9 @@ internal static class CommandExecutionExtensions
         }
 
         await transaction.CommitAsync(cancellationToken);
+
         logger.LogInformation(
-            "Status check resolved {Kind} {OperationId} with {Outcome}",
+            "Provider evidence resolved {Kind} {OperationId} with {Outcome}",
             operation.Kind,
             operation.PublicId,
             operation.Outcome);
@@ -214,12 +234,14 @@ internal static class CommandExecutionExtensions
                 && await CloseUnrecordedAsync(database, clock, logger, operation.Id, latest.Number, cancellationToken)
             : operation.Outcome == CommandOutcome.Uncertain
                 && latest.FailureCode is TransportFailureCode or InvalidResponseCode or UnrecordedResponseCode;
+
         if (!resendable)
         {
             return;
         }
 
         await bus.PublishAsync(createRequest(latest.Number + 1));
+
         logger.LogInformation(
             "Status check found no provider record for {Kind} {OperationId}; resending as request {AttemptNumber}",
             operation.Kind,
@@ -240,14 +262,18 @@ internal static class CommandExecutionExtensions
         CancellationToken cancellationToken)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
         var driverId = await database.Operations.Where(value => value.Id == operationId)
             .Select(value => value.DriverId)
             .SingleAsync(cancellationToken);
+
         await database.LockDriverReservationsAsync(driverId, cancellationToken);
+
         var operation = await database.LoadOperationAsync(operationId, cancellationToken)
             ?? throw new InvalidOperationException("The checked operation is missing.");
         var attempt = await database.Attempts.SingleAsync(
             value => value.OperationId == operationId && value.Number == attemptNumber, cancellationToken);
+
         if (attempt.FinishedAt is not null || operation.AuthorizedAttemptCount != attemptNumber
             || operation.Outcome is not (CommandOutcome.Pending or CommandOutcome.Uncertain)
             || operation.MarkUncertain().IsFailed)
@@ -258,13 +284,16 @@ internal static class CommandExecutionExtensions
         attempt.Outcome = operation.Outcome;
         attempt.FailureCode = UnrecordedResponseCode;
         attempt.FinishedAt = clock.GetUtcNow();
+
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
         logger.LogInformation(
             "{Kind} {OperationId} request {AttemptNumber} has no recorded response and is treated as uncertain",
             operation.Kind,
             operation.PublicId,
             attemptNumber);
+
         return true;
     }
 
@@ -281,6 +310,7 @@ internal static class CommandExecutionExtensions
             .Select(value => value.AutomaticChecksEndAt)
             .SingleOrDefaultAsync(cancellationToken);
         var remaining = endsAt - clock.GetUtcNow();
+
         if (remaining is null || remaining <= TimeSpan.Zero)
         {
             return new(ChargingCheckOutcome.Unresolved);
@@ -288,6 +318,7 @@ internal static class CommandExecutionExtensions
 
         using var window = new CancellationTokenSource(remaining.Value, clock);
         using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, window.Token);
+
         try
         {
             return await check(bounded.Token);
@@ -320,6 +351,7 @@ internal static class CommandExecutionExtensions
                     .SetProperty(
                         value => value.RequestLimit, value => isRetry ? value.RequestLimit : firstRequestLimit),
                 cancellationToken);
+
         return claimed == 1;
     }
 
@@ -336,6 +368,7 @@ internal static class CommandExecutionExtensions
         // One extra interval lets the final scheduled check run before the window closes.
         var endsAt = authorizedAt + policy.AutomaticStatusCheckInterval * (policy.MaximumAutomaticStatusChecks + 1);
         var scheduling = operation.ScheduleAutomaticChecks(endsAt);
+
         if (scheduling.IsFailed)
         {
             logger.LogWarning(
@@ -343,10 +376,12 @@ internal static class CommandExecutionExtensions
                 operation.Kind,
                 operation.PublicId,
                 string.Join(", ", scheduling.Errors));
+
             return false;
         }
 
         outbox.Enroll(database);
+
         for (int number = 1; number <= policy.MaximumAutomaticStatusChecks; number++)
         {
             await outbox.ScheduleAsync(
@@ -356,6 +391,7 @@ internal static class CommandExecutionExtensions
         }
 
         await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
+
         return true;
     }
 
@@ -367,6 +403,7 @@ internal static class CommandExecutionExtensions
             attempt.ProviderCommandId = evidence.Id;
             attempt.ProviderSessionId = evidence.SessionId;
             attempt.ProviderAppliedAt = evidence.AppliedAt;
+
             return ProviderEvidence.Applied;
         }
 
@@ -374,17 +411,21 @@ internal static class CommandExecutionExtensions
             && rejected.First().ExternalOperationId == attempt.OperationPublicId)
         {
             var evidence = rejected.First();
+
             attempt.ProviderCommandId = evidence.CommandId;
             attempt.FailureCode = evidence.Code;
             attempt.ResponseStatusCode = (int?)evidence.StatusCode;
             attempt.ResponseBody = evidence.ResponseBody;
+
             // An access denial establishes non-execution of this request only, so it cannot settle a command
             // whose earlier attempts were uncertain.
             bool deniedRetry = evidence.CommandId is null && attempt.Number > 1;
+
             return deniedRetry ? ProviderEvidence.Uncertain : ProviderEvidence.Rejected;
         }
 
         attempt.FailureCode = result.HasError<ProviderTransportError>() ? TransportFailureCode : InvalidResponseCode;
+
         if (result.HasError<ProviderResponseError>(out var errors))
         {
             var evidence = errors.First();

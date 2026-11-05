@@ -72,7 +72,14 @@ public sealed class Operation : IAuditableEntity
         });
     }
 
-    public Result ConfirmStart(Guid providerId, string providerSessionId, DateTimeOffset startedAt)
+    public Result ConfirmStart(Guid providerId, string providerSessionId, DateTimeOffset startedAt) =>
+        ConfirmStartWith(session => session.ConfirmStart(providerId, providerSessionId, startedAt));
+
+    /// <summary>Confirms the start from observations, which do not identify the provider's session.</summary>
+    public Result ConfirmObservedStart(Guid providerId, DateTimeOffset startedAt) =>
+        ConfirmStartWith(session => session.ConfirmObservedStart(providerId, startedAt));
+
+    private Result ConfirmStartWith(Func<ChargingSession, Result> confirmSession)
     {
         var eligibility = ValidateUnresolved(ChargingCommandKind.Start);
         if (eligibility.IsFailed)
@@ -80,8 +87,7 @@ public sealed class Operation : IAuditableEntity
             return eligibility;
         }
 
-        var confirmation = (Session ?? throw new InvalidOperationException("Session must be loaded."))
-            .ConfirmStart(providerId, providerSessionId, startedAt);
+        var confirmation = confirmSession(Session ?? throw new InvalidOperationException("Session must be loaded."));
         if (confirmation.IsFailed)
         {
             return confirmation;

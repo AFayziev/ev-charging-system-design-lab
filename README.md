@@ -8,7 +8,7 @@ and a React/TypeScript frontend for drivers and backoffice operator users.
 - Drivers discover stations, reserve connectors, start and stop charging, and
   follow session progress.
 - Operator users maintain station information and media, monitor sessions, investigate
-  uncertain command outcomes, and request reconciliation.
+  uncertain command outcomes, and release connectors held by uncertain starts.
 - WattHarbor and AmpTrail lab providers expose different APIs and
   controllable faults.
 - Notification delivery captures local email in a dedicated Mailpit sink with

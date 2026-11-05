@@ -52,8 +52,20 @@ public sealed class ChargingSession : IAuditableEntity
 
     public Result ConfirmStart(Guid providerId, string providerSessionId, DateTimeOffset startedAt)
     {
-        ArgumentOutOfRangeException.ThrowIfEqual(providerId, Guid.Empty);
         ArgumentException.ThrowIfNullOrWhiteSpace(providerSessionId);
+        return ActivateConfirmedStart(providerId, providerSessionId, startedAt);
+    }
+
+    /// <summary>
+    /// Confirms the start from observations alone. They carry only the platform session identity, so the
+    /// provider's stays unknown.
+    /// </summary>
+    public Result ConfirmObservedStart(Guid providerId, DateTimeOffset startedAt) =>
+        ActivateConfirmedStart(providerId, providerSessionId: null, startedAt);
+
+    private Result ActivateConfirmedStart(Guid providerId, string? providerSessionId, DateTimeOffset startedAt)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(providerId, Guid.Empty);
         if (Lifecycle != SessionLifecycle.Starting)
         {
             return Result.Fail(new ChargingStartError(

@@ -437,14 +437,13 @@ These are overridable experiment settings, not production availability targets.
 | Replica lag tolerance | 2 seconds | Greater lag triggers bounded fallback or a degraded view |
 | Provider HTTP attempt timeout | 3 seconds | Maximum wait for one effect or outcome-query response |
 | Command request limit | 3 total requests per start or stop | Initial request plus same-key resends made by automatic reconciliation checks that find no provider record; subject to provider safety and command eligibility |
-| Automatic reconciliation | Every 5 seconds, 6 scheduled checks; then continued checks until resolved, every 30 seconds at first and slowing to every 15 minutes as the operation ages (a quarter of its unresolved time) | The first window closes one interval after its final scheduled check. A scan every 30 seconds claims due operations, longest-waiting first and no more than the concurrent command limit, so checks resume after a worker or provider outage; manual or operator checks remain available |
+| Automatic reconciliation | Every 5 seconds, 6 scheduled checks; then continued checks until resolved, every 30 seconds at first and slowing to every 15 minutes as the operation ages (a quarter of its unresolved time) | The first window closes one interval after its final scheduled check. A scan every 30 seconds claims due operations, longest-waiting first and no more than the concurrent command limit, so checks resume after a worker or provider outage; manual checks remain available |
+| Release window | 10 minutes | An uncertain start with no observations this long after its last request can be [released](domain.md#61-command-outcomes) by an operator |
 | Stale-session recovery | A scan every 30 seconds finds active or stopping sessions whose newest reading is older than the freshness limit and reads the provider snapshot; each session is re-read every 30 seconds at first, slowing to every 15 minutes as it stays stale (a quarter of its stale time); at most 100 sessions per scan and 4 concurrent snapshot reads | The snapshot is appended to the observation stream, so it is recorded, deduplicated and completed like a callback. A fresh or ended session is not read |
 | Search index retry | 1 second, 5 seconds, then every 30 seconds until the index or database recovers | Delay between retries of a station index update |
 
 Wolverine scheduled work and retry policies bound automatic reconciliation under
 the [resilience boundaries](architecture.md#12-resilience-boundaries).
-Operator reconciliation requests are audited; their retry and admission limits
-are set per scenario.
 
 Pool limits, worker concurrency, instance counts, stream/document/file retention,
 and load are set per scenario. Deliberately small budgets expose saturation without a large
@@ -513,6 +512,8 @@ public API and the resulting platform state.
 | Cancellation races start | One eligible transition wins; cancelled bookings cannot dispatch a start | M06.06 |
 | Arrival deadline passes with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled | M06.06 |
 | Start applies but response is lost | One logical operation; visible uncertainty resolves against provider evidence without blind resubmission | M06.01 |
+| Outcome lookups fail while observations arrive | Observations confirm the start; the session stops and completes normally | M06.04.2 |
+| Uncertain start with no observations | The claim holds until an assigned operator releases the connector after the release window | M06.04.3 |
 | Worker dies after effect before acknowledgement | Redelivery retains operation/attempt identity; SQL mutations deduplicate and provider ambiguity follows its contract | M06.05 |
 | Duplicate/late observations | Historical evidence retained; current state follows source-time ordering | M07.01 |
 | Telemetry stops | Timestamped state becomes stale; silence does not imply stopped or offline | M07.03 |

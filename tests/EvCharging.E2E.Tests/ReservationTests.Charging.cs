@@ -43,7 +43,8 @@ public sealed partial class ReservationTests
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync();
         var page = await browser.NewPageAsync();
-        var operation = await StartWithLostResponseAsync(page, HttpStatusCode.ServiceUnavailable, timeout.Token);
+        var operation = await StartWithLostResponseAsync(
+            page, HttpStatusCode.ServiceUnavailable, timeout.Token, interruptTelemetry: true);
         await AwaitStartOutcomeAsync(operation.Id, CommandOutcome.Uncertain, timeout.Token);
         await page.GetByRole(AriaRole.Link, new() { Name = "My reservations", Exact = true }).ClickAsync();
         var unresolved = await Storage.Operations.AsNoTracking().Include(value => value.Session!)
@@ -335,7 +336,7 @@ public sealed partial class ReservationTests
     }
 
     private async Task<Operation> StartWithLostResponseAsync(
-        IPage page, HttpStatusCode? lookupStatus, CancellationToken cancellationToken)
+        IPage page, HttpStatusCode? lookupStatus, CancellationToken cancellationToken, bool interruptTelemetry = false)
     {
         await PauseChargingAsync();
         var reservation = await CurrentBookingAsync();
@@ -346,6 +347,12 @@ public sealed partial class ReservationTests
         var operationId = accepted.GetProperty("body").GetProperty("id").GetGuid();
         var sessionId = accepted.GetProperty("body").GetProperty("sessionId").GetGuid();
         await fixture.ConfigureWattHarborCommandFaultAsync(operationId, sessionId, (int?)lookupStatus);
+        if (interruptTelemetry)
+        {
+            // Observations of the started session would confirm it without a status check.
+            await fixture.ConfigureWattHarborTelemetryFaultAsync(sessionId, interrupt: true);
+        }
+
         await WorkerCommandAsync(KnownResourceCommands.StartCommand, cancellationToken);
         _chargingPaused = false;
         return await Storage.Operations.SingleAsync(value => value.PublicId == operationId, cancellationToken);

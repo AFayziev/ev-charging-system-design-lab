@@ -48,6 +48,8 @@ builder.AddMessaging(
         options.Policies.ForMessagesOfType<CheckChargingStartMessage>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<StopChargingMessage>().Audit(message => message.OperationId);
         options.Policies.ForMessagesOfType<CheckChargingStopMessage>().Audit(message => message.OperationId);
+        options.Policies.ForMessagesOfType<ConfirmObservedChargingStartMessage>()
+            .Audit(message => message.SessionId);
         options.Policies.ForMessagesOfType<CompleteChargingSessionMessage>().Audit(message => message.SessionId);
         options.Policies.ForMessagesOfType<RefreshSessionEvidenceMessage>().Audit(message => message.SessionId);
         options.AddFailurePolicies(messagingFailureOptions);

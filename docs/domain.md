@@ -28,7 +28,8 @@ Reservations, charging controls, personal records, and operator workflows requir
 authentication and their applicable role, ownership, or station assignment.
 
 Drivers access their own reservations and sessions. Assigned operator
-users edit station content, inspect operations, and request reconciliation.
+users edit station content, inspect unsettled operations, and release connectors
+held by uncertain starts.
 An operator role does not grant access to every station.
 Account administration, assignment-management workflows, and manual overrides of
 physical charging state are outside the feature set.
@@ -115,7 +116,8 @@ remain invariants, not configurable switches.
 
 A driver's active, unused reservations count toward the outstanding-booking
 quota across all stations, except allocations already eligible for expiry.
-Reservations with pending or uncertain starts retain their quota allocation.
+Reservations with pending or uncertain starts retain their quota allocation until
+the start settles or is released.
 Consumed, cancelled, and expired reservations do not count. Active and
 consumed slots for the same driver cannot overlap, even on different connectors.
 Consumed reservations retain their original interval for both driver and
@@ -156,9 +158,10 @@ An unused reservation with no pending start expires at the deadline. If no
 external attempt was authorized, an unexecuted queued start is rejected locally,
 its session fails, and the unused reservation expires.
 
-An authorized attempt with unresolved outcome retains its execution claim:
-deadline expiry does not prove the provider did nothing. An established session
-can continue beyond the slot until stopped; reservation expiry is not a stop.
+An authorized attempt with unresolved outcome retains its execution claim until
+it settles or an operator releases the start: deadline expiry does not prove the
+provider did nothing. An established session can continue beyond the slot until
+stopped; reservation expiry is not a stop.
 
 ### 5.2 Cancellation, consumption, and exclusivity
 
@@ -170,10 +173,11 @@ processing time is distinct from the applicable booking deadline; processing
 delays do not move the deadline. Repeated processing preserves recorded
 transition times.
 
-Confirmed start consumes the reservation. Definitive rejection fails that session
-and releases its execution claim. Before the arrival deadline, the reservation
-permits cancellation or another start with a new operation/session. Otherwise it
-expires. Each reservation permits at most one successful session.
+Confirmed start consumes the reservation. Definitive rejection or an operator
+[release](#61-command-outcomes) fails that session and releases its execution
+claim. Before the arrival deadline, the reservation permits cancellation or another
+start with a new operation/session. Otherwise it expires. Each reservation permits
+at most one successful session.
 
 At most one nonterminal platform session can claim a connector. Starting, active,
 and stopping sessions block another start even after the slot ends. This execution
@@ -212,12 +216,21 @@ Four dimensions remain separate:
 A provider acknowledgement can mean only that a request was queued. Confirmation
 depends on the [provider contract](integrations.md#1-provider-contracts).
 Attempt failure, command rejection, and session failure are distinct; a transport
-timeout does not establish rejection.
+timeout does not establish rejection. An operation is settled once its outcome is
+confirmed or rejected. Observations showing the session charging or ended confirm
+an unsettled start that has not been released.
 
 Exhausted automatic work requires operator investigation without inventing an
 outcome. Uncertain work remains uncertain, and untouched pending work remains
 pending unless another rule, such as pre-attempt expiry, resolves it. Later
 transport failures or delayed acknowledgements do not regress confirmed outcomes.
+
+An assigned operator can release the connector of an uncertain start when no
+observations arrive within the [release window](lab.md#22-default-timings) after
+its last request. Release fails the session, frees its claim, and ends automatic
+checks; the outcome stays uncertain. The release is audited. Observations that
+arrive after release are recorded without changing the session or outcome. Stops
+cannot be released.
 
 ### 6.2 Session lifecycle
 
@@ -227,13 +240,14 @@ transport failures or delayed acknowledgements do not regress confirmed outcomes
 | Active | Start is established; energy transfer can pause |
 | Stopping | Stop intent exists or finalization is pending |
 | Completed | Terminal provider state and valid final usage are established |
-| Failed | Start was definitively rejected or expired before any external attempt was authorized |
+| Failed | Start was definitively rejected, released by an operator, or expired before any external attempt was authorized |
 
 | Current state | Evidence/action | Result |
 |---|---|---|
 | No session | Eligible start intent accepted | Starting |
 | Starting | Start confirmed | Active; reservation consumed |
 | Starting | Definitive rejection or pre-attempt expiry | Failed |
+| Starting | Operator releases the uncertain start | Failed; claim released; outcome stays uncertain |
 | Starting | Unresolved effect | Starting; execution claim retained |
 | Active | Stop intent accepted | Stopping |
 | Stopping | Stop definitively rejected | Active |

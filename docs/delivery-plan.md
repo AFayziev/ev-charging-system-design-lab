@@ -384,8 +384,9 @@ Notification failure leaves accepted reservations intact and remains separately 
     no driver status action; it awaits automatic checks and operator investigation.
     Verify overruns blocking later starts through the application.
     Depends on M06.02.3.
-- [ ] M06.04 Deliver continued automatic checks and assigned-operator recovery
-  of unsettled operations. Depends on M04.02 and M06.01–M06.02.
+- [ ] M06.04 Deliver continued automatic checks, observation-confirmed starts,
+  and operator release of connectors held by uncertain starts.
+  Depends on M04.02 and M06.01–M06.02.
   Sub-items are sequenced as follows:
   - [x] M06.04.1 Continued automatic checks: a recurring scan in the worker gives
     every operation still unresolved after its checking window (for example,
@@ -394,14 +395,20 @@ Notification failure leaves accepted reservations intact and remains separately 
     parameters. Resends stay limited by the request limit. Verify recovery after
     a worker outage longer than the window, one check per concurrent scan, and
     no change to settled operations.
-  - [ ] M06.04.2 Operator recovery: list the operations of assigned stations that
-    continued checks have not settled, with their execution attempts, provider
-    identifiers, outcomes, failure summaries, and checking state. An audited
-    check request triggers an immediate check through the durable worker path
-    with bounded admission, rather than directly resending effects or releasing
-    claims without evidence. Verify assignment denial, repeated requests,
-    provider unavailability, and retained uncertainty when evidence is absent.
+  - [x] M06.04.2 Observation-confirmed starts: confirm an unsettled start when
+    observations show its session charging or ended, so it can still stop and
+    complete when outcome lookups fail. Verify confirmation while lookups fail,
+    completion afterwards, and no confirmation from another session's evidence
+    or of a released start.
     Depends on M06.04.1.
+  - [ ] M06.04.3 Start release: list unsettled operations for assigned stations
+    with their attempts and provider identifiers. An assigned operator can
+    release the connector of an uncertain start that has had no observations
+    within the release window. Observations after release are only recorded
+    until the [pending question](#5-pending-implementation-selections) is
+    settled. Verify assignment denial, release refused before the window or after
+    an observation, and a start that settles first.
+    Depends on M06.04.2.
 - [x] M06.05 Exercise the WattHarbor flow through crash after external effect,
   provider restart, rate limiting, and circuit opening, including attempts left
   unfinished by an interrupted request. Verify no SQL transaction spans an
@@ -413,7 +420,8 @@ Notification failure leaves accepted reservations intact and remains separately 
 
 Acceptance: driver start/stop and operator recovery work through the gateway,
 durable workers, and the synchronous provider. Uncertain effects remain visible and
-recoverable without authorizing conflicting starts. Final completion depends on M07.
+recoverable, and block conflicting starts until an operator releases them. Final
+completion depends on M07.
 
 ### M07 — Charging progress, history, and completion
 
@@ -738,6 +746,7 @@ their boundary becomes usable.
 | Selection | Constraint / dependency | Resolution task |
 |---|---|---|
 | Database retry ownership | Review bounded EF retries for API read routes separately from transactional writes and message retries; write retries require transaction replay and uncertain-commit handling | Pending review |
+| Observations after start release | Recorded only for now; alternatives are flagging the released start to operators or stopping the provider session automatically | Pending discussion |
 | API rate limiting | Enforce limits at the gateway or through instance middleware backed by a central store (for example, Redis), consistently across replicas | M08.04 |
 | Hosted public asset hostname | Subdomain in the existing Cloudflare account; separate public assets and private transfer endpoints | M11.01 |
 | Azure region and database resources | Provider-supported HA, readable replica/pooler capability, bounded exercise cost | M12.01 |

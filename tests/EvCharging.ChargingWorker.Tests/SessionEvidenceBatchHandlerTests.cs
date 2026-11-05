@@ -1,5 +1,6 @@
 using EvCharging.ChargingWorker.Handlers;
 using EvCharging.ChargingWorker.Observations;
+using EvCharging.Contracts.Charging;
 using EvCharging.Contracts.Events.Sessions;
 using EvCharging.Contracts.Observations;
 using EvCharging.Domain.Charging;
@@ -38,6 +39,7 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
         builder.Services
             .AddDbContext<PlatformDbContext>(options => options.UseNpgsql(fixture.GetDataSource("charging_messaging")));
         builder.Services.AddSingleton<CompletionRecorder>();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.UseWolverine(options =>
         {
             options.Discovery.DisableConventionalDiscovery();
@@ -49,6 +51,7 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
             options.Policies.UseDurableLocalQueues();
             options.PublishMessage<SessionCompletedEvent>().ToLocalQueue("session-completed-tests");
             options.Discovery.IncludeType<CompleteChargingSessionMessageHandler>();
+            options.Discovery.IncludeType<ConfirmObservedChargingStartMessageHandler>();
             options.Discovery.IncludeType<SessionCompletedRecorderHandler>();
         });
         _messaging = builder.Build();
@@ -246,15 +249,82 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
         Assert.Empty(Completions.For(session.Id));
     }
 
-    [Fact]
-    public async Task Handle_FinalReadingForAStartingSession_DoesNotComplete()
+    [Theory]
+    [InlineData(CommandOutcome.Pending)]
+    [InlineData(CommandOutcome.Uncertain)]
+    public async Task Handle_ChargingReadingForAnUnsettledStart_ConfirmsTheStart(CommandOutcome outcome)
     {
-        var session = await SeedSessionAsync();
+        var session = await SeedSessionAsync(startOutcome: outcome);
 
-        await CompleteAsync(Reading(session, 20, 7.25m, isFinal: true));
+        await CompleteAsync(Reading(session, 10, 1m), Reading(session, 15, 2m));
 
+        await using var database = Database();
+        var start = await database.Operations.AsNoTracking().Include(value => value.Session!)
+            .ThenInclude(value => value.Reservation)
+            .SingleAsync(value => value.SessionId == session.Id);
+        Assert.Equal(CommandOutcome.Confirmed, start.Outcome);
+        Assert.Equal(SessionLifecycle.Active, start.Session!.Lifecycle);
+        Assert.Equal(Start.AddSeconds(10), start.Session.StartedAt);
+        Assert.Null(start.Session.ProviderSessionId);
+        Assert.Equal(ReservationState.Consumed, start.Session.Reservation!.State);
+        var attempt = await database.Attempts.AsNoTracking().SingleAsync(value => value.OperationId == start.Id);
+        Assert.Equal(CommandOutcome.Confirmed, attempt.Outcome);
+        Assert.Equal(CommandExecutionExtensions.UnrecordedResponseCode, attempt.FailureCode);
+    }
+
+    [Fact]
+    public async Task Handle_FinalReadingForAnUnsettledStart_ConfirmsAndCompletesTheSession()
+    {
+        var session = await SeedSessionAsync(startOutcome: CommandOutcome.Uncertain);
+
+        await CompleteAsync(Reading(session, 10, 3m), Reading(session, 20, 7.25m, isFinal: true));
+
+        var saved = await SavedSessionAsync(session);
+        Assert.Equal(SessionLifecycle.Completed, saved.Lifecycle);
+        Assert.Equal(Start.AddSeconds(10), saved.StartedAt);
+        Assert.Equal(7.25m, saved.FinalEnergyKWh);
+        Assert.Single(Completions.For(session.Id));
+    }
+
+    [Fact]
+    public async Task Handle_ChargingReadingDatedBeforeTheStartRequest_StartsWhenRequested()
+    {
+        var session = await SeedSessionAsync(startOutcome: CommandOutcome.Uncertain);
+
+        await CompleteAsync(Reading(session, -30, 1m));
+
+        Assert.Equal(Start, (await SavedSessionAsync(session)).StartedAt);
+    }
+
+    [Theory]
+    [InlineData(ObservationState.Available)]
+    [InlineData(ObservationState.Faulted)]
+    [InlineData(ObservationState.Offline)]
+    [InlineData(ObservationState.Unknown)]
+    public async Task Handle_ReadingNeitherChargingNorEnded_LeavesTheStartUnsettled(ObservationState state)
+    {
+        var session = await SeedSessionAsync(startOutcome: CommandOutcome.Uncertain);
+
+        await CompleteAsync(Reading(session, 10, 0m) with { State = state });
+
+        await using var database = Database();
+        var start = await database.Operations.AsNoTracking().SingleAsync(value => value.SessionId == session.Id);
+        Assert.Equal(CommandOutcome.Uncertain, start.Outcome);
         Assert.Equal(SessionLifecycle.Starting, (await SavedSessionAsync(session)).Lifecycle);
-        Assert.Empty(Completions.For(session.Id));
+    }
+
+    [Fact]
+    public async Task Handle_ObservedStartConfirmedAgain_KeepsTheFirstConfirmation()
+    {
+        var session = await SeedSessionAsync(startOutcome: CommandOutcome.Uncertain);
+        await CompleteAsync(Reading(session, 10, 1m));
+
+        await _messaging!.InvokeMessageAndWaitAsync(
+            new ConfirmObservedChargingStartMessage(session.Id, Start.AddSeconds(30)));
+
+        var saved = await SavedSessionAsync(session);
+        Assert.Equal(SessionLifecycle.Active, saved.Lifecycle);
+        Assert.Equal(Start.AddSeconds(10), saved.StartedAt);
     }
 
     [Fact]
@@ -359,7 +429,9 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
             energyKWh,
             isFinal);
 
-    private async Task<ChargingSession> SeedSessionAsync(SessionLifecycle lifecycle = SessionLifecycle.Starting)
+    private async Task<ChargingSession> SeedSessionAsync(
+        SessionLifecycle lifecycle = SessionLifecycle.Starting,
+        CommandOutcome startOutcome = CommandOutcome.Pending)
     {
         await using var database = new PlatformDbContext(new DbContextOptionsBuilder<PlatformDbContext>()
             .UseNpgsql(fixture.GetDataSource("platform_writer")).Options);
@@ -382,6 +454,11 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
             now,
             new(2, TimeSpan.FromHours(2), TimeSpan.FromDays(1), TimeSpan.FromMinutes(10))).Value;
         var operation = Operation.AcceptStart(ChargingSession.AcceptStart(reservation, now).Value, Guid.NewGuid());
+        if (startOutcome == CommandOutcome.Uncertain)
+        {
+            Assert.True(operation.MarkUncertain().IsSuccess);
+        }
+
         var provider = new ChargingProvider { Name = $"Evidence {Guid.NewGuid()}", IntegrationKey = IntegrationKey };
         database.Operations.Add(operation);
         database.ChargingProviders.Add(provider);
@@ -402,7 +479,7 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
         {
             OperationId = operation.Id,
             Number = 1,
-            AuthorizedAt = now,
+            AuthorizedAt = Start,
             ChargingProviderId = provider.Id,
             IntegrationKey = IntegrationKey,
             ProviderStationId = "station",
