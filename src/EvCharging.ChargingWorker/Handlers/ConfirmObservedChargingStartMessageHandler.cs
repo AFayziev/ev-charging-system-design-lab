@@ -21,42 +21,45 @@ public sealed class ConfirmObservedChargingStartMessageHandler(
         ConfirmObservedChargingStartMessage message,
         CancellationToken cancellationToken)
     {
-        var start = await database.Operations.AsNoTracking()
+        var unsettledStart = await database.Operations.AsNoTracking()
             .Where(operation => operation.SessionId == message.SessionId
                 && operation.Kind == ChargingCommandKind.Start
                 && (operation.Outcome == CommandOutcome.Pending || operation.Outcome == CommandOutcome.Uncertain))
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (start is not null)
+        if (unsettledStart is not null)
         {
-            await ConfirmAsync(start, message.ObservedAt, cancellationToken);
+            await ConfirmFromObservationAsync(unsettledStart, message.ObservedAt, cancellationToken);
         }
 
         // Completion decides from the session itself whether it can complete.
-        bool finalised = await database.SessionEvidence.AnyAsync(
+        bool hasFinalReading = await database.SessionEvidence.AnyAsync(
             evidence => evidence.SessionId == message.SessionId && evidence.FinalEnergyKWh != null,
             cancellationToken);
 
-        return finalised ? new CompleteChargingSessionMessage(message.SessionId) : null;
+        return hasFinalReading ? new CompleteChargingSessionMessage(message.SessionId) : null;
     }
 
-    private async Task ConfirmAsync(Operation start, DateTimeOffset observedAt, CancellationToken cancellationToken)
+    private async Task ConfirmFromObservationAsync(
+        Operation unsettledStart,
+        DateTimeOffset observedAt,
+        CancellationToken cancellationToken)
     {
         // Observations match a session through its start requests, so the start has at least one.
-        var requests = await database.Attempts.AsNoTracking()
-            .Where(attempt => attempt.OperationId == start.Id)
+        var attempts = await database.Attempts.AsNoTracking()
+            .Where(attempt => attempt.OperationId == unsettledStart.Id)
             .OrderBy(attempt => attempt.Number)
             .Select(attempt => new { attempt.AuthorizedAt, attempt.ChargingProviderId })
             .ToListAsync(cancellationToken);
         // The charger cannot have started before it was first asked to, whatever its clock reports.
-        var requestedAt = requests[0].AuthorizedAt;
-        var startedAt = observedAt > requestedAt ? observedAt : requestedAt;
+        var firstRequestedAt = attempts[0].AuthorizedAt;
+        var startedAt = observedAt > firstRequestedAt ? observedAt : firstRequestedAt;
 
         await database.ResolveAsync(
             clock,
             logger,
-            start,
-            operation => operation.ConfirmObservedStart(requests[^1].ChargingProviderId, startedAt),
+            unsettledStart,
+            operation => operation.ConfirmObservedStart(attempts[^1].ChargingProviderId, startedAt),
             cancellationToken);
     }
 }

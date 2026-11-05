@@ -31,7 +31,7 @@ internal sealed class SessionEvidenceBatchHandler(
         await using var scope = scopes.CreateAsyncScope();
 
         var database = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
-        var (readings, starting) = await MatchSessionsAsync(database, envelopes, cancellationToken);
+        var (readings, startingSessionIds) = await MatchSessionsAsync(database, envelopes, cancellationToken);
 
         if (readings.Count == 0)
         {
@@ -75,7 +75,7 @@ internal sealed class SessionEvidenceBatchHandler(
                 advanced.Add(sessionId);
             }
 
-            if (starting.Contains(sessionId))
+            if (startingSessionIds.Contains(sessionId))
             {
                 // Charging or an end shows the start happened, whatever its status checks found. Confirming it also
                 // hands on a final reading, which a starting session cannot complete with.
@@ -105,14 +105,15 @@ internal sealed class SessionEvidenceBatchHandler(
         Guid sessionId,
         List<ObservationEnvelope> readings)
     {
-        var started = readings
+        var chargingOrStoppedReadingTimes = readings
             .Where(envelope => envelope.State is ObservationState.Charging or ObservationState.Stopped)
             .Select(envelope => envelope.OccurredAt)
             .ToList();
 
-        if (started.Count > 0)
+        if (chargingOrStoppedReadingTimes.Count > 0)
         {
-            await outbox.PublishAsync(new ConfirmObservedChargingStartMessage(sessionId, started.Min()));
+            var earliestObservedAt = chargingOrStoppedReadingTimes.Min();
+            await outbox.PublishAsync(new ConfirmObservedChargingStartMessage(sessionId, earliestObservedAt));
         }
     }
 

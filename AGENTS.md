@@ -104,6 +104,13 @@ Place code according to its responsibility and expected consumers. Keep
 feature-specific behavior in its feature slice; place capabilities used across
 features in the owning shared area, rather than the first feature that needs them.
 
+Name variables, parameters, and methods, including private helpers and test
+parameters, for what they hold or do, so readers need not open the body to decode
+them. Avoid vague or metaphorical names such as `Establish` or `silent`; prefer
+names that state the entity and action, such as `ActivateConfirmedStart`,
+`interruptTelemetry`, or `startingSessionIds`. Name types after the context they
+serve; reserve generic names for genuinely cross-cutting components.
+
 Implement cross-cutting behavior through established framework pipelines and
 extension points where available. Features declare their participation and
 configuration rather than repeat the underlying mechanics.
