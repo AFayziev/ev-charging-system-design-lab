@@ -56,21 +56,6 @@ public sealed class ObjectStoreTests(ObjectStoreFixture objectStore)
     }
 
     [Fact]
-    public async Task CreateDownloadUrl_StoredObject_DownloadsAsNamedAttachment()
-    {
-        var key = await UploadAsync();
-        var download = await objectStore.ApiStore.CreateDownloadUrlAsync(key, "Session summary.pdf");
-
-        var response = await objectStore.Browser.GetAsync(download.Url);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(Bytes, await response.Content.ReadAsByteArrayAsync());
-        var disposition = response.Content.Headers.ContentDisposition;
-        Assert.Equal("attachment", disposition?.DispositionType);
-        Assert.Equal("Session summary.pdf", disposition?.FileNameStar);
-    }
-
-    [Fact]
     public async Task PutPublic_ExistingKey_KeepsPublishedBytes()
     {
         var key = PublicKey();

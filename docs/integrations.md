@@ -181,7 +181,7 @@ The mail sink is the local default. There is no claim of provider-side deduplica
 unless the selected service documents and verifies it. Technical configuration,
 sender setup, and extension options are recorded in
 [notification adapters](lab.md#18-notification-adapters);
-implementation and hosted verification are tracked in the [plan](implementation-plan.md).
+implementation and hosted verification are tracked in the [plan](delivery-plan.md).
 
 ## 5. Known deviations from real providers
 
@@ -190,7 +190,7 @@ These simplifications may differ from typical real charging providers:
 
 - **Commands.** WattHarbor answers synchronously and deduplicates by key. Real
   providers commonly acknowledge a command and report its result later, often
-  without an idempotency key. AmpTrail ([plan](implementation-plan.md), M14) is the
+  without an idempotency key. AmpTrail ([plan](delivery-plan.md), M14) is the
   representative shape, and the same-key resend above is specific to WattHarbor.
 - **Session origin.** Every session starts through a platform command. Sessions
   started at the charger and unknown provider sessions are not modelled.

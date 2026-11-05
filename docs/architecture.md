@@ -7,8 +7,8 @@ operator users. The lab models production component interactions under
 bounded synthetic load, including concurrency, dependency failures, and uncertain
 external effects.
 
-Drivers discover stations, reserve connectors, control charging, follow progress,
-and download session summaries. Operator users maintain assigned station content,
+Drivers discover stations, reserve connectors, control charging, and follow
+progress. Operator users maintain assigned station content,
 inspect sessions and attempts, and request reconciliation.
 Infrastructure fault injection belongs to the test harness rather than the UI.
 
@@ -25,7 +25,7 @@ The documentation separates these concerns:
 | Architecture | Components, data ownership, processing paths, and failure boundaries |
 | [Integrations](integrations.md) | Third-party contracts, simulators, and adapter obligations |
 | [Lab](lab.md) | Technology selections, implementation constraints, execution profiles, and verification |
-| [Implementation plan](implementation-plan.md) | Milestones, dependencies, task tracking, and acceptance criteria |
+| [Delivery plan](delivery-plan.md) | Milestones, dependencies, task tracking, and acceptance criteria |
 
 ## 2. Design principles
 
@@ -50,7 +50,7 @@ Concrete products, libraries, and deployment profiles are selected in the
 flowchart LR
     Users[Drivers and operator users] --> UI[Shared frontend]
     UI --> CDN[CDN]
-    CDN --> Origin[Public assets and media storage]
+    CDN --> Origin[Published media storage]
     UI --> Edge[Load balancer]
     Edge -->|Pages and assets| FrontendHost[Frontend hosting]
     Edge -->|API and authentication| Gateway[Gateway replicas]
@@ -102,8 +102,7 @@ address hosts directly.
 
 Frontend hosting serves the entry page independently of the gateway.
 Gateway authentication, API, and live-update routes share the frontend's public origin.
-Versioned frontend assets and published media use the CDN;
-authorized file transfers use storage URLs. Authentication and API routes bypass
+Published media uses the CDN; authorized uploads use storage URLs. Authentication and API routes bypass
 CDN caching.
 
 | Supporting component | Purpose |
@@ -125,8 +124,8 @@ independent worker deployments. Replicas of a deployment share its responsibilit
 | Observation worker | Stream consumers and document history/latest views |
 | Search query service | Station discovery queries over the search index, with read-only access and its own typed unavailable response |
 | Search index worker | Station/business-event and observation consumers and search indexing |
-| Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and bounded warming/recovery |
-| Media worker | Media processing/publication, upload deadline checks, stored-object cleanup, and summaries |
+| Cache worker | Business-event and observation consumers, versioned cached query-view updates, invalidation, and recovery |
+| Media worker | Media processing/publication, upload deadline checks, and stored-object cleanup |
 | Notification worker | External notification delivery through a provider adapter, retries, and persisted delivery attempts |
 
 Recurring producers run with their owning workload: reconciliation/recovery
@@ -164,7 +163,7 @@ operation.
 | Observation history, latest observations | Document database projections | Cache and diagnostic queries |
 | Hot query results | Cache | Reconstructable from owning stores |
 | Station text, location, capabilities | Search index | Rebuildable discovery index |
-| Pending uploads, media variants, summaries | Object storage | CDN or private signed transfers |
+| Pending uploads, media variants | Object storage | CDN or private signed transfers |
 
 The relational database owns platform decisions; the charging provider owns
 physical state. The stream is the durable acceptance boundary for observations,
@@ -222,9 +221,8 @@ can lag and expose their freshness.
 | Catalog and session-history lists | Replica, optionally cache |
 | Station discovery | Search index |
 | Current progress | Document latest view / cache, plus live updates |
-| Operator investigation | Document observations and relational attempt records |
+| Operator recovery | Relational operation and attempt records |
 | Published media | CDN |
-| Private files | Authorized signed object-storage URL |
 
 Replica lag/outage triggers bounded primary fallback for admitted queries.
 Other requests return a recoverable unavailable response or an explicitly stale
@@ -234,7 +232,7 @@ immediate confirmation.
 
 Search is served by its own query service behind the gateway. Search failure, whether
 the index or the service, makes discovery visibly unavailable without affecting
-browsing, commands for known equipment, or the gateway's start. Cache bypass uses bounded fallback and gradual warm-up.
+browsing, commands for known equipment, or the gateway's start. Cache bypass uses bounded fallback to the owning stores.
 
 The index holds no live availability. Discovery's advisory availability is read
 from primary-side booking state, separately from search results, and is never
@@ -280,7 +278,7 @@ Reconnect cannot restore an interrupted transaction or establish whether it comm
 The message broker carries two workloads:
 
 - Competing-consumer jobs execute commands, reconciliation, media processing,
-  document generation, and notifications.
+  and notifications.
 - Topics route committed business events to independent subscriber
   queues for projections, notifications, and derived work.
 
@@ -429,25 +427,23 @@ Reconciliation requests from operator users use the same durable path and are au
 
 Lifecycle consumers combine matching provider evidence under the
 [completion policy](domain.md#7-measurements-and-completion). A transaction records
-final usage and publishes completion. Independent jobs generate the private
-summary and deliver notifications; their failures do not roll back charging facts.
+final usage and publishes completion. An independent job delivers the completion
+notification; its failure does not roll back charging facts.
 
 ## 10. Object storage and CDN
 
 | Content | Delivery |
 |---|---|
-| Versioned frontend assets and published station media | Public objects through the CDN |
+| Published station media | Public objects through the CDN |
 | Pending uploads | Private direct upload and worker access |
-| Session summaries | Private short-lived download URL after ownership check |
 
-The storage adapter exposes upload authorization, verification, publication, and
-download operations. Transfers use object-specific, short-lived signed URLs after
+The storage adapter exposes upload authorization, verification, and publication
+operations. Transfers use object-specific, short-lived signed URLs after
 platform authorization. Local and hosted storage implementations use the same
 adapter boundary.
 
-Public assets use a dedicated delivery origin.
-Pending uploads and summaries remain in private storage
-and bypass the CDN.
+Published media uses a dedicated delivery origin. Pending uploads remain in
+private storage and bypass the CDN.
 
 Media publication proceeds through a started private upload, direct browser
 transfer, a completion notice, bounded processing of the uploaded file (decoding a photo, or
@@ -465,9 +461,8 @@ Removal and replacement delete an item's stored objects by key prefix, as a
 message after the transaction. Stable item identity and per-item keys make
 retries converge after partial writes.
 
-Cache rules cover only public assets and published media. Versioned keys handle
-normal releases; the frontend entry page references the current build.
-Urgent removal needs origin deletion and CDN purge, which is not instantaneous
+Cache rules cover only published media, whose immutable keys change with each
+publication. Urgent removal needs origin deletion and CDN purge, which is not instantaneous
 everywhere. Warm caches can survive origin loss until expiry/eviction; cold
 requests require the origin. Missing media produces a visible placeholder.
 

@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
@@ -51,25 +50,6 @@ public sealed partial class ObjectStore(
         request.Headers.ContentLength = contentLength;
         var url = new Uri(await clients.Signing.GetPreSignedURLAsync(request));
         LogUploadSigned(key, contentType, contentLength, expiresAt);
-        return new SignedTransfer(url, expiresAt);
-    }
-
-    /// <summary>Signs a GET of a private object that browsers save as <paramref name="fileName"/>.</summary>
-    public async Task<SignedTransfer> CreateDownloadUrlAsync(string key, string fileName)
-    {
-        var expiresAt = time.GetUtcNow() + _options.DownloadUrlLifetime;
-        var request = new GetPreSignedUrlRequest
-        {
-            BucketName = _options.PrivateBucket,
-            Key = key,
-            Verb = HttpVerb.GET,
-            Protocol = clients.SigningProtocol,
-            Expires = expiresAt.UtcDateTime
-        };
-        request.ResponseHeaderOverrides.ContentDisposition =
-            new ContentDispositionHeaderValue("attachment") { FileNameStar = fileName }.ToString();
-        var url = new Uri(await clients.Signing.GetPreSignedURLAsync(request));
-        LogDownloadSigned(key, expiresAt);
         return new SignedTransfer(url, expiresAt);
     }
 
@@ -218,9 +198,6 @@ public sealed partial class ObjectStore(
         "Signed upload of {ContentLength} bytes of {ContentType} to {ObjectKey}, valid until {ExpiresAt}")]
     private partial void LogUploadSigned(
         string objectKey, string contentType, long contentLength, DateTimeOffset expiresAt);
-
-    [LoggerMessage(LogLevel.Debug, "Signed download of {ObjectKey}, valid until {ExpiresAt}")]
-    private partial void LogDownloadSigned(string objectKey, DateTimeOffset expiresAt);
 
     // These handled outcomes end the storage exception here, so the log keeps its details.
     [LoggerMessage(

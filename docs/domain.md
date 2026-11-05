@@ -27,7 +27,7 @@ photos, and access instructions. Browsing does not require an account or a drive
 Reservations, charging controls, personal records, and operator workflows require
 authentication and their applicable role, ownership, or station assignment.
 
-Drivers access their own reservations, sessions, and summaries. Assigned operator
+Drivers access their own reservations and sessions. Assigned operator
 users edit station content, inspect operations, and request reconciliation.
 An operator role does not grant access to every station.
 Account administration, assignment-management workflows, and manual overrides of
@@ -289,9 +289,8 @@ remain stopping while usage is pending. Missing readings, decreasing totals,
 meter resets, and conflicting session identities are diagnostic anomalies.
 Calibration, rollover handling, and automatic usage correction are outside scope.
 
-Completion freezes final usage and session-summary content. Later contradictions
-remain diagnostic evidence without rewriting either. File regeneration uses the
-same frozen facts; file or notification failure does not change completion.
+Completion freezes final usage. Later contradictions remain diagnostic evidence
+without rewriting it. Notification failure does not change completion.
 
 ## 8. Time, identity, and ordering
 
@@ -365,7 +364,6 @@ source timestamps.
 | Object / object key | Stored bytes / storage address, distinct from domain identity |
 | Published media | Processed item whose variants are stored for delivery |
 | Signed URL | Time-limited transfer permission, not stable file identity |
-| Session summary | Private usage document from completed facts; not an invoice or fiscal receipt |
 
 Uploaded, processed, and published are distinct milestones. Object existence alone
 does not make media visible.
@@ -397,7 +395,7 @@ station has none or an item cannot be loaded.
 | CSMS | Charging Station Management System; represented only by focused simulator behavior |
 | OCPP | Equipment-to-management protocol; not implemented by this lab |
 | OCPI | Charging-provider/service-provider exchange; vocabulary reference, not full implementation |
-| CDR | Charge Detail Record for charging/settlement; distinct from the session summary |
+| CDR | Charge Detail Record for charging/settlement; not produced by the lab |
 
 Industry references do not imply protocol certification, roaming, settlement, or
 physical charger firmware coverage.
@@ -417,9 +415,8 @@ physical charger firmware coverage.
 | failed | Definitive failure; missing response is an uncertain outcome |
 | offline / faulted / stale | Distinct connectivity, equipment, and evidence conditions |
 | energy consumption | Named measurement boundary and unit |
-| receipt | Session summary for the lab's usage document |
 
 Naming follows canonical nouns across documentation and contracts; casing follows
-language conventions. `SessionCompletedEvent` is a fact; `GenerateSessionSummaryMessage` is
+language conventions. `SessionCompletedEvent` is a fact; `ProcessStationMediaMessage` is
 work. UI labels can be friendlier while retaining semantics: `Confirming start`
 for pending/uncertain execution, `Last reported charging` for stale observations.

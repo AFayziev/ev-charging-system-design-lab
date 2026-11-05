@@ -7,7 +7,7 @@ experiment settings, and verification.
 [Domain invariants](domain.md) remain constant across profiles; configurable
 reservation limits define each experiment's admission policy.
 [Integration contracts](integrations.md) define simulator and real-provider behavior.
-The [implementation plan](implementation-plan.md) tracks delivery and pending selections.
+The [delivery plan](delivery-plan.md) tracks delivery and pending selections.
 
 ## 1. Technical setup
 
@@ -32,7 +32,7 @@ The [implementation plan](implementation-plan.md) tracks delivery and pending se
 | Observation stream | Confluent.Kafka client; Kafka in KRaft mode |
 | Object storage / CDN | RustFS locally, Cloudflare R2 hosted; AWSSDK.S3 / Cloudflare CDN |
 | Notification delivery | [Local Mailpit adapter and external-provider options](#18-notification-adapters) |
-| File processing | SkiaSharp images, TagLibSharp MP4 header verification, PDFsharp summaries |
+| File processing | SkiaSharp images, TagLibSharp MP4 header verification |
 | HTTP resilience | Microsoft.Extensions.Http.Resilience and Polly |
 | Default diagnostics | OpenTelemetry ASP.NET Core, HTTP, and runtime instrumentation with OTLP export to Aspire Dashboard |
 | Optional observability profile | OpenTelemetry Collector, Prometheus, Loki, Tempo, Grafana |
@@ -44,7 +44,7 @@ The platform and provider simulators run in independent Aspire AppHosts, each
 with its own resource lifecycle and dashboard. The platform references provider
 HTTP endpoints as parameterized external services. Simulator processes share
 generic service defaults but do not reference platform business or messaging
-assemblies. [Local startup](../README.md#local-development) configures the boundary.
+assemblies. [Local startup](development.md#apphosts-without-the-launcher) configures the boundary.
 
 Local host endpoints remain available for diagnostics. Service references define
 application routing; they do not enforce network isolation.
@@ -383,7 +383,7 @@ Testing treats the provider as a black box:
 | Local baseline | Aspire processes/containers: multiple gateway/API instances, independent workers, one application PostgreSQL server, a separate identity database server, MongoDB, Valkey, Elasticsearch, one RabbitMQ broker, Kafka, an S3-compatible storage container, Keycloak, simulators, and Aspire Dashboard diagnostics |
 | Optional `observability` | Adds the [selected observability backends](#11-technology-selections) for telemetry routing, backend queries, and custom dashboards; startup/health gates apply only when enabled |
 | Optional Sentry | Enables [frontend diagnostics](#19-frontend-diagnostics); requires a hosted project and build-upload credentials |
-| Cloudflare files/CDN | R2 and Cloudflare CDN deliver versioned frontend assets and published media through a custom domain; real presigned transfers, warm/cold cache behavior, and purge |
+| Cloudflare files/CDN | R2 and Cloudflare CDN deliver published media through a custom domain; real presigned transfers, warm/cold cache behavior, and purge |
 | External notification delivery | [Amazon SES](#18-notification-adapters); recorded provider and acceptance outcomes |
 | Azure database failover | Managed PostgreSQL HA plus readable replica/pooler routes; provider-supported failover exposes application interruption and recovery |
 
@@ -421,7 +421,7 @@ charging fixtures and removes charging workflow/file metadata while preserving b
 encryption keys, and identity-provider data. Reset is limited to relational
 charging data; other stores are unaffected. Entity identifiers change when reset
 recreates records. The reset operation is excluded from deployment.
-[Reset procedure](../README.md#charging-data-reset).
+[Reset procedure](development.md#charging-data-reset).
 
 ### 2.2 Default timings
 
@@ -504,49 +504,50 @@ public API and the resulting platform state.
 
 ### 2.4 Fault scenarios
 
-| Scenario | Expected behavior and acceptance evidence |
-|---|---|
-| Concurrent overlapping reservations | One conflicting booking succeeds; primary constraints remain effective across API instances |
-| Concurrent bookings by one driver across connectors | Configured quota and driver overlap protection hold across API instances |
-| Expiry worker delayed or restarted | Admission preserves capacity under the [reservation quota rules](domain.md#5-reservations); resumed expiry processing records one transition, audit, and event despite duplicate checks |
-| Reservation policy changed | New admission uses the updated limits; accepted slots and deadlines remain unchanged |
-| Cancellation races start | One eligible transition wins; cancelled bookings cannot dispatch a start |
-| Arrival deadline passes with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled |
-| Start applies but response is lost | One logical operation; visible uncertainty resolves against provider evidence without blind resubmission |
-| Worker dies after effect before acknowledgement | Redelivery retains operation/attempt identity; SQL mutations deduplicate and provider ambiguity follows its contract |
-| Duplicate/late observations | Historical evidence retained; current state follows source-time ordering |
-| Telemetry stops | Timestamped state becomes stale; silence does not imply stopped or offline |
-| Stop confirmed before final usage | Session waits for final evidence; completion and summary use matching frozen facts |
-| Provider ends the session itself (vehicle full) | The provider's final reading completes the session without a stop request, through callbacks or, when they are lost, the stale-session snapshot read; the connector claim is released on both sides and a pending stop settles |
-| Replica lag or replica lost (Azure database profile) | Lag visible; bounded fallback protects primary; immediate write confirmation remains correct |
-| Read saturation / API-worker scaling | Bounded acquisition/rejection; separate route budgets and aggregate client/server counts remain observable |
-| Gateway/API process lost | Routing reaches healthy instances; browser session remains usable across gateways; in-flight operations recover by identity |
-| Gateway unavailable during observation submission | Worker/provider submissions retain event identity and follow bounded retry/recovery; acknowledgement still requires durable ingestion, and no caller bypasses the gateway |
-| Managed database failover or pooler loss (Azure database profile) | Interrupted work is visible; reconnect is bounded and uncertain commits are checked by operation identity |
-| Broker outage and recovery | Outbox retains pending work, exposes age, and drains without duplicate mutations |
-| Stream unavailable | No false durable acknowledgement; bounded callback retry/polling and visible observation uncertainty |
-| Observation consumer stalled / MongoDB unavailable | Observation-view lag increases; catch-up succeeds within retention or its recovery limit is exposed |
-| Search index, cache, media, or notification worker instances lost and restored | That workload pauses and resumes from durable state or retained stream input; cached views expire or show as stale with bounded API fallback; other workloads and charging execution continue |
-| Cache flushed/unavailable | Bounded fallback and warm-up; no loss of authoritative records |
-| Valkey backplane unavailable and restored | Cross-instance live fan-out interruption is visible; bounded polling/reconnect obtains current snapshots, then fan-out resumes |
-| Search unavailable | Discovery is visibly unavailable; booking and commands for known equipment continue |
-| Provider rate-limited/down | Its work isolated; retries bounded and durable intent retained |
-| Upload succeeds but completion notice is lost | The check at the upload deadline finds the object and resumes processing |
-| Completion notice arrives before the file | Processing retries by a delayed message until the file lands or the upload URL expires, then the item fails as `upload_missing` |
-| Media worker fails after writing variants | Retry converges on the same variants, and the old publication remains usable |
-| Signed upload URL reused | Immutable published bytes cannot be overwritten |
-| Object storage lost | Files can fail while charging continues; processing retries retain references |
-| Warm and uncached synthetic objects deleted at the R2 origin | Warm edge hits can serve until expiry/eviction; cache misses fail and unavailable media shows placeholders; purge removes stale cached publication |
-| Summary/notification failure | Session stays completed; independent retry/exhaustion is inspectable |
-| Notification provider rejects, delays, or loses a response | Delivery attempts retain identity and provider evidence; acceptance differs from recipient delivery, and ambiguous sends are not blindly repeated |
-| Live disconnect | Reconnect obtains a current snapshot before incremental updates |
-| Cross-driver/station access | API and private-file authorization reject unauthorized access |
-| Identity provider unavailable | Login/refresh failures visible; established sessions can use unexpired cached-signing-key-validated tokens while the session store is reachable |
-| Authentication session store unavailable | Protected routes fail explicitly; no anonymous downgrade or use of disposable cache as session authority |
-| Concurrent token refresh / logout | Concurrent requests follow the identity provider's supported refresh policy; logout revokes refresh tokens and removes the shared ticket |
-| Browser authentication boundaries | No OIDC tokens exposed to JavaScript; login uses gateway routes, state-changing requests require antiforgery, and API access still enforces ownership |
-| Frontend render/async failure (Sentry enabled) | Error report identifies the deployed source location and preceding activity; repeated failures group into an issue and trigger the configured alert |
-| Sentry disabled or unreachable | Disabled mode sends no Sentry telemetry; failed export is bounded and does not prevent navigation or platform requests |
+| Scenario | Expected behavior and acceptance evidence | Task |
+|---|---|---|
+| Concurrent overlapping reservations | One conflicting booking succeeds; primary constraints remain effective across API instances | M05.01 |
+| Concurrent bookings by one driver across connectors | Configured quota and driver overlap protection hold across API instances | M05.08 |
+| Expiry worker delayed or restarted | Admission preserves capacity under the [reservation quota rules](domain.md#5-reservations); resumed expiry processing records one transition, audit, and event despite duplicate checks | M05.02 |
+| Reservation policy changed | New admission uses the updated limits; accepted slots and deadlines remain unchanged | M05.08 |
+| Cancellation races start | One eligible transition wins; cancelled bookings cannot dispatch a start | M06.06 |
+| Arrival deadline passes with start queued or uncertain | Unattempted work fails safely; a possible external effect retains its claim and is reconciled | M06.06 |
+| Start applies but response is lost | One logical operation; visible uncertainty resolves against provider evidence without blind resubmission | M06.01 |
+| Worker dies after effect before acknowledgement | Redelivery retains operation/attempt identity; SQL mutations deduplicate and provider ambiguity follows its contract | M06.05 |
+| Duplicate/late observations | Historical evidence retained; current state follows source-time ordering | M07.01 |
+| Telemetry stops | Timestamped state becomes stale; silence does not imply stopped or offline | M07.03 |
+| Stop confirmed before final usage | Session waits for final evidence; completion uses matching frozen facts | M07.02 |
+| Provider ends the session itself (vehicle full) | The provider's final reading completes the session without a stop request, through callbacks or, when they are lost, the stale-session snapshot read; the connector claim is released on both sides and a pending stop settles | M07.06 |
+| Replica lag or replica lost (Azure database profile) | Lag visible; bounded fallback protects primary; immediate write confirmation remains correct | M12.02 |
+| Read saturation / API-worker scaling | Bounded acquisition/rejection; separate route budgets and aggregate client/server counts remain observable | M12.06, M13.02 |
+| Gateway/API process lost | Routing reaches healthy instances; browser session remains usable across gateways; in-flight operations recover by identity | M02.07 |
+| Gateway unavailable during observation submission | Worker/provider submissions retain event identity and follow bounded retry/recovery; acknowledgement still requires durable ingestion, and no caller bypasses the gateway | M13.02 |
+| Managed database failover or pooler loss (Azure database profile) | Interrupted work is visible; reconnect is bounded and uncertain commits are checked by operation identity | M12.03 |
+| Broker outage and recovery | Outbox retains pending work, exposes age, and drains without duplicate mutations | M05.05 |
+| Stream unavailable | No false durable acknowledgement; bounded callback retry/polling and visible observation uncertainty | M07.01 |
+| Observation consumer stalled / MongoDB unavailable | Observation-view lag increases; catch-up succeeds within retention or its recovery limit is exposed | M07.01 |
+| Search index, cache, media, or notification worker instances lost and restored | That workload pauses and resumes from durable state or retained stream input; cached views expire or show as stale with bounded API fallback; other workloads and charging execution continue | M05.04, M08.02, M09.01, M10.01 |
+| Cache flushed/unavailable | Bounded fallback; no loss of authoritative records | M08.02 |
+| Valkey backplane unavailable and restored | Cross-instance live fan-out interruption is visible; bounded polling/reconnect obtains current snapshots, then fan-out resumes | M08.01 |
+| API rate limit exceeded | Rejected with Problem Details regardless of the replica that receives the request | M08.04 |
+| Search unavailable | Discovery is visibly unavailable; booking and commands for known equipment continue | M09.01 |
+| Provider rate-limited/down | Its work isolated; retries bounded and durable intent retained | M06.05 |
+| Upload succeeds but completion notice is lost | The check at the upload deadline finds the object and resumes processing | M10.01 |
+| Completion notice arrives before the file | Processing retries by a delayed message until the file lands or the upload URL expires, then the item fails as `upload_missing` | M10.01 |
+| Media worker fails after writing variants | Retry converges on the same variants, and the old publication remains usable | M10.01 |
+| Signed upload URL reused | Immutable published bytes cannot be overwritten | M10.01 |
+| Object storage lost | Files can fail while charging continues; processing retries retain references | M10.01 |
+| Warm and uncached synthetic objects deleted at the R2 origin | Warm edge hits can serve until expiry/eviction; cache misses fail and unavailable media shows placeholders; purge removes stale cached publication | M11.02 |
+| Notification failure | Session stays completed; independent retry/exhaustion is inspectable | M05.04, M07.02 |
+| Notification provider rejects, delays, or loses a response | Delivery attempts retain identity and provider evidence; acceptance differs from recipient delivery, and ambiguous sends are not blindly repeated | M05.04, M05.07 |
+| Live disconnect | Reconnect obtains a current snapshot before incremental updates | M08.01 |
+| Cross-driver/station access | API and upload authorization reject unauthorized access | M04.02, M05.01 |
+| Identity provider unavailable | Login/refresh failures visible; established sessions can use unexpired cached-signing-key-validated tokens while the session store is reachable | M02.07 |
+| Authentication session store unavailable | Protected routes fail explicitly; no anonymous downgrade or use of disposable cache as session authority | M02.07 |
+| Concurrent token refresh / logout | Concurrent requests follow the identity provider's supported refresh policy; logout revokes refresh tokens and removes the shared ticket | M02.07 |
+| Browser authentication boundaries | No OIDC tokens exposed to JavaScript; login uses gateway routes, state-changing requests require antiforgery, and API access still enforces ownership | M02.07 |
+| Frontend render/async failure (Sentry enabled) | Error report identifies the deployed source location and preceding activity; repeated failures group into an issue and trigger the configured alert | M01.14 |
+| Sentry disabled or unreachable | Disabled mode sends no Sentry telemetry; failed export is bounded and does not prevent navigation or platform requests | M01.13 |
 
 Recovery is judged by business outcomes and durable evidence, not merely a
 restarted process.

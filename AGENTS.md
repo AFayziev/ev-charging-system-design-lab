@@ -7,15 +7,24 @@ and a shared React/TypeScript frontend for drivers and backoffice operator users
 It models production component interactions under small synthetic workloads,
 including concurrency, dependency failures, and uncertain external effects.
 
+The backend is .NET 10 / C# 14 in `EvChargingSystemDesign.slnx`; the frontend is
+React/TypeScript in `src/EvCharging.Web` (Node 24, npm). Docker with a Linux engine
+is required for most tests and for running the lab. The README covers
+[running the lab](README.md#run-locally); the development guide owns the other
+commands: [backend checks](docs/development.md#backend-checks),
+[frontend checks](docs/development.md#frontend-checks), and
+[tests](docs/development.md#tests).
+
 | Reference | Responsibility | Keep elsewhere |
 |---|---|---|
-| [README](README.md) | Entry point: system and feature overview, prerequisites, local setup, and development commands | Detailed design and canonical rules belong in their owning references; delivery status belongs in the plan |
+| [README](README.md) | Entry point: system and feature overview, architecture summary, prerequisites, and running the lab locally | Detailed design and canonical rules belong in their owning references; delivery status belongs in the plan; development commands belong in the development guide |
+| [Development guide](docs/development.md) | Commands for working on the lab: checks, tests, manual and detached AppHost startup, configuration overrides, data reset, and optional hosted-profile setup | Profile semantics and constraints belong in Lab |
 | [Architecture](docs/architecture.md) | Intended technical design in technology-neutral terms: component responsibilities, data ownership, transaction and consistency boundaries, processing flows, and failure/recovery boundaries | Business eligibility and lifecycle rules belong in Domain; product/package selections and experiments belong in Lab; delivery stages belong in Plan |
 | [Domain](docs/domain.md) | Intended system behavior: canonical vocabulary, actors and permissions, business invariants, booking policies, lifecycle transitions, time semantics, and evidence required to establish outcomes | Implementation progress and temporary delivery stages belong in Plan; persistence/framework mechanisms belong in Architecture, Lab, or Backend guidelines |
 | [Integrations](docs/integrations.md) | External contracts and integration obligations: provider guarantees, acknowledgements versus confirmed effects, retry/deduplication safety, observations, unit/identity mapping, and lab-provider behavior | Platform business rules belong in Domain; internal processing and storage ownership belong in Architecture; provider wiring and experiment settings belong in Lab |
 | [Lab](docs/lab.md) | Concrete lab design: selected technologies, implementation constraints, execution profiles, configurable experiment values, controlled faults, and verification tools/signals | Business-rule semantics belong in Domain; reusable coding/persistence practices belong in Backend guidelines; application logic, source configuration, and framework defaults stay in source |
-| [Plan](docs/implementation-plan.md) | Delivery tracking: stable task IDs, milestone status, dependencies, staged scope, pending work, and acceptance criteria | Link to owning design references instead of restating rules or design; verification evidence belongs in task reports or PR descriptions |
-| [Backend guidelines](docs/backend-guidelines.md) | Reusable implementation and review rules: code organization, C# style, domain/persistence boundaries, validation, identifiers, transactions, errors, testing, and enforcement | System-specific business behavior belongs in Domain; component design belongs in Architecture; technology selections and experiment values belong in Lab; CLI commands belong in README |
+| [Plan](docs/delivery-plan.md) | Delivery tracking: stable task IDs, milestone status, dependencies, staged scope, pending work, and acceptance criteria | Link to owning design references instead of restating rules or design; verification evidence belongs in task reports or PR descriptions |
+| [Backend guidelines](docs/backend-guidelines.md) | Reusable implementation and review rules: code organization, C# style, domain/persistence boundaries, validation, identifiers, transactions, errors, testing, and enforcement | System-specific business behavior belongs in Domain; component design belongs in Architecture; technology selections and experiment values belong in Lab; CLI commands belong in the development guide |
 
 Design references describe the intended system, independently of which features
 are implemented. The plan owns delivery stages and completion status; incomplete
@@ -34,6 +43,11 @@ live under `simulators/`. Both inherit repository build, package, analyzer, and
 formatting rules. Responsibilities describe the intended host boundaries;
 implementation progress is recorded in the plan.
 
+The platform and provider AppHosts are independent. The platform does not start
+the providers; `tools/dev.ps1` starts both and passes the providers' dynamic URLs
+to the platform. API features are vertical slices under `Features/<Feature>`;
+charging-provider adapters live in the charging worker under `Providers/<Provider>`.
+
 | Project | Type | Responsibility |
 |---|---|---|
 | `EvCharging.AppHost` | Orchestrator | Aspire resource graph, endpoints, references, environment, and startup dependencies |
@@ -47,8 +61,8 @@ implementation progress is recorded in the plan.
 | `EvCharging.SearchIndexWorker` | Resource | Search indexing |
 | `EvCharging.SearchApi` | Resource | Anonymous station search over a read-only index role, with typed unavailability, routed by the gateway |
 | `EvCharging.SearchIndex` | Library | Station search document, index names and mapping shared by the indexer and the search API |
-| `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, warming, and recovery |
-| `EvCharging.MediaWorker` | Resource | Media processing/publication, session summaries, upload deadline checks, and stored-object cleanup |
+| `EvCharging.CacheWorker` | Resource | Cached query-view updates, invalidation, and recovery |
+| `EvCharging.MediaWorker` | Resource | Media processing/publication, upload deadline checks, and stored-object cleanup |
 | `EvCharging.NotificationWorker` | Resource | Notification jobs, simulator/real-provider adapters, retries, and persisted delivery attempts |
 | `EvCharging.WattHarborProviderApi` | Resource | WattHarbor lab provider with authoritative synchronous results and command deduplication |
 | `EvCharging.WattHarborProviderApi.Migrations` | Resource | Provider-owned EF migrations and one-shot database initialization |
@@ -70,7 +84,8 @@ Queue, stream, and scheduled-job processors use `Worker`. The proxy/BFF host use
 
 `infra/<component>/<system>` owns infrastructure configuration; `tests` owns verification; `tools` owns
 repeatable lab commands. NuGet package pins belong in `Directory.Packages.props`;
-container image pins belong alongside their AppHost resource definitions. Do not
+container image pins belong alongside their AppHost resource definitions. Analyzer
+and formatting rules come from `.editorconfig` and `Directory.Build.props`. Do not
 duplicate them in documentation or a separate toolchain document.
 
 ## Implementation choices
@@ -127,9 +142,12 @@ For externally referenced resources:
 
 ## Verification scope
 
-After each piece of .NET work, run the [backend checks](README.md#backend-checks)
+After each piece of .NET work, run the [backend checks](docs/development.md#backend-checks)
 to remove unused imports, apply `dotnet format`, and verify formatting and the build
 before reporting completion.
+
+Run each test project separately with `dotnet test tests/<Project>`; narrow to one
+test with `--filter "FullyQualifiedName~<TestName>"`.
 
 Match verification to the changed behavior and affected boundaries:
 
@@ -216,7 +234,7 @@ accent.
   `src/EvCharging.AppHost/EvCharging.AppHost.csproj` or simulator
   `simulators/EvCharging.Providers.AppHost/EvCharging.Providers.AppHost.csproj`
   explicitly. Agents use detached
-  `aspire start --non-interactive`; the README contains the human foreground command.
+  `aspire start --non-interactive`; the [development guide](docs/development.md#apphosts-without-the-launcher) contains the human foreground command.
 - Use `--isolated` for git worktrees. Use `aspire wait <resource>` for readiness and
   `aspire describe` for endpoints; avoid port guessing and HTTP polling loops.
 - Stop the agent-owned validation session when finished. Stop before rebuilding
@@ -264,7 +282,7 @@ Prefer concise tables and lists. Use numbered lists for ordered procedures and
 bullets for unordered reference information.
 
 Update task checkboxes and milestone status with the implementation, following
-the plan's [completion criteria](docs/implementation-plan.md#1-scope-and-tracking). Do not add
+the plan's [completion criteria](docs/delivery-plan.md#1-scope-and-tracking). Do not add
 evidence paragraphs, duplicate progress summaries, or follow-up commits just to
 record a commit hash. Verification belongs in the chat report or PR description.
 
