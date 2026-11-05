@@ -22,6 +22,7 @@ internal sealed class OperationConfiguration : IEntityTypeConfiguration<Operatio
         entity.Property(operation => operation.DriverId).IsAudited();
         entity.Property(operation => operation.Kind).IsAudited();
         entity.Property(operation => operation.Outcome).IsAudited();
+        entity.Property(operation => operation.ReleasedAt).IsAudited();
         entity.HasOne(operation => operation.Session)
             .WithMany()
             .HasForeignKey(operation => operation.SessionId)
@@ -34,5 +35,9 @@ internal sealed class OperationConfiguration : IEntityTypeConfiguration<Operatio
         // Serves FindUnreconciledChargingMessageHandler; the filter matches its predicate.
         entity.HasIndex(operation => new { operation.AutomaticChecksEndAt, operation.Id })
             .HasFilter("outcome IN ('pending', 'uncertain') AND authorized_attempt_count > 0");
+        // Serves the operators' unsettled-operations list, paged by id; the filter matches its predicate.
+        entity.HasIndex(operation => operation.Id)
+            .HasDatabaseName("ix_operations_unsettled")
+            .HasFilter("outcome IN ('pending', 'uncertain') AND authorized_attempt_count > 0 AND released_at IS NULL");
     }
 }

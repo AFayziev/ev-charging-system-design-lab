@@ -314,6 +314,25 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
     }
 
     [Fact]
+    public async Task Handle_ReadingsAfterTheStartWasReleased_AreOnlyRecorded()
+    {
+        var session = await SeedSessionAsync(startOutcome: CommandOutcome.Uncertain);
+        await ReleaseStartAsync(session);
+
+        await CompleteAsync(Reading(session, 10, 1m), Reading(session, 20, 7.25m, isFinal: true));
+
+        await using var database = Database();
+        var start = await database.Operations.AsNoTracking().SingleAsync(value => value.SessionId == session.Id);
+        Assert.Equal(CommandOutcome.Uncertain, start.Outcome);
+        Assert.NotNull(start.ReleasedAt);
+        var saved = await SavedSessionAsync(session);
+        Assert.Equal(SessionLifecycle.Failed, saved.Lifecycle);
+        Assert.Null(saved.StartedAt);
+        Assert.Equal(7.25m, (await EvidenceAsync(session))!.FinalEnergyKWh);
+        Assert.Empty(Completions.For(session.Id));
+    }
+
+    [Fact]
     public async Task Handle_ObservedStartConfirmedAgain_KeepsTheFirstConfirmation()
     {
         var session = await SeedSessionAsync(startOutcome: CommandOutcome.Uncertain);
@@ -393,6 +412,18 @@ public sealed class SessionEvidenceBatchHandlerTests(PlatformDatabaseFixture fix
         database.Operations.Add(stop);
         await database.SaveChangesAsync();
         return stop;
+    }
+
+    // Operators release through the API, under its role.
+    private async Task ReleaseStartAsync(ChargingSession session)
+    {
+        await using var database = fixture.CreateContext("platform_writer");
+        var start = await database.Operations.Include(value => value.Session)
+            .SingleAsync(value => value.SessionId == session.Id);
+        var releaseWindow = TimeSpan.FromMinutes(10);
+        var release = start.ReleaseStart(Start + releaseWindow, Start, releaseWindow, hasObservations: false);
+        Assert.True(release.IsSuccess);
+        await database.SaveChangesAsync();
     }
 
     private async Task<ChargingSession> SavedSessionAsync(ChargingSession session)

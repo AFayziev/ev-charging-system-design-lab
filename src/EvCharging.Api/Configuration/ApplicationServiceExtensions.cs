@@ -17,6 +17,10 @@ internal static class ApplicationServiceExtensions
             .BindConfiguration(ChargingProgressOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        services.AddOptions<ChargingStartReleaseOptions>()
+            .BindConfiguration(ChargingProgressOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services.AddOptions<ReservationPolicyOptions>()
             .BindConfiguration("ReservationPolicy")
             .Validate(
@@ -55,10 +59,9 @@ internal static class ApplicationServiceExtensions
         options.CodeGeneration.AlwaysUseServiceLocationFor<IAuthorizationService>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptionsSnapshot<ReservationPolicyOptions>>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<ChargingStatusCheckOptions>>();
+        options.CodeGeneration.AlwaysUseServiceLocationFor<IOptions<ChargingStartReleaseOptions>>();
         options.CodeGeneration.AlwaysUseServiceLocationFor<IOptionsSnapshot<StationMediaOptions>>();
 
-        // Concurrent writers can deadlock on exclusion constraints. The aborted transaction is rerun inline,
-        // where it sees the winner's committed row and reports the conflict.
         options.Policies.OnException(ExceptionExtensions.IsTransactionConflict)
             .RetryWithCooldown(TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(250));
 

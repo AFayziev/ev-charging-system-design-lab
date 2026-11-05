@@ -13,7 +13,8 @@ public sealed record StartOperationResponse(
     DateTimeOffset AcceptedAt,
     DateTimeOffset? StartedAt,
     StartFailureReason? FailureReason = null,
-    DateTimeOffset? AutomaticChecksEndAt = null);
+    DateTimeOffset? AutomaticChecksEndAt = null,
+    DateTimeOffset? ReleasedAt = null);
 
 public enum StartFailureReason
 {
@@ -36,7 +37,8 @@ internal static class StartOperationMappings
             operation.Outcome == CommandOutcome.Rejected
                 && responseStatusCode is (int)HttpStatusCode.Unauthorized or (int)HttpStatusCode.Forbidden
                     ? StartFailureReason.ChargingServiceUnavailable : null,
-            operation.AutomaticChecksEndAt);
+            operation.AutomaticChecksEndAt,
+            operation.ReleasedAt);
     }
 
     public static async Task<StartOperationResponse> ToResponseAsync(

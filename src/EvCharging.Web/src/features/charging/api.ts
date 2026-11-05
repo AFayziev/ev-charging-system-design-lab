@@ -1,6 +1,9 @@
 import { queryOptions } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { SessionLifecycle } from "@/features/reservations/api";
+import type {
+  CommandOutcome,
+  SessionLifecycle,
+} from "@/features/reservations/api";
 
 export type ObservationState =
   "available" | "charging" | "stopped" | "faulted" | "offline" | "unknown";
@@ -80,7 +83,92 @@ export function mergePowerBuckets(
 export const chargingKeys = {
   progress: (sessionId: string) => ["charging", sessionId, "progress"] as const,
   power: (sessionId: string) => ["charging", sessionId, "power"] as const,
+  unsettledLists: ["charging", "unsettled"] as const,
+  unsettled: (afterId: string | null) =>
+    ["charging", "unsettled", afterId] as const,
 };
+
+export interface UnsettledOperationAttempt {
+  readonly number: number;
+  readonly authorizedAt: string;
+  readonly finishedAt: string | null;
+  readonly outcome: CommandOutcome | null;
+  readonly failureCode: string | null;
+  readonly responseStatusCode: number | null;
+  readonly integrationKey: string;
+  readonly providerStationId: string;
+  readonly providerChargerId: string;
+  readonly providerConnectorId: string;
+  readonly providerCommandId: string | null;
+  readonly providerSessionId: string | null;
+}
+
+export interface ChargingEquipment {
+  readonly stationName: string;
+  readonly chargerName: string;
+  readonly connectorNumber: number;
+}
+
+export function formatEquipment(equipment: ChargingEquipment) {
+  return `${equipment.stationName} · ${equipment.chargerName} · Connector ${equipment.connectorNumber}`;
+}
+
+export interface ReleasedChargingStart {
+  readonly id: string;
+  readonly releasedAt: string;
+}
+
+/** A start or stop on an assigned station that no evidence has settled yet. */
+export interface UnsettledOperation {
+  readonly id: string;
+  readonly kind: "start" | "stop";
+  readonly outcome: CommandOutcome;
+  readonly acceptedAt: string;
+  readonly sessionId: string;
+  readonly equipment: ChargingEquipment;
+  readonly lastRequestedAt: string;
+  readonly hasObservations: boolean;
+  /** When a start's release window ends; null for a stop. */
+  readonly releasableAt: string | null;
+  /** Decided by the server, so the device clock does not matter. */
+  readonly canRelease: boolean;
+  readonly attempts: readonly UnsettledOperationAttempt[];
+}
+
+export interface UnsettledOperationList {
+  readonly operations: readonly UnsettledOperation[];
+  readonly nextAfterId: string | null;
+}
+
+export async function getUnsettledOperations(
+  afterId: string | null,
+  signal?: AbortSignal,
+): Promise<UnsettledOperationList> {
+  const response = await api.get<UnsettledOperationList>(
+    "/api/charging-operations/unsettled",
+    { params: { afterId }, signal },
+  );
+  return response.data;
+}
+
+export async function releaseChargingStart(
+  operationId: string,
+  antiforgeryToken: string,
+): Promise<ReleasedChargingStart> {
+  const response = await api.post<ReleasedChargingStart>(
+    `/api/charging-operations/${encodeURIComponent(operationId)}/release`,
+    undefined,
+    { headers: { "X-CSRF-TOKEN": antiforgeryToken } },
+  );
+  return response.data;
+}
+
+export const unsettledOperationsQuery = (afterId: string | null) =>
+  queryOptions({
+    queryKey: chargingKeys.unsettled(afterId),
+    queryFn: ({ signal }) => getUnsettledOperations(afterId, signal),
+    retry: false,
+  });
 
 export async function getChargingProgress(
   sessionId: string,

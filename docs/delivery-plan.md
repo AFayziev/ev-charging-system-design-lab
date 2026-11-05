@@ -45,7 +45,7 @@ toward acceptance; repetition is needed only when changes invalidate their resul
 | M03 | Domain and seeded persistence baseline | M02 | Done |
 | M04 | Station browsing and operator edits | M03 | Done |
 | M05 | Reservations, expiry, and notifications | M04.01 | Done |
-| M06 | Charging start/stop and operator recovery | M05.02; cancellation races require M05.03 | In progress |
+| M06 | Charging start/stop and operator recovery | M05.02; cancellation races require M05.03 | Done |
 | M07 | Charging progress, history, and completion | M06.01; completion requires M06.02 | Done |
 | M08 | Live updates, cached views, and rate limiting | M07.01 | Planned |
 | M09 | Search and station discovery | M04.01, M05.01; availability requires M06.01 | Done |
@@ -384,7 +384,7 @@ Notification failure leaves accepted reservations intact and remains separately 
     no driver status action; it awaits automatic checks and operator investigation.
     Verify overruns blocking later starts through the application.
     Depends on M06.02.3.
-- [ ] M06.04 Deliver continued automatic checks, observation-confirmed starts,
+- [x] M06.04 Deliver continued automatic checks, observation-confirmed starts,
   and operator release of connectors held by uncertain starts.
   Depends on M04.02 and M06.01–M06.02.
   Sub-items are sequenced as follows:
@@ -401,7 +401,7 @@ Notification failure leaves accepted reservations intact and remains separately 
     completion afterwards, and no confirmation from another session's evidence
     or of a released start.
     Depends on M06.04.1.
-  - [ ] M06.04.3 Start release: list unsettled operations for assigned stations
+  - [x] M06.04.3 Start release: list unsettled operations for assigned stations
     with their attempts and provider identifiers. An assigned operator can
     release the connector of an uncertain start that has had no observations
     within the release window. Observations after release are only recorded

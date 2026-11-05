@@ -167,6 +167,11 @@ namespace EvCharging.Persistence.Migrations.Migrations
                         .HasColumnName("public_id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at")
+                        .HasAnnotation("Audit:Included", true);
+
                     b.Property<int?>("RequestLimit")
                         .HasColumnType("integer")
                         .HasColumnName("request_limit");
@@ -178,6 +183,10 @@ namespace EvCharging.Persistence.Migrations.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_operations");
+
+                    b.HasIndex("Id")
+                        .HasDatabaseName("ix_operations_unsettled")
+                        .HasFilter("outcome IN ('pending', 'uncertain') AND authorized_attempt_count > 0 AND released_at IS NULL");
 
                     b.HasIndex("PublicId")
                         .IsUnique()

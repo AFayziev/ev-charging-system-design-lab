@@ -22,6 +22,10 @@ public sealed class ChargingOptions : IValidatableObject
     [Range(typeof(TimeSpan), "00:00:01", "1.00:00:00")]
     public TimeSpan SilenceLimit { get; set; }
 
+    /// <summary>How long after its last request an uncertain start with no observations waits before an operator can release it.</summary>
+    [Range(typeof(TimeSpan), "00:00:01", "1.00:00:00")]
+    public TimeSpan ReleaseWindow { get; set; }
+
     /// <summary>How far a reading's occurrence may lie ahead of the platform clock and still count as current.</summary>
     [Range(typeof(TimeSpan), "00:00:00.001", "1.00:00:00")]
     public TimeSpan ClockSkew { get; set; }

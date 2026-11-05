@@ -7,6 +7,18 @@ export function getStartPresentation(
   canRetry: boolean,
   arrivalDeadline: string,
 ): Presentation | undefined {
+  if (operation?.releasedAt) {
+    const availability = canRetry
+      ? `Your reservation is still available until ${formatClock(arrivalDeadline)}.`
+      : "The start window has ended.";
+    return {
+      tone: "error",
+      badge: "Connector released",
+      title: "Charging start released",
+      text: `The station never confirmed whether charging started, so an operator released the connector at ${formatClock(operation.releasedAt)}. ${availability}`,
+    };
+  }
+
   const automatic = operation?.automaticChecksEndAt;
   const ended = automatic && Date.now() >= Date.parse(automatic);
   if (

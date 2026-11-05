@@ -432,12 +432,12 @@ public sealed partial class ChargingCommandTests
         using var host = CreateProviderHost(database, queries);
         var messaging = _messaging!;
         await messaging.TrackActivity().Timeout(TimeSpan.FromSeconds(15)).ExecuteAndWaitAsync(
-            bus => new CheckChargingStopMessageHandler(
+            _ => new CheckChargingStopMessageHandler(
                 database,
                 host.Services.GetRequiredService<ChargingProviderClientFactory>(),
                 _clock,
                 Options.Create(TestExecutionOptions()),
-                bus,
+                _scope!.ServiceProvider.GetRequiredService<IDbContextOutbox>(),
                 NullLogger<CheckChargingStopMessageHandler>.Instance)
                 .HandleAsync(new(operationId), CancellationToken.None));
         return messaging.Services.GetRequiredService<StopRecorder>().For(operationId);

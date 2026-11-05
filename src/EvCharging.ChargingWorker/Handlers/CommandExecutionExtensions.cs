@@ -103,7 +103,8 @@ internal static class CommandExecutionExtensions
 
     /// <summary>
     /// Records the provider's response on the authorized attempt and applies the matching transition to its
-    /// operation, unless a check already settled it.
+    /// operation, unless a check already settled it. A response to a released start is recorded on its attempt
+    /// without changing the operation.
     /// </summary>
     public static async Task ApplyOutcomeAsync(
         this PlatformDbContext database,
@@ -131,16 +132,30 @@ internal static class CommandExecutionExtensions
             return;
         }
 
-        var transitioned = transition(operation, RecordResult(attempt, result));
-
-        if (transitioned.IsFailed)
+        var evidence = RecordResult(attempt, result);
+        if (operation.ReleasedAt is not null)
         {
-            throw new InvalidOperationException(
-                $"The authorized {operation.Kind} {operation.PublicId} cannot accept its provider outcome: "
-                + string.Join(", ", transitioned.Errors));
+            // A released start keeps its outcome; the response is still kept as evidence of what the provider did.
+            attempt.Outcome = evidence switch
+            {
+                ProviderEvidence.Applied => CommandOutcome.Confirmed,
+                ProviderEvidence.Rejected => CommandOutcome.Rejected,
+                _ => CommandOutcome.Uncertain
+            };
+        }
+        else
+        {
+            var transitioned = transition(operation, evidence);
+            if (transitioned.IsFailed)
+            {
+                throw new InvalidOperationException(
+                    $"The authorized {operation.Kind} {operation.PublicId} cannot accept its provider outcome: "
+                    + string.Join(", ", transitioned.Errors));
+            }
+
+            attempt.Outcome = operation.Outcome;
         }
 
-        attempt.Outcome = operation.Outcome;
         attempt.FinishedAt = clock.GetUtcNow();
 
         await database.SaveChangesAsync(cancellationToken);
@@ -155,15 +170,17 @@ internal static class CommandExecutionExtensions
     }
 
     /// <summary>
-    /// Applies provider evidence from a status check or from observations, unless the operation is already settled.
-    /// An attempt whose response was never recorded is closed with the result.
+    /// Applies provider evidence from a status check or from observations, unless the operation is already settled
+    /// or released. An attempt whose response was never recorded is closed with the result.
     /// </summary>
     public static async Task ResolveAsync(
         this PlatformDbContext database,
+        IDbContextOutbox outbox,
         TimeProvider clock,
         ILogger logger,
         Operation unresolved,
         Func<Operation, Result> transition,
+        object? followUpMessage,
         CancellationToken cancellationToken)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
@@ -172,7 +189,7 @@ internal static class CommandExecutionExtensions
         var operation = await database.LoadOperationAsync(unresolved.Id, cancellationToken)
             ?? throw new InvalidOperationException("The checked operation is missing.");
 
-        if (operation.Outcome is not (CommandOutcome.Confirmed or CommandOutcome.Rejected))
+        if (!operation.IsSettledOrReleased)
         {
             var transitioned = transition(operation);
 
@@ -193,11 +210,15 @@ internal static class CommandExecutionExtensions
                 latest.FailureCode = UnrecordedResponseCode;
                 latest.Outcome = operation.Outcome;
             }
-
-            await database.SaveChangesAsync(cancellationToken);
         }
 
-        await transaction.CommitAsync(cancellationToken);
+        outbox.Enroll(database);
+        if (followUpMessage is not null)
+        {
+            await outbox.PublishAsync(followUpMessage);
+        }
+
+        await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
 
         logger.LogInformation(
             "Provider evidence resolved {Kind} {OperationId} with {Outcome}",
@@ -210,13 +231,13 @@ internal static class CommandExecutionExtensions
     /// The provider has no record of the latest uncertain request, so the same operation key is sent again.
     /// A request refused for access establishes nothing about the earlier ones, so it ends resending.
     /// A request whose response was never recorded and that has no provider record is closed as uncertain, once it
-    /// is older than a status check interval: a younger one may still be in flight.
+    /// is older than a status check interval: a younger one may still be in flight. 
     /// Authorization rechecks eligibility and the request limit; overlapping checks claim one attempt number.
     /// </summary>
     public static async Task ResendAsync(
         this PlatformDbContext database,
+        IDbContextOutbox outbox,
         TimeProvider clock,
-        IMessageBus bus,
         ILogger logger,
         Operation operation,
         Attempt latest,
@@ -224,77 +245,58 @@ internal static class CommandExecutionExtensions
         Func<int, object> createRequest,
         CancellationToken cancellationToken)
     {
-        if (latest.Number >= operation.RequestLimit)
-        {
-            return;
-        }
-
-        bool resendable = latest.FinishedAt is null
-            ? clock.GetUtcNow() - latest.AuthorizedAt >= unrecordedAfter
-                && await CloseUnrecordedAsync(database, clock, logger, operation.Id, latest.Number, cancellationToken)
-            : operation.Outcome == CommandOutcome.Uncertain
-                && latest.FailureCode is TransportFailureCode or InvalidResponseCode or UnrecordedResponseCode;
+        bool resendable = latest.Number < operation.RequestLimit
+            && (latest.FinishedAt is null
+                ? clock.GetUtcNow() - latest.AuthorizedAt >= unrecordedAfter
+                : operation.Outcome == CommandOutcome.Uncertain
+                    && latest.FailureCode is TransportFailureCode or InvalidResponseCode or UnrecordedResponseCode);
 
         if (!resendable)
         {
             return;
         }
 
-        await bus.PublishAsync(createRequest(latest.Number + 1));
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        await database.LockDriverReservationsAsync(operation.DriverId, cancellationToken);
+
+        var current = await database.LoadOperationAsync(operation.Id, cancellationToken)
+            ?? throw new InvalidOperationException("The checked operation is missing.");
+        var attempt = await database.Attempts.SingleAsync(
+            value => value.OperationId == operation.Id && value.Number == latest.Number, cancellationToken);
+
+        // A response recorded in the meantime, or any change to the operation, leaves it as it is.
+        if (current.IsSettledOrReleased || current.AuthorizedAttemptCount != latest.Number)
+        {
+            return;
+        }
+
+        if (attempt.FinishedAt is null)
+        {
+            if (current.MarkUncertain().IsFailed)
+            {
+                return;
+            }
+
+            attempt.Outcome = current.Outcome;
+            attempt.FailureCode = UnrecordedResponseCode;
+            attempt.FinishedAt = clock.GetUtcNow();
+
+            logger.LogInformation(
+                "{Kind} {OperationId} request {AttemptNumber} has no recorded response and is treated as uncertain",
+                current.Kind,
+                current.PublicId,
+                latest.Number);
+        }
+
+        outbox.Enroll(database);
+        await outbox.PublishAsync(createRequest(latest.Number + 1));
+        await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
 
         logger.LogInformation(
             "Status check found no provider record for {Kind} {OperationId}; resending as request {AttemptNumber}",
-            operation.Kind,
-            operation.PublicId,
+            current.Kind,
+            current.PublicId,
             latest.Number + 1);
-    }
-
-    /// <summary>
-    /// Closes the latest attempt as uncertain when it is still unfinished, so the next request can be authorized.
-    /// A response recorded in the meantime, or any change to the operation, leaves it as it is.
-    /// </summary>
-    private static async Task<bool> CloseUnrecordedAsync(
-        PlatformDbContext database,
-        TimeProvider clock,
-        ILogger logger,
-        Guid operationId,
-        int attemptNumber,
-        CancellationToken cancellationToken)
-    {
-        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-
-        var driverId = await database.Operations.Where(value => value.Id == operationId)
-            .Select(value => value.DriverId)
-            .SingleAsync(cancellationToken);
-
-        await database.LockDriverReservationsAsync(driverId, cancellationToken);
-
-        var operation = await database.LoadOperationAsync(operationId, cancellationToken)
-            ?? throw new InvalidOperationException("The checked operation is missing.");
-        var attempt = await database.Attempts.SingleAsync(
-            value => value.OperationId == operationId && value.Number == attemptNumber, cancellationToken);
-
-        if (attempt.FinishedAt is not null || operation.AuthorizedAttemptCount != attemptNumber
-            || operation.Outcome is not (CommandOutcome.Pending or CommandOutcome.Uncertain)
-            || operation.MarkUncertain().IsFailed)
-        {
-            return false;
-        }
-
-        attempt.Outcome = operation.Outcome;
-        attempt.FailureCode = UnrecordedResponseCode;
-        attempt.FinishedAt = clock.GetUtcNow();
-
-        await database.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        logger.LogInformation(
-            "{Kind} {OperationId} request {AttemptNumber} has no recorded response and is treated as uncertain",
-            operation.Kind,
-            operation.PublicId,
-            attemptNumber);
-
-        return true;
     }
 
     /// <summary>Runs an automatic check inside the operation's checking window.</summary>

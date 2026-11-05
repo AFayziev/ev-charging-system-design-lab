@@ -28,6 +28,7 @@ import classes from "./App.module.css";
 import { AppLoading } from "./AppLoading";
 import { StationListPage } from "@/features/stations/components/StationListPage";
 import { StationDetailPage } from "@/features/stations/components/StationDetailPage";
+import { UnsettledOperationsPage } from "@/features/charging/components/UnsettledOperationsPage";
 import { StationEditPage } from "@/features/stations/components/StationEditPage";
 import { AssignedStationsPage } from "@/features/stations/components/AssignedStationsPage";
 import { ReservationsPage } from "@/features/reservations/components/ReservationsPage";
@@ -250,6 +251,10 @@ export function App() {
             <Route
               path="/operator"
               element={area(PlatformRole.Operator, <AssignedStationsPage />)}
+            />
+            <Route
+              path="/operator/charging-operations"
+              element={area(PlatformRole.Operator, <UnsettledOperationsPage />)}
             />
             <Route
               path="/reservations"

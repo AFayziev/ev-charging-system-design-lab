@@ -49,7 +49,7 @@ public sealed class CheckChargingStartCommandHandler(
         }
 
         var outcome = ChargingCheckOutcome.Resolved;
-        if (operation.Outcome is CommandOutcome.Pending or CommandOutcome.Uncertain)
+        if (!operation.IsSettledOrReleased)
         {
             try
             {
@@ -69,7 +69,7 @@ public sealed class CheckChargingStartCommandHandler(
         }
 
         var response = await operation.ToResponseAsync(database, cancellationToken);
-        if (operation.Outcome is CommandOutcome.Confirmed or CommandOutcome.Rejected)
+        if (operation.IsSettledOrReleased)
         {
             outcome = ChargingCheckOutcome.Resolved;
         }

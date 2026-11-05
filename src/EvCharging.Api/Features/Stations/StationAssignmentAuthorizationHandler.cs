@@ -1,6 +1,7 @@
 using EvCharging.Api.Authentication;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
+using EvCharging.Persistence.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,12 +29,8 @@ internal sealed class StationAssignmentAuthorizationHandler(
         }
 
         var cancellationToken = httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
-        bool assigned = await database.OperatorAssignments
-            .AnyAsync(
-                assignment => assignment.StationId == resource.Id
-                    && database.OperatorUsers.Any(user => user.Id == assignment.OperatorUserId
-                        && user.IdentityIssuer == identity.Issuer && user.IdentitySubject == identity.Subject),
-                cancellationToken);
+        bool assigned = await database.AssignedStationIds(identity.Issuer, identity.Subject)
+            .ContainsAsync(resource.Id, cancellationToken);
         if (assigned)
         {
             context.Succeed(requirement);

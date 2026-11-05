@@ -9,6 +9,7 @@ namespace EvCharging.Domain.Tests.Charging;
 public sealed class OperationTests
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 15, 12, 0, 0, TimeSpan.Zero);
+    private static readonly TimeSpan ReleaseWindow = TimeSpan.FromMinutes(10);
 
     [Fact]
     public void ScheduleAutomaticChecks_BeforeEffectAuthorization_ReturnsFailureWithoutMutation()
@@ -195,6 +196,83 @@ public sealed class OperationTests
             Assert.IsType<ChargingStartError>(Assert.Single(result.Errors)).Code);
         Assert.Equal(CommandOutcome.Pending, stop.Outcome);
         Assert.Equal(SessionLifecycle.Stopping, session.Lifecycle);
+    }
+
+    [Fact]
+    public void ReleaseStart_UncertainStartAfterTheWindow_FailsTheSessionAndAcceptsNoLaterEvidence()
+    {
+        var reservation = Booking();
+        var session = ChargingSession.AcceptStart(reservation, Start).Value;
+        var operation = Operation.AcceptStart(session, Guid.NewGuid());
+        Assert.True(operation.MarkUncertain().IsSuccess);
+        var releasedAt = Start + ReleaseWindow;
+
+        Assert.True(operation.ReleaseStart(releasedAt, Start, ReleaseWindow, hasObservations: false).IsSuccess);
+
+        Assert.Equal(CommandOutcome.Uncertain, operation.Outcome);
+        Assert.Equal(SessionLifecycle.Failed, session.Lifecycle);
+        Assert.Equal(ReservationState.Active, reservation.State);
+        Assert.Equal(releasedAt, operation.ReleasedAt);
+        Assert.Null(operation.AutomaticChecksEndAt);
+        Assert.True(operation.IsSettledOrReleased);
+        Assert.All(
+            new[]
+            {
+                operation.ConfirmStart(Guid.NewGuid(), "late", Start.AddMinutes(11)),
+                operation.ConfirmObservedStart(Guid.NewGuid(), Start.AddMinutes(11)),
+                operation.RejectStart(),
+                operation.MarkUncertain()
+            },
+            late => Assert.Equal(
+                ChargingStartError.OperationResolvedCode,
+                Assert.IsType<ChargingStartError>(Assert.Single(late.Errors)).Code));
+        Assert.True(
+            operation.ReleaseStart(Start.AddMinutes(20), Start, ReleaseWindow, hasObservations: false).IsSuccess);
+        Assert.Equal(releasedAt, operation.ReleasedAt);
+        Assert.Equal(SessionLifecycle.Failed, session.Lifecycle);
+    }
+
+    [Theory]
+    [InlineData("pending")]
+    [InlineData("confirmed")]
+    [InlineData("rejected")]
+    [InlineData("stop")]
+    [InlineData("before window")]
+    [InlineData("observed")]
+    public void ReleaseStart_NotReleasable_IsRefusedWithoutMutation(string scenario)
+    {
+        var session = ChargingSession.AcceptStart(Booking(), Start).Value;
+        var operation = Operation.AcceptStart(session, Guid.NewGuid());
+        var now = scenario == "before window" ? Start + ReleaseWindow - TimeSpan.FromTicks(1) : Start + ReleaseWindow;
+        switch (scenario)
+        {
+            case "confirmed":
+                Assert.True(operation.ConfirmStart(Guid.NewGuid(), "provider-session", Start).IsSuccess);
+                break;
+            case "rejected":
+                Assert.True(operation.RejectStart().IsSuccess);
+                break;
+            case "stop":
+                Assert.True(operation.ConfirmStart(Guid.NewGuid(), "provider-session", Start).IsSuccess);
+                operation = Operation.AcceptStop(session, Guid.NewGuid(), Start.AddMinutes(1)).Value;
+                Assert.True(operation.MarkUncertain().IsSuccess);
+                break;
+            case "before window" or "observed":
+                Assert.True(operation.MarkUncertain().IsSuccess);
+                break;
+        }
+
+        var lifecycle = session.Lifecycle;
+        var outcome = operation.Outcome;
+
+        var result = operation.ReleaseStart(now, Start, ReleaseWindow, hasObservations: scenario == "observed");
+
+        Assert.Equal(
+            ChargingStartError.StartNotReleasableCode,
+            Assert.IsType<ChargingStartError>(Assert.Single(result.Errors)).Code);
+        Assert.Null(operation.ReleasedAt);
+        Assert.Equal(outcome, operation.Outcome);
+        Assert.Equal(lifecycle, session.Lifecycle);
     }
 
     [Theory]

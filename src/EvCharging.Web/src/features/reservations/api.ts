@@ -37,6 +37,8 @@ export interface StartOperation {
   readonly startedAt: string | null;
   readonly failureReason: "chargingServiceUnavailable" | null;
   readonly automaticChecksEndAt: string | null;
+  /** When an operator released the connector held by this uncertain start. */
+  readonly releasedAt: string | null;
 }
 
 export interface StopOperation {
@@ -51,10 +53,17 @@ export interface ChargingStartCheck {
   readonly outcome: "resolved" | "unresolved" | "unavailable";
 }
 
+/** An operation still awaiting evidence. A released start awaits none, although its outcome stays uncertain. */
 export function isUnresolved(
-  operation: { readonly outcome: CommandOutcome } | null,
+  operation: {
+    readonly outcome: CommandOutcome;
+    readonly releasedAt?: string | null;
+  } | null,
 ) {
-  return operation?.outcome === "pending" || operation?.outcome === "uncertain";
+  return (
+    !operation?.releasedAt &&
+    (operation?.outcome === "pending" || operation?.outcome === "uncertain")
+  );
 }
 
 export function hasCurrentCharging(reservation: Reservation) {

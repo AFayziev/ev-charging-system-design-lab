@@ -22,6 +22,13 @@ public sealed class Operation : IAuditableEntity
     public int? RequestLimit { get; private set; }
     public DateTimeOffset? AutomaticChecksEndAt { get; private set; }
 
+    /// <summary>When an operator released the connector held by this uncertain start.</summary>
+    public DateTimeOffset? ReleasedAt { get; private set; }
+
+    /// <summary>Settled operations and released starts accept no further evidence.</summary>
+    public bool IsSettledOrReleased =>
+        Outcome is CommandOutcome.Confirmed or CommandOutcome.Rejected || ReleasedAt is not null;
+
     public Result ScheduleAutomaticChecks(DateTimeOffset endsAt)
     {
         if (Outcome != CommandOutcome.Pending || AuthorizedAttemptCount != 1
@@ -160,9 +167,68 @@ public sealed class Operation : IAuditableEntity
         return Result.Ok();
     }
 
+    /// <summary>
+    /// Releases the connector held by an uncertain start that no evidence has settled. The session fails, and the
+    /// outcome stays uncertain. Clearing the checking window ends automatic checks: the continued-check scan and
+    /// scheduled checks only run while it is set. Releasing an already released start changes nothing.
+    /// </summary>
+    public Result ReleaseStart(
+        DateTimeOffset now, DateTimeOffset lastRequestedAt, TimeSpan releaseWindow, bool hasObservations)
+    {
+        if (ReleasedAt is not null)
+        {
+            return Result.Ok();
+        }
+
+        var eligibility = ValidateStartRelease(now, lastRequestedAt, releaseWindow, hasObservations);
+        if (eligibility.IsFailed)
+        {
+            return eligibility;
+        }
+
+        var release = (Session ?? throw new InvalidOperationException("Session must be loaded.")).ReleaseStart();
+        if (release.IsFailed)
+        {
+            return release;
+        }
+
+        ReleasedAt = now.ToUniversalTime();
+        AutomaticChecksEndAt = null;
+        return Result.Ok();
+    }
+
+    /// <summary>When a start's release window after its last request ends; stops cannot be released.</summary>
+    public DateTimeOffset? StartReleasableAt(DateTimeOffset lastRequestedAt, TimeSpan releaseWindow) =>
+        Kind == ChargingCommandKind.Start ? lastRequestedAt + releaseWindow : null;
+
+    /// <summary>
+    /// An uncertain start can be released once the release window after its last request has passed with no
+    /// observations from the provider.
+    /// </summary>
+    public Result ValidateStartRelease(
+        DateTimeOffset now, DateTimeOffset lastRequestedAt, TimeSpan releaseWindow, bool hasObservations)
+    {
+        if (Kind != ChargingCommandKind.Start || Outcome != CommandOutcome.Uncertain || ReleasedAt is not null)
+        {
+            return NotReleasable("Only an uncertain start that has not been released can be released.");
+        }
+
+        if (hasObservations)
+        {
+            return NotReleasable("The provider has sent observations for this session, so the start is not released.");
+        }
+
+        return now < lastRequestedAt + releaseWindow
+            ? NotReleasable("The start can be released once the release window after its last request ends.")
+            : Result.Ok();
+    }
+
+    private static Result NotReleasable(string message) =>
+        Result.Fail(new ChargingStartError(ChargingStartError.StartNotReleasableCode, message));
+
     private Result ValidateUnresolved(ChargingCommandKind expected)
     {
-        if (Kind == expected && Outcome is (CommandOutcome.Pending or CommandOutcome.Uncertain))
+        if (Kind == expected && ReleasedAt is null && Outcome is (CommandOutcome.Pending or CommandOutcome.Uncertain))
         {
             return Result.Ok();
         }

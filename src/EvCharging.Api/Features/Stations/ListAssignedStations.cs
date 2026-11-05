@@ -3,6 +3,7 @@ using EvCharging.Api.Errors;
 using EvCharging.Api.Pagination;
 using EvCharging.Domain.Equipment;
 using EvCharging.Persistence;
+using EvCharging.Persistence.Extensions;
 using FluentResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,10 +27,7 @@ public sealed class ListAssignedStationsQueryHandler(
 
         var stations = database.Stations
             .AsNoTracking()
-            .Where(station => database.OperatorAssignments.Any(assignment => assignment.StationId == station.Id
-                && database.OperatorUsers.Any(operatorUser => operatorUser.Id == assignment.OperatorUserId
-                    && operatorUser.IdentityIssuer == identity.Issuer
-                    && operatorUser.IdentitySubject == identity.Subject)));
+            .Where(station => database.AssignedStationIds(identity.Issuer, identity.Subject).Contains(station.Id));
         var cursor = await ResolveCursorAsync(stations, request.AfterId, cancellationToken);
         if (cursor.IsFailed)
         {

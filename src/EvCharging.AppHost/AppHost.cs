@@ -58,6 +58,7 @@ var api = builder.AddProject<Projects.EvCharging_Api>("api", launchProfileName: 
         options => options.StatusCheckTimeout,
         options => options.FreshnessLimit,
         options => options.SilenceLimit,
+        options => options.ReleaseWindow,
         options => options.ClockSkew)
     .WithHttpEndpoint()
     .WithReplicas(apiCount)

@@ -89,6 +89,43 @@ public sealed partial class ChargingCommandTests
     }
 
     // A provider whose answer arrives after the arrival deadline, with the expiry scan having run in between.
+    [Fact]
+    public async Task Start_ResponseArrivingAfterRelease_IsRecordedWithoutChangingTheReleasedStart()
+    {
+        var operation = await PrepareAsync();
+        using var lost = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+        await ExecuteAsync(operation.Id, lost);
+        using var releasedInFlight = new ProviderTransport(async (_, _) =>
+        {
+            await ReleaseAsync(operation.Id);
+            return Applied(operation.PublicId);
+        });
+
+        await ExecuteAsync(operation.Id, releasedInFlight, attemptNumber: 2);
+
+        await using var database = Database();
+        var released = await LoadAsync(database, operation.Id);
+        Assert.Equal(CommandOutcome.Uncertain, released.Outcome);
+        Assert.NotNull(released.ReleasedAt);
+        Assert.Equal(SessionLifecycle.Failed, released.Session!.Lifecycle);
+        var retry = await database.Attempts.AsNoTracking()
+            .SingleAsync(value => value.OperationId == operation.Id && value.Number == 2);
+        Assert.NotNull(retry.FinishedAt);
+        Assert.Equal(CommandOutcome.Confirmed, retry.Outcome);
+        Assert.NotNull(retry.ProviderSessionId);
+    }
+
+    // Operators release through the API, under its role.
+    private async Task ReleaseAsync(Guid operationId)
+    {
+        await using var api = WriterDatabase();
+        var uncertain = await api.Operations.Include(value => value.Session)
+            .SingleAsync(value => value.Id == operationId);
+        var now = _clock.GetUtcNow();
+        Assert.True(uncertain.ReleaseStart(now, lastRequestedAt: now, TimeSpan.Zero, hasObservations: false).IsSuccess);
+        await api.SaveChangesAsync();
+    }
+
     private ProviderTransport ExpiringTransport(Operation operation, string response) =>
         new(async (_, _) =>
         {

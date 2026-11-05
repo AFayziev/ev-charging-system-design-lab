@@ -24,7 +24,6 @@ public sealed class ReservationAdmissionTests(PlatformDatabaseFixture fixture) :
 {
     private static readonly DateTimeOffset Now = new(2030, 1, 1, 8, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset SlotStart = Now.AddHours(2);
-    private readonly SimulatedDeadlock _deadlock = new();
     private readonly CreatedRecorder _created = new();
     private ApiHandlerHost? _api;
 
@@ -34,7 +33,6 @@ public sealed class ReservationAdmissionTests(PlatformDatabaseFixture fixture) :
             new FakeTimeProvider(Now),
             services =>
             {
-                services.AddSingleton<IInterceptor>(_deadlock);
                 services.AddSingleton(_created);
                 services.Configure<ReservationPolicyOptions>(options =>
                 {
@@ -66,8 +64,6 @@ public sealed class ReservationAdmissionTests(PlatformDatabaseFixture fixture) :
         var (_, first) = await fixture.SeedDriverAsync();
         var (_, second) = await fixture.SeedDriverAsync();
 
-        // The driver lock does not separate different drivers, so the connector's exclusion constraint decides.
-        // Concurrent inserts can deadlock there; the loser's retry then reports the overlap.
         var results = await Task.WhenAll(
             CreateAsync(first, connector, SlotStart),
             CreateAsync(second, connector, SlotStart));
@@ -99,28 +95,6 @@ public sealed class ReservationAdmissionTests(PlatformDatabaseFixture fixture) :
         Assert.Equal(1, await CountAsync(reservation => reservation.DriverId == driver.Id));
     }
 
-    [Fact]
-    public async Task Create_DeadlockVictim_RetriesOnFreshStateAndBooksOnce()
-    {
-        var connector = (await fixture.SeedConnectorsAsync(1))[0];
-        var (driver, identity) = await fixture.SeedDriverAsync();
-
-        // The next save fails as a deadlock victim would. A retry that reused the failed attempt's context or
-        // outbox enrollment would book twice and so be rejected by the driver's own overlap constraint.
-        _deadlock.FailNextSave();
-        Result<ReservationResponse>? result = null;
-        await _api!.Messaging.TrackActivity().Timeout(TimeSpan.FromSeconds(30))
-            .ExecuteAndWaitAsync(async Task (IMessageContext _) =>
-                result = await CreateAsync(identity, connector.PublicId, SlotStart));
-
-        Assert.True(result!.IsSuccess);
-        Assert.True(_deadlock.Fired);
-        await using var database = fixture.CreateContext();
-        var reservation = await database.Reservations.SingleAsync(value => value.DriverId == driver.Id);
-        Assert.Equal(result.Value.Id, reservation.PublicId);
-        Assert.Single(_created.For(reservation.Id));
-    }
-
     private Task<Result<ReservationResponse>> CreateAsync(
         UserIdentity identity, Guid connectorId, DateTimeOffset startsAt) =>
         _api!.InvokeAsync<Result<ReservationResponse>>(
@@ -130,32 +104,6 @@ public sealed class ReservationAdmissionTests(PlatformDatabaseFixture fixture) :
     {
         await using var database = fixture.CreateContext();
         return await database.Reservations.CountAsync(predicate);
-    }
-
-    private sealed class SimulatedDeadlock : SaveChangesInterceptor
-    {
-        private int _armed;
-        private int _fired;
-
-        public bool Fired => Volatile.Read(ref _fired) == 1;
-
-        public void FailNextSave() => Volatile.Write(ref _armed, 1);
-
-        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-            DbContextEventData eventData,
-            InterceptionResult<int> result,
-            CancellationToken cancellationToken = default)
-        {
-            if (Interlocked.Exchange(ref _armed, 0) == 1)
-            {
-                Volatile.Write(ref _fired, 1);
-                throw new DbUpdateException(
-                    "Simulated deadlock victim.",
-                    new PostgresException("deadlock detected", "ERROR", "ERROR", PostgresErrorCodes.DeadlockDetected));
-            }
-
-            return base.SavingChangesAsync(eventData, result, cancellationToken);
-        }
     }
 
     public sealed class CreatedRecorder

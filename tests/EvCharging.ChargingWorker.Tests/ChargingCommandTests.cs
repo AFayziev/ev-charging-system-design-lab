@@ -772,17 +772,17 @@ public sealed partial class ChargingCommandTests(PlatformDatabaseFixture fixture
         using var host = CreateProviderHost(database, queries);
         var messaging = _messaging!;
         await messaging.TrackActivity().Timeout(TimeSpan.FromSeconds(15)).ExecuteAndWaitAsync(
-            bus => Checker(database, host, bus).HandleAsync(new(operationId, automatic), CancellationToken.None));
+            _ => Checker(database, host).HandleAsync(new(operationId, automatic), CancellationToken.None));
         return messaging.Services.GetRequiredService<StartRecorder>().For(operationId);
     }
 
-    private CheckChargingStartMessageHandler Checker(PlatformDbContext database, IHost host, IMessageBus? bus = null) =>
+    private CheckChargingStartMessageHandler Checker(PlatformDbContext database, IHost host) =>
         new(
             database,
             host.Services.GetRequiredService<ChargingProviderClientFactory>(),
             _clock,
             Options.Create(TestExecutionOptions()),
-            bus ?? _scope!.ServiceProvider.GetRequiredService<IMessageBus>(),
+            _scope!.ServiceProvider.GetRequiredService<IDbContextOutbox>(),
             NullLogger<CheckChargingStartMessageHandler>.Instance);
 
     internal static ChargingExecutionOptions TestExecutionOptions(int maximumCommandRequests = 3) => new()

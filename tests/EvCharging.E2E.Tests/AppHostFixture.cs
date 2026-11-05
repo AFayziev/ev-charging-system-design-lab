@@ -18,6 +18,9 @@ namespace EvCharging.E2E.Tests;
 
 public sealed class AppHostFixture : IAsyncLifetime
 {
+    /// <summary>How long an uncertain start with no observations waits before an operator can release it.</summary>
+    public static TimeSpan ReleaseWindow { get; } = TimeSpan.FromSeconds(20);
+
     public static ReservationBookingLimits BookingLimits { get; } = new(
         4, TimeSpan.FromHours(3), TimeSpan.FromDays(20), TimeSpan.FromMinutes(10));
 
@@ -155,6 +158,8 @@ public sealed class AppHostFixture : IAsyncLifetime
                 "--NotificationDelivery:Provider=Mailpit",
                 // Short enough to observe an upload that never reports in settling at its deadline.
                 "--StationMedia:UploadUrlLifetime=00:00:30",
+                // Short enough to release an unconfirmed start within a scenario.
+                $"--Charging:ReleaseWindow={ReleaseWindow.ToString("c", CultureInfo.InvariantCulture)}",
                 "--ChargingProviders:WattHarborIntegrationKey=driver-wattharbor",
                 "--ChargingProviders:AmpTrailIntegrationKey=driver-amptrail",
                 $"--Parameters:wattharbor-provider-token-endpoint={tokenEndpoint}",

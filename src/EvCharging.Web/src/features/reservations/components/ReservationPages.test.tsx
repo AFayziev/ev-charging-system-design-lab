@@ -347,7 +347,41 @@ const pendingStart: StartOperation = {
   startedAt: null,
   failureReason: null,
   automaticChecksEndAt: null,
+  releasedAt: null,
 };
+
+it("lets the driver start again after an operator released an unconfirmed start", async () => {
+  vi.setSystemTime(new Date("2026-10-11T12:35:00Z"));
+  get.mockImplementation(async (url: string) => ({
+    data:
+      url === "/auth/session"
+        ? { signedIn: true, antiforgeryToken: "csrf-token" }
+        : {
+            reservations: [
+              {
+                ...reservation,
+                startOperation: {
+                  ...pendingStart,
+                  outcome: "uncertain",
+                  lifecycle: "failed",
+                  releasedAt: "2026-10-11T12:34:00Z",
+                },
+              },
+            ],
+            nextAfterId: null,
+          },
+  }));
+  setup();
+
+  expect(await screen.findByText("Charging start released")).toBeVisible();
+  expect(
+    screen.getByText(/an operator released the connector/),
+  ).toHaveTextContent("still available until");
+  expect(
+    screen.queryByRole("button", { name: "Check status" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Start charging" })).toBeEnabled();
+});
 
 it("waits to check again at the cutoff without updated reservation data", async () => {
   vi.useFakeTimers();

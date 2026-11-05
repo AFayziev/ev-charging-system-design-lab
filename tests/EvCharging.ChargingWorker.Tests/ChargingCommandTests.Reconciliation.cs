@@ -40,6 +40,31 @@ public sealed partial class ChargingCommandTests
     }
 
     [Fact]
+    public async Task ReleasedStart_IsNotCheckedAgainAndProviderEvidenceLeavesItReleased()
+    {
+        var operation = await PrepareAsync();
+        using var lost = new ProviderTransport((_, _) => throw new HttpRequestException("Lost."));
+        await ExecuteAsync(operation.Id, lost);
+        _clock.Advance(TimeSpan.FromMinutes(10));
+        await ReleaseAsync(operation.Id);
+
+        await using var database = Database();
+
+        Assert.Empty(await FindUnreconciledAsync(operation.Id));
+        using var queries = new ProviderTransport((_, _) => Task.FromResult(Applied(operation.PublicId)));
+        using var host = CreateProviderHost(database, queries);
+        var result = await Checker(database, host)
+            .HandleAsync(new CheckChargingStartMessage(operation.Id), CancellationToken.None);
+
+        Assert.Equal(ChargingCheckOutcome.Resolved, result.Outcome);
+        Assert.Equal(0, queries.Calls);
+        var released = await database.Operations.AsNoTracking().Include(value => value.Session)
+            .SingleAsync(value => value.Id == operation.Id);
+        Assert.Equal(CommandOutcome.Uncertain, released.Outcome);
+        Assert.Equal(SessionLifecycle.Failed, released.Session!.Lifecycle);
+    }
+
+    [Fact]
     public async Task FindUnreconciled_ConcurrentScans_ScheduleOneCheck()
     {
         var operation = await PrepareAsync();

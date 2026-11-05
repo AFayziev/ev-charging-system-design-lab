@@ -8,6 +8,7 @@ import {
   Text,
 } from "@mantine/core";
 import {
+  IconAlertTriangle,
   IconArrowLeft,
   IconArrowRight,
   IconChargingPile,
@@ -29,6 +30,17 @@ export function AssignedStationsPage() {
         title="Operator area"
         description="Maintain content for your assigned stations."
       />
+      <Group>
+        <Button
+          component={Link}
+          to="/operator/charging-operations"
+          variant="light"
+          mih={44}
+          leftSection={<IconAlertTriangle size={18} aria-hidden="true" />}
+        >
+          Unsettled charging operations
+        </Button>
+      </Group>
       {query.isPending && <StationLoading />}
       {query.isError && (
         <StationFailure

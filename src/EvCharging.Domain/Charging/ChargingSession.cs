@@ -86,12 +86,16 @@ public sealed class ChargingSession : IAuditableEntity
         return Result.Ok();
     }
 
-    public Result RejectStart()
+    public Result RejectStart() => FailStart("Only a starting session can be rejected.");
+
+    /// <summary>Fails a start whose outcome could not be established, freeing the connector it claims.</summary>
+    public Result ReleaseStart() => FailStart("Only a starting session can be released.");
+
+    private Result FailStart(string notStartingMessage)
     {
         if (Lifecycle != SessionLifecycle.Starting)
         {
-            return Result.Fail(new ChargingStartError(
-                ChargingStartError.SessionNotStartingCode, "Only a starting session can be rejected."));
+            return Result.Fail(new ChargingStartError(ChargingStartError.SessionNotStartingCode, notStartingMessage));
         }
 
         Lifecycle = SessionLifecycle.Failed;

@@ -2,13 +2,12 @@ using System.Globalization;
 using EvCharging.ChargingWorker.Configuration;
 using EvCharging.ChargingWorker.Providers;
 using EvCharging.Contracts.Charging;
-using EvCharging.Domain.Charging;
 using EvCharging.Persistence;
 using EvCharging.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Wolverine;
 using Wolverine.Attributes;
+using Wolverine.EntityFrameworkCore;
 
 namespace EvCharging.ChargingWorker.Handlers;
 
@@ -17,7 +16,7 @@ public sealed class CheckChargingStartMessageHandler(
     ChargingProviderClientFactory providers,
     TimeProvider clock,
     IOptions<ChargingExecutionOptions> options,
-    IMessageBus bus,
+    IDbContextOutbox outbox,
     ILogger<CheckChargingStartMessageHandler> logger)
 {
     [NonTransactional]
@@ -49,7 +48,8 @@ public sealed class CheckChargingStartMessageHandler(
             return new(ChargingCheckOutcome.Unresolved);
         }
 
-        if (operation.Outcome is CommandOutcome.Confirmed or CommandOutcome.Rejected)
+        // A released start is not checked again: its outcome stays uncertain.
+        if (operation.IsSettledOrReleased)
         {
             return new(ChargingCheckOutcome.Resolved);
         }
@@ -72,8 +72,8 @@ public sealed class CheckChargingStartMessageHandler(
             if (resend && evidence.Outcome == ChargingCheckOutcome.Unresolved)
             {
                 await database.ResendAsync(
+                    outbox,
                     clock,
-                    bus,
                     logger,
                     operation,
                     attempt,
@@ -86,6 +86,7 @@ public sealed class CheckChargingStartMessageHandler(
         }
 
         await database.ResolveAsync(
+            outbox,
             clock,
             logger,
             operation,
@@ -95,6 +96,7 @@ public sealed class CheckChargingStartMessageHandler(
                     attempt.ChargingProviderId,
                     (evidence.Command?.SessionId ?? evidence.Session!.Id).ToString("D", CultureInfo.InvariantCulture),
                     evidence.Command?.AppliedAt ?? evidence.Session!.StartedAt),
+            followUpMessage: null,
             cancellationToken);
         return new(ChargingCheckOutcome.Resolved);
     }

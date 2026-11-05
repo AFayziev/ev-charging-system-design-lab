@@ -16,7 +16,51 @@ internal static class ChargingEndpoints
         routes.MapPost("/start", Start);
         routes.MapPost("/start/{operationId:guid}/check", Check);
         routes.MapPost("/stop", Stop);
+
+        var operations = app.MapGroup("/charging-operations")
+            .RequireAuthorization(PlatformRole.Operator.ToClaimValue());
+        operations.MapGet("/unsettled", Unsettled);
+        operations.MapPost("/{operationId:guid}/release", Release);
         return app;
+    }
+
+    private static async Task<Results<
+        Ok<UnsettledOperationListResponse>, ValidationProblem, ChallengeHttpResult>> Unsettled(
+            [AsParameters] ListUnsettledOperationsRequest request,
+            IMessageBus bus,
+            CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<UnsettledOperationListResponse>>(request, cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ when result.HasError<ValidationError>(out var errors) => errors.ToResponse(),
+            _ => TypedResults.Ok(result.Value)
+        };
+    }
+
+    private static async Task<Results<
+        Ok<ReleasedChargingStartResponse>,
+        NotFound,
+        ChallengeHttpResult,
+        ForbidHttpResult,
+        ProblemHttpResult>> Release(
+            Guid operationId, IMessageBus bus, CancellationToken cancellationToken)
+    {
+        var result = await bus.InvokeAsync<Result<ReleasedChargingStartResponse>>(
+            new ReleaseChargingStartCommand(operationId), cancellationToken);
+        return result switch
+        {
+            _ when result.HasError<UnauthenticatedError>() => TypedResults.Challenge(),
+            _ when result.HasError<ForbiddenError>() => TypedResults.Forbid(),
+            _ when result.HasError<NotFoundError<Guid>>(out var missing) => missing.First().ToResponse(),
+            _ when result.HasError<ChargingStartError>(out var errors) =>
+                ErrorResponseMappings.CodedConflict(
+                    "Charging start release refused",
+                    errors.First().Message,
+                    errors.First().Code),
+            _ => TypedResults.Ok(result.Value)
+        };
     }
 
     private static async Task<Results<
